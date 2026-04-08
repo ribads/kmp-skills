@@ -1,0 +1,39 @@
+---
+name: context
+description: Use when you need Android Context or Activity access in shared KMP code. Required dependency for core:file, core:permissions, core:record, core:sharedpref.
+user-invocable: true
+---
+
+# core:context — Android Context Provider
+
+**Module**: `core:context` | **Artifact**: `com.ribads.synapse:core-context`
+**Package**: `com.ribads.synapse.core.context`
+
+```kotlin
+commonMain.dependencies {
+    implementation("com.ribads.synapse:core-context:<version>")
+}
+```
+
+---
+
+## API
+
+```kotlin
+expect object AppContextProvider {
+    val applicationContext: Any?   // Android: android.content.Context, iOS: null
+    val currentActivity: Any?     // Android: FragmentActivity or null, iOS: null
+}
+```
+
+Auto-initialized on Android via a `ContentProvider` registered in the manifest — no manual setup needed.
+
+## Usage
+
+```kotlin
+// In platform-specific code (androidMain)
+val context = AppContextProvider.applicationContext as Context
+val activity = AppContextProvider.currentActivity as? FragmentActivity
+```
+
+This module is a transitive dependency of `core:file`, `core:permissions`, `core:record`, and `core:sharedpref`. You rarely need to depend on it directly.
