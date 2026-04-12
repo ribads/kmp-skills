@@ -93,6 +93,18 @@ Type-discriminated via `"type"` field. Unknown types deserialize to `UINode.Unkn
 | `RadioButton` | `selected`, `label`, `stateKey`, `onSelectedChangeActionId` |
 | `Switch` | `checked`, `label`, `stateKey`, `onCheckedChangeActionId` |
 
+### Chart Nodes
+
+| Type | Key fields |
+|------|-----------|
+| `BarChart` | `series` (List\<UIChartSeries\>), `title`, `showGrid`, `showValues`, `animate`, `cornerRadius` |
+| `LineChart` | `series` (List\<UIChartSeries\>), `title`, `showGrid`, `showDots`, `smoothCurve`, `showArea`, `animate`, `lineWidth`, `dotRadius` |
+| `PieChart` | `slices` (List\<UIPieSlice\>), `title`, `donutFraction`, `showPercentages`, `showLegend`, `animate` |
+
+**UIChartSeries**: `entries` (List\<UIChartEntry\>), `label` (String?), `color` (hex String?)
+**UIChartEntry**: `value` (Float), `label` (String)
+**UIPieSlice**: `value` (Float), `label` (String?), `color` (hex String?)
+
 ### Base Fields (all nodes)
 
 | Field | Type | Description |
@@ -127,6 +139,41 @@ Type-discriminated via `"type"` field. Unknown types deserialize to `UINode.Unkn
     { "type": "Spacer", "modifier": { "height": { "type": "fixed", "dp": 24 } } },
     { "type": "PrimaryButton", "title": "Done", "actionId": "dismiss" }
   ]
+}
+```
+
+### Chart JSON
+
+```json
+{
+  "type": "BarChart",
+  "title": "Monthly Revenue",
+  "modifier": { "fillMaxWidth": true, "padding": 16 },
+  "series": [
+    {
+      "label": "2024",
+      "color": "#4CAF50",
+      "entries": [
+        { "value": 120, "label": "Jan" },
+        { "value": 180, "label": "Feb" },
+        { "value": 95, "label": "Mar" }
+      ]
+    }
+  ],
+  "showValues": true
+}
+```
+
+```json
+{
+  "type": "PieChart",
+  "title": "Allocation",
+  "slices": [
+    { "value": 40, "label": "Stocks", "color": "#2196F3" },
+    { "value": 35, "label": "Bonds", "color": "#4CAF50" },
+    { "value": 25, "label": "Cash", "color": "#FF9800" }
+  ],
+  "donutFraction": 0.5
 }
 ```
 

@@ -1,6 +1,6 @@
 ---
 name: ui-components
-description: Use when implementing buttons, text fields, password fields, phone inputs, currency inputs, date pickers, cards, dividers, scaffolds, trays, or bottom sheets in a KMP Compose project.
+description: Use when implementing buttons, text fields, password fields, phone inputs, currency inputs, date pickers, cards, dividers, scaffolds, trays, bottom sheets, bar charts, line charts, or pie charts in a KMP Compose project.
 user-invocable: true
 ---
 
@@ -184,19 +184,45 @@ data class DatePickerModel(val selectedDate: Long?, val minDate: Long?, val maxD
 
 ## Trays / Bottom Sheets
 
+### `Tray`
+
+Standard modal bottom sheet with a drag handle. Wraps content height, supports swipe-to-dismiss, and can pin a `stickyBottom` slot that stays visually anchored to the bottom of the visible sheet area as the user drags (it tracks `sheetState.requireOffset()` via an `IntOffset`, so it does not scroll off-screen with the content). Applies `navigationBarsPadding` automatically.
+
+- `isSwipeDismissible = false` locks the sheet in place (gesture changes are rejected via `confirmValueChange`).
+- `skipPartiallyExpanded = true` forces the sheet to open fully without a half-expanded stop.
+- `stickyBottom` is rendered inside a `BoxScope` aligned to `BottomEnd`, padded by `Theme.spacing.x5` — typically used for a primary action button that must remain reachable.
+
 ```kotlin
 @Composable fun Tray(
-    onDismissRequest: OptionalClickCallback, isSwipeDismissible: Boolean = true,
+    onDismissRequest: OptionalClickCallback,
+    isSwipeDismissible: Boolean = true,
     skipPartiallyExpanded: Boolean = false,
     stickyBottom: (@Composable BoxScope.() -> Unit)? = null,
     content: @Composable BoxScope.() -> Unit,
 )
+```
 
+### `ScrollableTray`
+
+Standalone bottom sheet designed for modals whose **inner content scrolls** (e.g. `verticalScroll`, `LazyColumn`). Differs from `Tray` in several ways:
+
+- **Locked in place** — no drag or swipe can move the sheet. Scroll/fling overflow is consumed by a custom `NestedScrollConnection` so it never reaches the sheet's drag handler.
+- **No drag handle** is rendered.
+- **Expands to fill** available space below the status bar (`statusBarsPadding`), leaving a portion of the screen behind it visible.
+- Uses `Theme.colors.surface.primaryDark`/`primaryLight` as container color based on `invertedColors`.
+- **Callers are responsible for providing their own close button** inside `content` — there is no swipe-to-dismiss and no drag handle, so the only way the user can dismiss is via an explicit control you render.
+
+```kotlin
 @Composable fun ScrollableTray(
-    onDismissRequest: OptionalClickCallback, invertedColors: Boolean = isSystemInDarkTheme(),
+    onDismissRequest: OptionalClickCallback,
+    invertedColors: Boolean = isSystemInDarkTheme(),
     content: @Composable BoxScope.() -> Unit,
 )
 ```
+
+**When to use which:**
+- Use `Tray` for standard modal sheets with fixed or wrap-height content (forms, confirmations, pickers).
+- Use `ScrollableTray` when the sheet contains a long scrollable list that would otherwise fight the sheet's own drag gesture.
 
 ---
 
@@ -224,10 +250,231 @@ DatePickerBottomSheet(
     onDismissRequest = { showPicker = false }
 )
 
-// Scaffold with tray
+// Scaffold
 Scaffold(topBar = { /* toolbar */ }) { padding ->
     Column(Modifier.padding(padding)) { /* content */ }
 }
+
+// Tray with a sticky primary action
+Tray(
+    onDismissRequest = { viewModel.emit(Intent.DismissSheet) },
+    stickyBottom = {
+        PrimaryButton(
+            model = "Confirm".asText().asButton(),
+            onClick = { viewModel.emit(Intent.Confirm) }
+        )
+    }
+) {
+    Column { /* form fields */ }
+}
+
+// ScrollableTray wrapping a LazyColumn — caller renders its own close button
+ScrollableTray(onDismissRequest = { viewModel.emit(Intent.DismissSheet) }) {
+    Column {
+        Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+            IconButton(onClick = { viewModel.emit(Intent.DismissSheet) }) { /* close icon */ }
+        }
+        LazyColumn { items(rows) { RowItem(it) } }
+    }
+}
 ```
+
+---
+
+## Charts
+
+### Bar Chart
+
+```kotlin
+@Composable fun BarChart(
+    model: BarChartModel, modifier: Modifier = Modifier,
+    height: Dp = 240.dp, invertedColors: Boolean = isSystemInDarkTheme(),
+)
+```
+
+### Line Chart
+
+```kotlin
+@Composable fun LineChart(
+    model: LineChartModel, modifier: Modifier = Modifier,
+    height: Dp = 240.dp, invertedColors: Boolean = isSystemInDarkTheme(),
+)
+```
+
+### Pie Chart
+
+```kotlin
+@Composable fun PieChart(
+    model: PieChartModel, modifier: Modifier = Modifier,
+    invertedColors: Boolean = isSystemInDarkTheme(),
+)
+```
+
+### Chart Models
+
+```kotlin
+@Immutable
+data class ChartEntry(val value: Float, val label: String = "")
+
+@Immutable
+data class ChartSeries(
+    val entries: List<ChartEntry>,
+    val label: Clause? = null,
+    val color: Color? = null,
+)
+
+@Immutable
+data class PieSlice(
+    val value: Float,
+    val label: Clause? = null,
+    val color: Color? = null,
+)
+
+@Immutable
+data class PieChartModel(
+    val slices: List<PieSlice>,
+    val title: Clause? = null,
+    val donutFraction: Float = 0f,       // 0f = full pie, 0.6f = typical donut
+    val showPercentages: Boolean = true,
+    val showLegend: Boolean = true,
+    val animate: Boolean = true,
+)
+
+@Immutable
+data class BarChartModel(
+    val series: List<ChartSeries>,
+    val title: Clause? = null,
+    val showGrid: Boolean = true,
+    val showValues: Boolean = false,
+    val animate: Boolean = true,
+    val cornerRadius: Float = 8f,
+) {
+    companion object {
+        // Single-series convenience constructor
+        operator fun invoke(
+            entries: List<ChartEntry>, title: Clause? = null, color: Color? = null,
+            showGrid: Boolean = true, showValues: Boolean = false,
+            animate: Boolean = true, cornerRadius: Float = 8f,
+        ): BarChartModel
+    }
+}
+
+@Immutable
+data class LineChartModel(
+    val series: List<ChartSeries>,
+    val title: Clause? = null,
+    val showGrid: Boolean = true,
+    val showDots: Boolean = true,
+    val smoothCurve: Boolean = true,
+    val showArea: Boolean = false,
+    val animate: Boolean = true,
+    val lineWidth: Float = 3f,
+    val dotRadius: Float = 5f,
+) {
+    companion object {
+        // Single-series convenience constructor
+        operator fun invoke(
+            entries: List<ChartEntry>, title: Clause? = null, color: Color? = null,
+            showGrid: Boolean = true, showDots: Boolean = true,
+            smoothCurve: Boolean = true, showArea: Boolean = false,
+            animate: Boolean = true, lineWidth: Float = 3f, dotRadius: Float = 5f,
+        ): LineChartModel
+    }
+}
+```
+
+### Chart Usage
+
+```kotlin
+// Simple bar chart
+BarChart(
+    model = BarChartModel(
+        entries = listOf(
+            ChartEntry(value = 45f, label = "Mon"),
+            ChartEntry(value = 80f, label = "Tue"),
+            ChartEntry(value = 65f, label = "Wed"),
+            ChartEntry(value = 90f, label = "Thu"),
+            ChartEntry(value = 55f, label = "Fri"),
+        ),
+        title = "Weekly Sales".asText(),
+        showValues = true,
+    )
+)
+
+// Multi-series grouped bar chart
+BarChart(
+    model = BarChartModel(
+        series = listOf(
+            ChartSeries(
+                entries = listOf(ChartEntry(120f, "Q1"), ChartEntry(180f, "Q2"), ChartEntry(150f, "Q3")),
+                label = "Revenue".asText(),
+            ),
+            ChartSeries(
+                entries = listOf(ChartEntry(80f, "Q1"), ChartEntry(110f, "Q2"), ChartEntry(95f, "Q3")),
+                label = "Costs".asText(),
+            ),
+        ),
+        title = "Quarterly Report".asText(),
+    )
+)
+
+// Line chart with area fill
+LineChart(
+    model = LineChartModel(
+        entries = listOf(
+            ChartEntry(20f, "Jan"), ChartEntry(35f, "Feb"), ChartEntry(28f, "Mar"),
+            ChartEntry(50f, "Apr"), ChartEntry(42f, "May"), ChartEntry(60f, "Jun"),
+        ),
+        title = "Growth Trend".asText(),
+        showArea = true,
+    )
+)
+
+// Simple pie chart
+PieChart(
+    model = PieChartModel(
+        slices = listOf(
+            PieSlice(value = 35f, label = "Mobile".asText()),
+            PieSlice(value = 30f, label = "Desktop".asText()),
+            PieSlice(value = 20f, label = "Tablet".asText()),
+            PieSlice(value = 15f, label = "Other".asText()),
+        ),
+        title = "Traffic Sources".asText(),
+    )
+)
+
+// Donut chart
+PieChart(
+    model = PieChartModel(
+        slices = listOf(
+            PieSlice(value = 72f, label = "Complete".asText(), color = Color(0xFF34D399)),
+            PieSlice(value = 28f, label = "Remaining".asText(), color = Color(0xFFE2E8F0)),
+        ),
+        title = "Progress".asText(),
+        donutFraction = 0.6f,
+    )
+)
+
+// Multi-series line chart
+LineChart(
+    model = LineChartModel(
+        series = listOf(
+            ChartSeries(
+                entries = listOf(ChartEntry(10f, "W1"), ChartEntry(30f, "W2"), ChartEntry(25f, "W3"), ChartEntry(45f, "W4")),
+                label = "Users".asText(),
+            ),
+            ChartSeries(
+                entries = listOf(ChartEntry(5f, "W1"), ChartEntry(15f, "W2"), ChartEntry(20f, "W3"), ChartEntry(35f, "W4")),
+                label = "Sessions".asText(),
+            ),
+        ),
+        title = "Weekly Metrics".asText(),
+        showArea = true,
+        smoothCurve = true,
+    )
+)
+```
+
+---
 
 Note: `Clause`, `Image`, `Currency`, `OptionalClickCallback` come from `ui:element`.

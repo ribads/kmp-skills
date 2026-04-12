@@ -386,6 +386,12 @@ fun Modifier.shimmer(showShimmer: Boolean = true): Modifier
 
 ---
 
+## Hard Rules
+
+1. **Data models must be constructed outside composables.** All `Clause`, `Text`, `Graphics`, `Image`, `TextFormat`, and other ui-element data models should be built in the UI contract (state), mapper, or reducer — never inline inside a `@Composable` function. Composables should only *render* pre-built models, not *create* them.
+
+---
+
 ## Usage Examples
 
 ### Theme setup
@@ -433,50 +439,69 @@ Spacer(Modifier.height(Theme.spacing.x4))
 
 ### Rich text
 
+Build all clause models in the contract/mapper, then render in the composable:
+
 ```kotlin
-// Simple
-Text(clause = "Hello World".asText())
+// — Contract / State —
+data class ViewState(
+    val greeting: Clause = "Hello World".asText(),
+    val boldLabel: Clause = "Bold text".asText(format = TextFormat.Bold),
+    val errorLabel: Clause = "Error occurred".asText(format = TextFormat.Error),
+    val styledLabel: Clause = "Bold + italic".asText(format = TextFormat.Bold + TextFormat.Italic),
+    val mention: Clause = "@john".asMention(textActionId = "user_123"),
+    val price: Clause = Text.Money(amount = 1999, currency = Currency.GBP),  // £19.99
+    val date: Clause = Text.Timestamp(date = 1718000000000L, pattern = "dd MMM yyyy"),
+    val featured: Clause = Text.listOf(
+        Graphics(image = Image.Drawable(Res.drawable.ic_star), intent = TextIntent.Emphasis),
+        " Featured".asText(format = TextFormat.Bold),
+    ),
+    val link: Clause = "Click here".asText().asClickable("link_id"),
+)
+```
 
-// Formatted
-Text(clause = "Bold text".asText(format = TextFormat.Bold))
-Text(clause = "Error occurred".asText(format = TextFormat.Error))
+```kotlin
+// — Screen (composable) — only renders pre-built models
+@Composable
+fun MyScreen(state: ViewState) {
+    Text(clause = state.greeting)
+    Text(clause = state.boldLabel)
+    Text(clause = state.errorLabel)
+    Text(clause = state.styledLabel)
+    Text(clause = state.mention)
+    Text(clause = state.price)
+    Text(clause = state.date)
+    Text(clause = state.featured)
 
-// Combined formats
-Text(clause = "Bold + italic".asText(format = TextFormat.Bold + TextFormat.Italic))
-
-// Mention style (bold + emphasis background)
-Text(clause = "@john".asMention(textActionId = "user_123"))
-
-// Money
-Text(clause = Text.Money(amount = 1999, currency = Currency.GBP))  // £19.99
-
-// Timestamp
-Text(clause = Text.Timestamp(date = System.currentTimeMillis(), pattern = "dd MMM yyyy"))
-
-// Composite with icon
-Text(clause = Text.listOf(
-    Graphics(image = Image.Drawable(Res.drawable.ic_star), intent = TextIntent.Emphasis),
-    " Featured".asText(format = TextFormat.Bold)
-))
-
-// Clickable
-WithTextClickHandler(onTextActionClick = { tag -> handleClick(tag) }) {
-    Text(clause = "Click here".asText().asClickable("link_id"))
+    WithTextClickHandler(onTextActionClick = { tag -> handleClick(tag) }) {
+        Text(clause = state.link)
+    }
 }
+```
 
-// Custom intent palette
+```kotlin
+// Custom intent palette (theme-level, wraps content)
 WithTextIntentPalette(
     palette = textIntentPalette(emphasisContent = Color.Blue, emphasisSurface = Color.LightGray)
 ) {
-    Text(clause = "Custom styled".asText(format = TextFormat.Emphasis))
+    Text(clause = state.styledLabel)
 }
 ```
 
 ### Image & Icon
 
 ```kotlin
-Image(image = Image.Bitmap("https://example.com/photo.jpg"), modifier = Modifier.fillMaxWidth())
-Icon(image = Image.Drawable(Res.drawable.ic_settings), modifier = Modifier.size(24.dp), adaptive = true, onClick = { openSettings() })
+// — Contract / State —
+data class ViewState(
+    val photo: Image = Image.Bitmap("https://example.com/photo.jpg"),
+    val settingsIcon: Image = Image.Drawable(Res.drawable.ic_settings),
+)
+
+// — Screen —
+@Composable
+fun MyScreen(state: ViewState, onSettingsClick: () -> Unit) {
+    Image(image = state.photo, modifier = Modifier.fillMaxWidth())
+    Icon(image = state.settingsIcon, modifier = Modifier.size(24.dp), adaptive = true, onClick = onSettingsClick)
+}
 ```
 
 ### Shimmer loading
