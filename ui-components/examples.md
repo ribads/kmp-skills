@@ -1,0 +1,449 @@
+# Usage Examples
+
+## Buttons
+
+```kotlin
+PrimaryButton(
+    model = "Submit".asText().asButton(),
+    state = if (isLoading) ButtonState.Loading else ButtonState.Enabled,
+    onClick = { viewModel.emit(Intent.OnSubmit) }
+)
+```
+
+## Text Fields
+
+```kotlin
+LabelTextField(
+    model = TextInputModel(label = "Email".asText(), value = email, placeholder = "Enter email".asText()),
+    onValueChange = { email = it }
+)
+```
+
+## Date Picker
+
+```kotlin
+DatePickerBottomSheet(
+    isVisible = showPicker,
+    model = DatePickerModel(selectedDate = selectedMs, minDate = null, maxDate = null),
+    onDateSelected = { millis -> selectedMs = millis },
+    onDismissRequest = { showPicker = false }
+)
+```
+
+## Scaffold
+
+```kotlin
+Scaffold(topBar = { /* toolbar */ }) { padding ->
+    Column(Modifier.padding(padding)) { /* content */ }
+}
+```
+
+## Tray
+
+```kotlin
+// Tray with a sticky primary action
+Tray(
+    onDismissRequest = { viewModel.emit(Intent.DismissSheet) },
+    stickyBottom = {
+        PrimaryButton(
+            model = "Confirm".asText().asButton(),
+            onClick = { viewModel.emit(Intent.Confirm) }
+        )
+    }
+) {
+    Column { /* form fields */ }
+}
+
+// ScrollableTray wrapping a LazyColumn — caller renders its own close button
+ScrollableTray(onDismissRequest = { viewModel.emit(Intent.DismissSheet) }) {
+    Column {
+        Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+            IconButton(onClick = { viewModel.emit(Intent.DismissSheet) }) { /* close icon */ }
+        }
+        LazyColumn { items(rows) { RowItem(it) } }
+    }
+}
+```
+
+## Checkbox
+
+```kotlin
+LabelCheckbox(
+    model = CheckboxModel(label = "Accept terms".asText(), checked = isChecked),
+    onCheckedChange = { isChecked = it }
+)
+```
+
+## Progress
+
+```kotlin
+ProgressBar(
+    model = ProgressBarModel(value = 75f, max = 100f, label = "Upload".asText(), showPercentage = true)
+)
+
+CircularProgress(
+    model = CircularProgressModel(value = 72f, max = 100f, label = "Daily Goal".asText())
+)
+```
+
+## Rating
+
+```kotlin
+RatingInput(
+    model = RatingInputModel(rating = 3, maxStars = 5),
+    onRatingChange = { newRating -> rating = newRating }
+)
+```
+
+## Chips
+
+```kotlin
+// Single select
+ChipGroup(
+    model = ChipGroupModel(
+        options = listOf(ChipOption("s", "Small".asText()), ChipOption("m", "Medium".asText()), ChipOption("l", "Large".asText())),
+        selectedKeys = setOf(selectedSize),
+    ),
+    onSelectionChange = { selectedSize = it.first() }
+)
+
+// Multi select
+ChipGroup(
+    model = ChipGroupModel(
+        options = listOf(ChipOption("a", "Android".asText()), ChipOption("i", "iOS".asText()), ChipOption("w", "Web".asText())),
+        selectedKeys = selectedPlatforms,
+        multiSelect = true,
+    ),
+    onSelectionChange = { selectedPlatforms = it }
+)
+```
+
+## Tab Layout
+
+```kotlin
+TabLayout(
+    model = TabLayoutModel(tabs = listOf(TabItem("Overview".asText()), TabItem("Details".asText())), selectedIndex = tab),
+    onTabSelected = { tab = it },
+) { selectedIndex ->
+    when (selectedIndex) {
+        0 -> OverviewContent()
+        1 -> DetailsContent()
+    }
+}
+```
+
+## Radio Group
+
+```kotlin
+// Vertical
+RadioGroup(
+    model = RadioGroupModel(
+        options = listOf(RadioOption("sm", "Small".asText()), RadioOption("md", "Medium".asText()), RadioOption("lg", "Large".asText())),
+        selectedKey = selectedSize,
+    ),
+    onSelectionChange = { selectedSize = it }
+)
+
+// Horizontal
+RadioGroup(
+    model = RadioGroupModel(
+        options = listOf(RadioOption("y", "Yes".asText()), RadioOption("n", "No".asText())),
+        selectedKey = answer,
+    ),
+    horizontal = true,
+    onSelectionChange = { answer = it }
+)
+```
+
+## Slider
+
+```kotlin
+Slider(
+    model = SliderModel(value = severity, min = 1f, max = 10f, step = 1f, label = "Severity".asText(), showValue = true),
+    onValueChange = { severity = it }
+)
+```
+
+## Stepper
+
+```kotlin
+Stepper(
+    model = StepperModel(value = quantity, min = 0, max = 20, step = 1, label = "Quantity".asText()),
+    onValueChange = { quantity = it }
+)
+```
+
+## Timer
+
+```kotlin
+Timer(
+    model = TimerModel(elapsedMs = elapsed, running = isRunning, label = "Workout".asText()),
+    onStartStop = { isRunning = !isRunning },
+    onReset = { elapsed = 0L; isRunning = false }
+)
+```
+
+## Time Picker
+
+```kotlin
+TimePicker(
+    model = TimePickerModel(hour = hour, minute = minute, is24Hour = true, label = "Alarm".asText()),
+    onTimeChange = { h, m -> hour = h; minute = m }
+)
+```
+
+## Confirm Dialog
+
+```kotlin
+ConfirmDialog(
+    model = ConfirmDialogModel(
+        title = "Delete item?".asText(),
+        message = "This action cannot be undone.".asText(),
+        confirmLabel = "Delete".asText(),
+        cancelLabel = "Cancel".asText(),
+    ),
+    onConfirm = { viewModel.emit(Intent.ConfirmDelete) },
+    onCancel = { showDialog = false }
+)
+```
+
+## Empty State
+
+```kotlin
+EmptyState(
+    model = EmptyStateModel(
+        icon = Image.Drawable(Res.drawable.ic_empty),
+        title = "No items yet".asText(),
+        subtitle = "Add your first item to get started".asText(),
+        actionLabel = "Add Item".asText(),
+    ),
+    onActionClick = { viewModel.emit(Intent.AddItem) }
+)
+```
+
+---
+
+## Chat
+
+### ChatTextArea
+
+```kotlin
+// Basic input with camera and mic actions
+ChatTextArea(
+    model = ChatTextAreaModel(
+        value = inputText,
+        placeholder = "Message".asText(),
+        actions = listOf(
+            ChatInputAction(id = "camera", image = Image.Drawable(Res.drawable.ic_camera)),
+            ChatInputAction(id = "mic", image = Image.Drawable(Res.drawable.ic_mic)),
+        ),
+    ),
+    onValueChange = { inputText = it },
+    onSend = { viewModel.emit(Intent.SendMessage(inputText)) },
+    onActionClick = { actionId ->
+        when (actionId) {
+            "camera" -> viewModel.emit(Intent.OpenCamera)
+            "mic" -> viewModel.emit(Intent.StartRecording)
+        }
+    },
+)
+
+// With attachments
+ChatTextArea(
+    model = ChatTextAreaModel(
+        value = inputText,
+        placeholder = "Message".asText(),
+        attachments = listOf(
+            ChatAttachment.Image(id = "1", image = Image.Bitmap(filePath = photoPath)),
+            ChatAttachment.Audio(id = "2", durationMs = 15_000, waveform = waveformData),
+        ),
+        actions = listOf(
+            ChatInputAction(id = "camera", image = Image.Drawable(Res.drawable.ic_camera)),
+        ),
+    ),
+    onValueChange = { inputText = it },
+    onSend = { viewModel.emit(Intent.SendMessage(inputText)) },
+    onRemoveAttachment = { attachment -> viewModel.emit(Intent.RemoveAttachment(attachment.id)) },
+    onActionClick = { actionId -> /* handle */ },
+)
+```
+
+### MessageBubble
+
+```kotlin
+// Simple text message
+MessageBubble(
+    model = MessageBubbleModel(
+        text = "Hello!".asText(),
+        timestamp = "9:41 AM".asText(),
+        variant = MessageVariant.Outgoing,
+        status = MessageStatus.Read,
+    ),
+)
+
+// Rich text with formatting
+MessageBubble(
+    model = MessageBubbleModel(
+        text = Text.listOf(
+            "Hey ".asText(),
+            "@Kenny".asText(format = TextFormat.Mention),
+            "! The new feature is ".asText(),
+            "ready".asText(format = TextFormat.Bold),
+        ),
+        timestamp = "9:42 AM".asText(),
+        variant = MessageVariant.Incoming,
+    ),
+)
+
+// With images
+MessageBubble(
+    model = MessageBubbleModel(
+        text = "Check these out".asText(),
+        images = listOf(
+            Image.Bitmap(filePath = "https://example.com/photo1.jpg"),
+            Image.Bitmap(filePath = "https://example.com/photo2.jpg"),
+        ),
+        timestamp = "9:43 AM".asText(),
+        variant = MessageVariant.Outgoing,
+        status = MessageStatus.Delivered,
+    ),
+    onImageClick = { index -> viewModel.emit(Intent.OpenImage(index)) },
+)
+
+// With audio
+MessageBubble(
+    model = MessageBubbleModel(
+        audio = MessageAudio(
+            durationMs = 34_000,
+            progress = 0.4f,
+            isPlaying = true,
+            waveform = waveformData,
+        ),
+        timestamp = "9:44 AM".asText(),
+        variant = MessageVariant.Outgoing,
+        status = MessageStatus.Delivered,
+    ),
+    onPlayPause = { viewModel.emit(Intent.TogglePlayback) },
+)
+
+// Grouped consecutive messages (tightened corners)
+MessageBubble(
+    model = MessageBubbleModel(
+        text = "First message".asText(),
+        timestamp = "9:45 AM".asText(),
+        variant = MessageVariant.Incoming,
+    ),
+)
+MessageBubble(
+    model = MessageBubbleModel(
+        text = "Second message from same sender".asText(),
+        timestamp = "9:45 AM".asText(),
+        variant = MessageVariant.Incoming,
+        isGrouped = true, // tightens the sender-side top corner
+    ),
+)
+```
+
+---
+
+## Charts
+
+### Bar Chart
+
+```kotlin
+// Simple
+BarChart(
+    model = BarChartModel(
+        entries = listOf(
+            ChartEntry(value = 45f, label = "Mon"),
+            ChartEntry(value = 80f, label = "Tue"),
+            ChartEntry(value = 65f, label = "Wed"),
+            ChartEntry(value = 90f, label = "Thu"),
+            ChartEntry(value = 55f, label = "Fri"),
+        ),
+        title = "Weekly Sales".asText(),
+        showValues = true,
+    )
+)
+
+// Multi-series grouped
+BarChart(
+    model = BarChartModel(
+        series = listOf(
+            ChartSeries(
+                entries = listOf(ChartEntry(120f, "Q1"), ChartEntry(180f, "Q2"), ChartEntry(150f, "Q3")),
+                label = "Revenue".asText(),
+            ),
+            ChartSeries(
+                entries = listOf(ChartEntry(80f, "Q1"), ChartEntry(110f, "Q2"), ChartEntry(95f, "Q3")),
+                label = "Costs".asText(),
+            ),
+        ),
+        title = "Quarterly Report".asText(),
+    )
+)
+```
+
+### Line Chart
+
+```kotlin
+// With area fill
+LineChart(
+    model = LineChartModel(
+        entries = listOf(
+            ChartEntry(20f, "Jan"), ChartEntry(35f, "Feb"), ChartEntry(28f, "Mar"),
+            ChartEntry(50f, "Apr"), ChartEntry(42f, "May"), ChartEntry(60f, "Jun"),
+        ),
+        title = "Growth Trend".asText(),
+        showArea = true,
+    )
+)
+
+// Multi-series
+LineChart(
+    model = LineChartModel(
+        series = listOf(
+            ChartSeries(
+                entries = listOf(ChartEntry(10f, "W1"), ChartEntry(30f, "W2"), ChartEntry(25f, "W3"), ChartEntry(45f, "W4")),
+                label = "Users".asText(),
+            ),
+            ChartSeries(
+                entries = listOf(ChartEntry(5f, "W1"), ChartEntry(15f, "W2"), ChartEntry(20f, "W3"), ChartEntry(35f, "W4")),
+                label = "Sessions".asText(),
+            ),
+        ),
+        title = "Weekly Metrics".asText(),
+        showArea = true,
+        smoothCurve = true,
+    )
+)
+```
+
+### Pie Chart
+
+```kotlin
+// Simple
+PieChart(
+    model = PieChartModel(
+        slices = listOf(
+            PieSlice(value = 35f, label = "Mobile".asText()),
+            PieSlice(value = 30f, label = "Desktop".asText()),
+            PieSlice(value = 20f, label = "Tablet".asText()),
+            PieSlice(value = 15f, label = "Other".asText()),
+        ),
+        title = "Traffic Sources".asText(),
+    )
+)
+
+// Donut
+PieChart(
+    model = PieChartModel(
+        slices = listOf(
+            PieSlice(value = 72f, label = "Complete".asText(), color = Color(0xFF34D399)),
+            PieSlice(value = 28f, label = "Remaining".asText(), color = Color(0xFFE2E8F0)),
+        ),
+        title = "Progress".asText(),
+        donutFraction = 0.6f,
+    )
+)
+```
