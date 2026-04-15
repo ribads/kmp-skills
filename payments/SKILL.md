@@ -47,28 +47,74 @@ sealed class PaystackError {
 **Package**: `com.synapse.paystack.ui`
 
 ```kotlin
-// Compose Multiplatform payment UI
-@Composable
-fun PaymentSheetContent(...)
+// --- Compose Multiplatform modal entry point (recommended) ---
 
-// Result handling
-sealed class PaymentSheetResult {
-    data class Completed(val reference: String) : PaymentSheetResult()
-    data object Cancelled : PaymentSheetResult()
-    data class Failed(val error: PaystackError) : PaymentSheetResult()
+@Composable
+fun rememberPaystackPaymentSheetState(): PaystackPaymentSheetState
+
+@Stable
+class PaystackPaymentSheetState {
+    val isPresented: Boolean
+    fun present(accessCode: String)
+    // dismiss() is internal — sheet manages its own lifecycle
 }
 
-// Platform entry points
-// Android: PaymentSheetActivity (ComponentActivity)
-// iOS: PaymentSheetViewController() factory
-// Android public API: PaymentSheet with ActivityResultLauncher
+@Composable
+fun PaystackPaymentSheet(
+    state: PaystackPaymentSheetState,
+    onResult: (PaymentSheetResult) -> Unit,
+)
+
+// --- Low-level composable (embed in your own container) ---
+
+@Composable
+fun PaymentSheetContent(
+    accessCode: String,
+    onResult: (PaymentSheetResult) -> Unit,
+    modifier: Modifier = Modifier,
+)
+
+// --- Result types ---
+
+sealed class PaymentSheetResult {
+    data class Completed(val details: PaymentCompletionDetails) : PaymentSheetResult()
+    data object Cancelled : PaymentSheetResult()
+    data class Failed(val error: Throwable, val reference: String?) : PaymentSheetResult()
+}
+
+data class PaymentCompletionDetails(val reference: String)
+
+typealias PaymentSheetResultCallback = (PaymentSheetResult) -> Unit
+
+// --- Platform entry points ---
+
+// Android: PaymentSheet(activity: ComponentActivity, callback) → launch(accessCode)
+// iOS: PaymentSheetViewController(accessCode, onResult) → UIViewController
+```
+
+**Usage**:
+```kotlin
+// 1. Initialize once at app startup
+paystack { publicKey = "pk_live_..." }
+
+// 2. In a composable
+val state = rememberPaystackPaymentSheetState()
+
+Button(onClick = { state.present(accessCode = "xxx") }) { ... }
+
+PaystackPaymentSheet(
+    state = state,
+    onResult = { result ->
+        when (result) {
+            is PaymentSheetResult.Completed -> { /* result.details.reference */ }
+            is PaymentSheetResult.Failed    -> { /* result.error */ }
+            is PaymentSheetResult.Cancelled -> { /* user dismissed */ }
+        }
+    },
+)
 ```
 
 **Screens**: Card payments (number/expiry/CVV, PIN, OTP, phone, address, DOB, 3DS), M-Pesa (online/offline)
-
-### core:payment:paystack — High-level Wrapper
-
-Composes `core:paystack:core` + `core:paystack:ui` into a single integration point.
 
 ---
 
