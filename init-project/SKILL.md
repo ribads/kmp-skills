@@ -158,7 +158,7 @@ python3 .claude/skills/init-project/scripts/init_project.py \
 | `--output` | yes | Absolute path where the project directory will be created. |
 | `--domains` | yes | Comma-separated domain names in lowercase (e.g. `auth,profile,orders`). Each gets `entities/` + `data/` modules. |
 | `--features` | yes | Comma-separated feature names in lowercase (e.g. `auth,home,profile`). Each gets `usecase/` + `ui/` modules with a landing screen. |
-| `--synapse-version` | no | Synapse library version. Defaults to `0.0.17-alpha1`. |
+| `--synapse-version` | no | Synapse library version. Defaults to the latest release resolved from Maven Central (`com.ribads.synapse:ui-element` `maven-metadata.xml`); falls back to a pinned version if the lookup fails. |
 | `--force` | no | Overwrite existing files. Otherwise aborts if output dir already has a `settings.gradle.kts`. |
 
 ### Example
@@ -169,9 +169,10 @@ python3 .claude/skills/init-project/scripts/init_project.py \
     --package com.outside \
     --output /Users/ribads/Projects/outside-new \
     --domains auth,activities,profile,messaging \
-    --features auth,discover,profile,notifications,activities,create,settings \
-    --synapse-version 0.0.17-alpha1
+    --features auth,discover,profile,notifications,activities,create,settings
 ```
+
+Omit `--synapse-version` to use the latest published release. Pass it explicitly only when pinning to a specific version.
 
 ## Gradle conventions
 

@@ -13,11 +13,85 @@ Creates the complete project scaffold:
 """
 
 import argparse
+import shutil
+import subprocess
 import sys
+import urllib.error
+import urllib.request
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 
+SYNAPSE_VERSION_FALLBACK = "0.0.24-alpha1"
+SYNAPSE_METADATA_URL = (
+    "https://repo1.maven.org/maven2/com/ribads/synapse/ui-element/maven-metadata.xml"
+)
+
+
 # ─── Helpers ───────────────────────────────────────────────────────────────────
+
+def _fetch_metadata_xml() -> str | None:
+    """Return the raw maven-metadata.xml body, or ``None`` if unreachable.
+
+    Tries urllib first; on SSL trust issues (common with python.org builds on
+    macOS that never ran ``Install Certificates.command``), falls back to
+    ``curl``, which uses the system trust store.
+    """
+    request = urllib.request.Request(
+        SYNAPSE_METADATA_URL,
+        headers={"User-Agent": "synapse-init-project/1.0"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:
+            return response.read().decode("utf-8")
+    except urllib.error.URLError as e:
+        # SSL cert issues or DNS/network — try curl as a fallback.
+        if not shutil.which("curl"):
+            print(f"warning: urllib failed ({e}) and curl is unavailable", file=sys.stderr)
+            return None
+        try:
+            result = subprocess.run(
+                ["curl", "-fsSL", "--max-time", "10", SYNAPSE_METADATA_URL],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            return result.stdout
+        except subprocess.CalledProcessError as ce:
+            print(f"warning: curl fallback failed ({ce.stderr.strip() or ce})", file=sys.stderr)
+            return None
+
+
+def fetch_latest_synapse_version() -> str:
+    """Fetch the latest released Synapse version from Maven Central.
+
+    Falls back to ``SYNAPSE_VERSION_FALLBACK`` if the lookup fails (offline,
+    DNS issue, unexpected XML, etc.). Queries the ``ui-element`` artifact
+    since every Synapse release publishes it.
+    """
+    body = _fetch_metadata_xml()
+    if body is None:
+        print(f"warning: using fallback Synapse version {SYNAPSE_VERSION_FALLBACK}", file=sys.stderr)
+        return SYNAPSE_VERSION_FALLBACK
+    try:
+        root = ET.fromstring(body)
+    except ET.ParseError as e:
+        print(
+            f"warning: could not parse maven-metadata.xml ({e}); "
+            f"falling back to {SYNAPSE_VERSION_FALLBACK}",
+            file=sys.stderr,
+        )
+        return SYNAPSE_VERSION_FALLBACK
+    version = root.findtext("versioning/release") or root.findtext("versioning/latest")
+    if version:
+        return version.strip()
+    print(
+        "warning: maven-metadata.xml had no <release>/<latest>; "
+        f"falling back to {SYNAPSE_VERSION_FALLBACK}",
+        file=sys.stderr,
+    )
+    return SYNAPSE_VERSION_FALLBACK
+
 
 def to_pascal(name: str) -> str:
     return name[0].upper() + name[1:] if name else name
@@ -123,10 +197,6 @@ org.gradle.caching=true
 #Android
 android.nonTransitiveRClass=true
 android.useAndroidX=true
-android.sdk.defaultTargetSdkToCompileSdkIfUnset=false
-android.enableAppCompileTimeRClass=false
-android.usesSdkInManifest.disallowed=false
-android.uniquePackageNames=false
 android.dependency.useConstraints=true
 '''
 
@@ -1433,7 +1503,7 @@ import __BASE_PACKAGE__.core.auth.OauthTokenProvider
 import __BASE_PACKAGE__.core.config.AppConfigurationProvider
 import io.ktor.client.HttpClient
 
-internal class CoreClientImpl(
+class CoreClientImpl(
     private val tokenProvider: OauthTokenProvider,
     private val configProvider: AppConfigurationProvider,
 ) : CoreClient {
@@ -1512,13 +1582,14 @@ data class OauthToken(
 OAUTH_TOKEN_PROVIDER = '''package __BASE_PACKAGE__.core.auth
 
 import com.ribads.synapse.core.sharedpref.SharedPrefManager
+import com.ribads.synapse.core.sharedpref.getStringOrNull
 import me.tatarka.inject.annotations.Inject
 
 class OauthTokenProvider @Inject constructor(
     private val storage: SharedPrefManager,
 ) {
-    fun getAccessToken(): String? = storage.getString("access_token")
-    fun setAccessToken(token: String) = storage.putString("access_token", token)
+    fun getAccessToken(): String? = storage.getStringOrNull("access_token")
+    fun setAccessToken(token: String) = storage.put("access_token", token)
     fun clear() = storage.clear()
 
     companion object {
@@ -2277,7 +2348,11 @@ def main() -> None:
     parser.add_argument("--output", required=True, help="Absolute path to create project in")
     parser.add_argument("--domains", required=True, help="Comma-separated domain names (lowercase)")
     parser.add_argument("--features", required=True, help="Comma-separated feature names (lowercase)")
-    parser.add_argument("--synapse-version", default="0.0.17-alpha1", help="Synapse library version")
+    parser.add_argument(
+        "--synapse-version",
+        default=None,
+        help="Synapse library version (defaults to latest from Maven Central)",
+    )
     parser.add_argument("--force", action="store_true", help="Overwrite existing files")
     args = parser.parse_args()
 
@@ -2286,7 +2361,11 @@ def main() -> None:
     out = Path(args.output).expanduser().resolve()
     domains = [d.strip() for d in args.domains.split(",") if d.strip()]
     features = [f.strip() for f in args.features.split(",") if f.strip()]
-    synapse_version = args.synapse_version
+    if args.synapse_version:
+        synapse_version = args.synapse_version
+    else:
+        print("Resolving latest Synapse version from Maven Central...")
+        synapse_version = fetch_latest_synapse_version()
     force = args.force
 
     if not name or not name[0].isupper():

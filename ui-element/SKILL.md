@@ -166,16 +166,25 @@ fun Icon(
     isDarkTheme: Boolean = isSystemInDarkTheme(),
 )
 
+typealias AsyncImagePainterFactory =
+    @Composable (String, ConstraintsSizeResolver, DrawableResource?) -> Painter
+
 @Composable
 fun WithImagePainter(
-    imagePainterFactory: @Composable (String, ConstraintsSizeResolver, DrawableResource?) -> Painter,
+    imagePainterFactory: AsyncImagePainterFactory,
     content: @Composable () -> Unit,
 )
 
 object ImagePainterFactory {
-    @Composable
-    fun createPainterFactory(): @Composable (String, ConstraintsSizeResolver, DrawableResource?) -> Painter
+    val Default: AsyncImagePainterFactory
+    fun createPainterFactory(): AsyncImagePainterFactory
 }
+
+/**
+ * Install Synapse's platform Coil components (iOS: PHAsset fetcher; Android: no-op).
+ * Call on your ImageLoader.Builder before build().
+ */
+expect fun ImageLoader.Builder.installSynapseImageComponents(): ImageLoader.Builder
 ```
 
 ---
