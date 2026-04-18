@@ -1,28 +1,28 @@
 ---
 name: create-screen
-description: Use when scaffolding a new screen in a Synapse-based KMP app. Generates the 7-file IRS-MVI screen package (Contract, Interactor, Reducer, Mapper, ViewModel, Screen, di/UiComponent) via a script.
+description: Use when scaffolding a new screen in a Synapse-based KMP app. Generates the 7-file IRSE-MVI screen package (Contract, Interactor, Reducer, Mapper, ViewModel, Screen, di/UiComponent) via a script.
 user-invocable: true
 ---
 
-# create-screen — Synapse IRS-MVI Screen Scaffold
+# create-screen — Synapse IRSE-MVI Screen Scaffold
 
-Generates the canonical 7-file screen package used in Synapse apps. Every screen in a Synapse project follows the same IRS-MVI structure — this skill eliminates the boilerplate.
+Generates the canonical 7-file screen package used in Synapse apps. Every screen in a Synapse project follows the same IRSE-MVI structure — this skill eliminates the boilerplate.
 
 ## What it creates
 
 ```
 <package>/
-├── {Name}Contract.kt         sealed Intent, sealed Result, @Immutable ViewState, Mapper interface
-├── {Name}Interactor.kt       Interactor<Intent, Result> — merge() + filterIsInstance routing
-├── {Name}Reducer.kt          Reducer<ViewState, Result> — pure state machine
+├── {Name}Contract.kt         sealed Intent, sealed Result, sealed Effect, @Immutable ViewState, Mapper interface
+├── {Name}Interactor.kt       Interactor<Intent, Result, State> — merge() + filterIsInstance routing, StateFlow-aware
+├── {Name}Reducer.kt          Reducer<ViewState, Result, Effect> — pure state machine returning Reduction
 ├── {Name}Mapper.kt           Contract.Mapper impl — intent/domain → Result conversion
-├── {Name}ViewModel.kt        LifecycleViewModel boilerplate
-├── {Name}Screen.kt           @Composable — Scaffold, derivedStateOf, navigationCommand handling
+├── {Name}ViewModel.kt        LifecycleViewModel boilerplate (4 type params)
+├── {Name}Screen.kt           @Composable — Scaffold, OnFirstComposition, CollectAsEffect for navigation
 └── di/{Name}UiComponent.kt   @Component kotlin-inject with @Provides bindings
 ```
 
 The scaffold ships with the baseline intents every Synapse screen needs:
-`LoadInitialData`, `Navigation.Done`, `Navigation.Back`, a `NavigationCommand?` on the ViewState, and the `isFirstIntent` + `navigationCommand.let { ... }` wiring in the composable.
+`LoadInitialData`, `Navigation.Back`, an `Effect.Navigate(NavigationCommand)` effect, and the `OnFirstComposition` + `effects.CollectAsEffect` wiring in the composable.
 
 ## Script
 
@@ -72,7 +72,7 @@ The script prints a short checklist. The files it generates are a minimal compil
 4. Wire any UseCases through the `Mapper` + `Interactor`.
 
 When helping the user wire these up, reach for:
-- `/mvi` — IRS-MVI APIs
+- `/mvi` — IRSE-MVI APIs (Intent → Interactor → Result → Reducer → State/Effect)
 - `/navigation` — `NavigatorHost`, `FeatureLauncher`, `NavigationCommand`
 - `/di-scopes` — `@SingletonScope`, kotlin-inject wiring
 - `/ui-components` / `/ui-element` — Scaffold, ButtonModel, TextInputModel, Theme, Clause

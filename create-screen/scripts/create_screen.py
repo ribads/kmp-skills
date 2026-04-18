@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Generate a Synapse screen scaffold (7 files following the IRS-MVI pattern).
+"""Generate a Synapse screen scaffold (7 files following the IRSE-MVI pattern).
 
 Creates:
-  {Name}Contract.kt    - Intent/Result/ViewState + Mapper interface
+  {Name}Contract.kt    - Intent/Result/Effect/ViewState + Mapper interface
   {Name}Interactor.kt  - Wires intents via merge() + filterIsInstance
-  {Name}Reducer.kt     - Pure state machine
+  {Name}Reducer.kt     - Pure state machine returning Reduction(State, Effects)
   {Name}Mapper.kt      - Contract.Mapper impl
   {Name}ViewModel.kt   - LifecycleViewModel boilerplate
-  {Name}Screen.kt      - Compose entry, renders ViewState, emits Intents
+  {Name}Screen.kt      - Compose entry, renders ViewState, emits Intents, collects Effects
   di/{Name}UiComponent.kt - kotlin-inject @Component with bindings
 """
 
@@ -29,30 +29,31 @@ internal object __NAME__Contract {
 
     interface Mapper {
         fun toResult(intent: Intent.LoadInitialData): Result.OnInitialDataLoaded
-        fun toResult(intent: Intent.Navigation): Result.OnNavigationCommandUpdated
+        fun toResult(intent: Intent.Navigation): Result.NavigationRequested
     }
 
     sealed class Intent {
         data object LoadInitialData : Intent()
         sealed class Navigation : Intent() {
-            data object Done : Navigation()
             data object Back : Navigation()
         }
     }
 
     sealed class Result {
         data object OnInitialDataLoaded : Result()
-        data class OnNavigationCommandUpdated(val navigationCommand: NavigationCommand?) : Result()
+        data class NavigationRequested(val command: NavigationCommand) : Result()
+    }
+
+    sealed class Effect {
+        data class Navigate(val command: NavigationCommand) : Effect()
     }
 
     @Immutable
     data class ViewState(
-        val navigationCommand: NavigationCommand?,
+        val isLoading: Boolean = false,
     ) {
         companion object {
-            val Default = ViewState(
-                navigationCommand = null,
-            )
+            val Default = ViewState()
         }
     }
 }
@@ -64,7 +65,9 @@ import com.ribads.synapse.ui.mvi.Interactor
 import __PACKAGE__.__NAME__Contract.Intent
 import __PACKAGE__.__NAME__Contract.Mapper
 import __PACKAGE__.__NAME__Contract.Result
+import __PACKAGE__.__NAME__Contract.ViewState
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
@@ -72,9 +75,12 @@ import me.tatarka.inject.annotations.Inject
 
 internal class __NAME__Interactor @Inject constructor(
     private val mapper: Mapper,
-) : Interactor<Intent, Result> {
+) : Interactor<Intent, Result, ViewState> {
 
-    override fun process(intents: Flow<Intent>): Flow<Result> {
+    override fun process(
+        intents: Flow<Intent>,
+        state: StateFlow<ViewState>,
+    ): Flow<Result> {
         return merge(
             intents.filterIsInstance<Intent.LoadInitialData>().map(mapper::toResult),
             intents.filterIsInstance<Intent.Navigation>().map(mapper::toResult),
@@ -86,18 +92,22 @@ internal class __NAME__Interactor @Inject constructor(
 REDUCER = '''package __PACKAGE__
 
 import com.ribads.synapse.ui.mvi.Reducer
+import com.ribads.synapse.ui.mvi.Reduction
+import com.ribads.synapse.ui.mvi.noEffects
+import com.ribads.synapse.ui.mvi.withEffect
+import __PACKAGE__.__NAME__Contract.Effect
 import __PACKAGE__.__NAME__Contract.Result
 import __PACKAGE__.__NAME__Contract.ViewState
 import me.tatarka.inject.annotations.Inject
 
-internal class __NAME__Reducer @Inject constructor() : Reducer<ViewState, Result> {
+internal class __NAME__Reducer @Inject constructor() : Reducer<ViewState, Result, Effect> {
     override fun reduce(
         state: ViewState,
         result: Result,
-    ): ViewState {
+    ): Reduction<ViewState, Effect> {
         return when (result) {
-            is Result.OnInitialDataLoaded -> state
-            is Result.OnNavigationCommandUpdated -> state.copy(navigationCommand = result.navigationCommand)
+            is Result.OnInitialDataLoaded -> state.noEffects()
+            is Result.NavigationRequested -> state withEffect Effect.Navigate(result.command)
         }
     }
 }
@@ -117,11 +127,10 @@ internal class __NAME__Mapper @Inject constructor() : Mapper {
         return Result.OnInitialDataLoaded
     }
 
-    override fun toResult(intent: Intent.Navigation): Result.OnNavigationCommandUpdated {
+    override fun toResult(intent: Intent.Navigation): Result.NavigationRequested {
         return when (intent) {
-            Intent.Navigation.Done -> Result.OnNavigationCommandUpdated(navigationCommand = null)
-            Intent.Navigation.Back -> Result.OnNavigationCommandUpdated(
-                navigationCommand = NavigationCommand.BackCommand(),
+            Intent.Navigation.Back -> Result.NavigationRequested(
+                command = NavigationCommand.BackCommand(),
             )
         }
     }
@@ -134,6 +143,7 @@ import com.ribads.synapse.ui.mvi.FlowViewModelArgs
 import com.ribads.synapse.ui.mvi.Interactor
 import com.ribads.synapse.ui.mvi.LifecycleViewModel
 import com.ribads.synapse.ui.mvi.Reducer
+import __PACKAGE__.__NAME__Contract.Effect
 import __PACKAGE__.__NAME__Contract.Intent
 import __PACKAGE__.__NAME__Contract.Result
 import __PACKAGE__.__NAME__Contract.ViewState
@@ -141,9 +151,9 @@ import me.tatarka.inject.annotations.Inject
 
 internal class __NAME__ViewModel @Inject constructor(
     initialState: ViewState,
-    interactor: Interactor<Intent, Result>,
-    reducer: Reducer<ViewState, Result>,
-) : LifecycleViewModel<Intent, Result, ViewState>(
+    interactor: Interactor<Intent, Result, ViewState>,
+    reducer: Reducer<ViewState, Result, Effect>,
+) : LifecycleViewModel<Intent, Result, ViewState, Effect>(
     args = FlowViewModelArgs(
         initialState = initialState,
         reducer = reducer,
@@ -165,6 +175,9 @@ import androidx.compose.ui.Modifier
 import com.ribads.synapse.ui.component.scaffold.Scaffold
 import com.ribads.synapse.ui.compose.presentation.navigation.NavigationDispatcher
 import com.ribads.synapse.ui.element.theme.Theme
+import com.ribads.synapse.ui.mvi.CollectAsEffect
+import com.ribads.synapse.ui.mvi.OnFirstComposition
+import __PACKAGE__.__NAME__Contract.Effect
 import __PACKAGE__.__NAME__Contract.Intent
 
 @Composable
@@ -174,13 +187,12 @@ internal fun __NAME__Screen(
 ) {
     val viewState by remember { derivedStateOf { viewModel.state.value } }
 
-    if (viewModel.isFirstIntent) {
-        viewModel.emit(Intent.LoadInitialData)
-    }
+    viewModel.OnFirstComposition(Intent.LoadInitialData)
 
-    viewState.navigationCommand?.let {
-        navigationDispatcher.navigateTo(it)
-        viewModel.emit(Intent.Navigation.Done)
+    viewModel.effects.CollectAsEffect { effect ->
+        when (effect) {
+            is Effect.Navigate -> navigationDispatcher.navigateTo(effect.command)
+        }
     }
 
     Scaffold(
@@ -202,6 +214,7 @@ UI_COMPONENT_NO_PROVIDER = '''package __PACKAGE__.di
 
 import com.ribads.synapse.ui.mvi.Interactor
 import com.ribads.synapse.ui.mvi.Reducer
+import __PACKAGE__.__NAME__Contract.Effect
 import __PACKAGE__.__NAME__Contract.Intent
 import __PACKAGE__.__NAME__Contract.Mapper
 import __PACKAGE__.__NAME__Contract.Result
@@ -221,10 +234,10 @@ internal abstract class __NAME__UiComponent {
     protected fun __NAME__Mapper.bind(): Mapper = this
 
     @Provides
-    protected fun __NAME__Reducer.bind(): Reducer<ViewState, Result> = this
+    protected fun __NAME__Reducer.bind(): Reducer<ViewState, Result, Effect> = this
 
     @Provides
-    fun __NAME__Interactor.bind(): Interactor<Intent, Result> = this
+    fun __NAME__Interactor.bind(): Interactor<Intent, Result, ViewState> = this
 
     @Provides
     protected fun provideDefaultViewState(): ViewState = ViewState.Default
@@ -235,6 +248,7 @@ UI_COMPONENT_WITH_PROVIDER = '''package __PACKAGE__.di
 
 import com.ribads.synapse.ui.mvi.Interactor
 import com.ribads.synapse.ui.mvi.Reducer
+import __PACKAGE__.__NAME__Contract.Effect
 import __PACKAGE__.__NAME__Contract.Intent
 import __PACKAGE__.__NAME__Contract.Mapper
 import __PACKAGE__.__NAME__Contract.Result
@@ -257,10 +271,10 @@ internal abstract class __NAME__UiComponent(
     protected fun __NAME__Mapper.bind(): Mapper = this
 
     @Provides
-    protected fun __NAME__Reducer.bind(): Reducer<ViewState, Result> = this
+    protected fun __NAME__Reducer.bind(): Reducer<ViewState, Result, Effect> = this
 
     @Provides
-    fun __NAME__Interactor.bind(): Interactor<Intent, Result> = this
+    fun __NAME__Interactor.bind(): Interactor<Intent, Result, ViewState> = this
 
     @Provides
     protected fun provideDefaultViewState(): ViewState = ViewState.Default
@@ -296,7 +310,7 @@ def write_file(path: Path, content: str, force: bool) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Generate a Synapse screen scaffold (7 files, IRS-MVI pattern).",
+        description="Generate a Synapse screen scaffold (7 files, IRSE-MVI pattern).",
     )
     parser.add_argument(
         "--name",
@@ -371,7 +385,7 @@ def main() -> None:
     print("Done. Next steps:")
     print(f"  1. Add {name}UiComponent to your feature's ViewModelComponent.")
     print(f"  2. Register the route in your FeatureLauncher's NavigatorHost.")
-    print(f"  3. Extend {name}Contract.Intent/Result/ViewState with feature-specific state.")
+    print(f"  3. Extend {name}Contract.Intent/Result/Effect/ViewState with feature-specific state.")
     print(f"  4. Wire UseCases through the Mapper + Interactor.")
 
 

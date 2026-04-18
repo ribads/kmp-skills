@@ -122,7 +122,7 @@ fun String.toUIScreen(): UIScreen
 
 ### renderedComposable
 
-When `dataSchema` is provided, `ReactiveDataStore`, `MutationExecutor`, `SchemaConditionEvaluator`, and `CollectionProvider` are created automatically. The `mutation:` action prefix is intercepted and routed to the executor.
+When `config.dataSchema` is provided, `ReactiveDataStore`, `MutationExecutor`, `SchemaConditionEvaluator`, and `CollectionProvider` are created automatically. The `mutation:` action prefix is intercepted and routed to the executor.
 
 ```kotlin
 fun NavGraphBuilder.renderedComposable(
@@ -130,16 +130,22 @@ fun NavGraphBuilder.renderedComposable(
     schemaStore: SchemaStore,
     actionHandler: ActionHandler,
     navigationDispatcher: NavigationDispatcher,
-    registry: NodeRendererRegistry = NodeRendererRegistry.defaults(),
-    conditionEvaluator: ConditionEvaluator = ConditionEvaluator.AlwaysFalse,
-    stateHolder: RendererStateHolder = RendererStateHolder(),
-    dataSchema: DataSchema? = null,
-    theme: UITheme? = null,
-    fontResolver: FontResolver = FontResolver { FontFamily.Default },
-    mediaProvider: MediaProvider = MediaProvider.NoOp,
-    onPageNotFound: (@Composable (pageId: String) -> Unit)? = null,
+    config: RenderedPageConfig = RenderedPageConfig(),
+    onPageNotFound: @Composable (pageId: String) -> Unit = { /* minimal default */ },
+)
+
+data class RenderedPageConfig(
+    val registry: NodeRendererRegistry = NodeRendererRegistry.defaults(),
+    val conditionEvaluator: ConditionEvaluator = ConditionEvaluator.AlwaysFalse,
+    val stateHolder: RendererStateHolder = RendererStateHolder(),
+    val dataSchema: DataSchema? = null,
+    val theme: UITheme? = null,
+    val fontResolver: FontResolver = FontResolver.Default,
+    val mediaProvider: MediaProvider = MediaProvider.NoOp,
 )
 ```
+
+`stateHolder` and `conditionEvaluator` are ignored when `dataSchema` is set — the `ReactiveDataStore` takes over both roles.
 
 **Built-in action prefixes:**
 - `renderer:navigate:<pageId>` — navigates to another rendered page

@@ -1,6 +1,6 @@
 ---
 name: init-project
-description: Use when initializing a new KMP project with Synapse libraries. Generates the full multi-module DDD architecture (core, domain, features, androidApp, composeApp, compose-ui, iosApp) with IRS-MVI wiring, kotlin-inject DI, and Compose Multiplatform navigation — all from templates.
+description: Use when initializing a new KMP project with Synapse libraries. Generates the full multi-module DDD architecture (core, domain, features, androidApp, composeApp, compose-ui, iosApp) with IRSE-MVI wiring, kotlin-inject DI, and Compose Multiplatform navigation — all from templates.
 user-invocable: true
 ---
 
@@ -41,7 +41,7 @@ Generates a complete Kotlin Multiplatform project with the canonical Synapse mul
 │       │   │   ├── NetworkComponent.kt    # CoreClient provider
 │       │   │   └── AppConfigurationProvider.kt
 │       │   └── ui/
-│       │       ├── MainContract.kt        # Main screen IRS-MVI
+│       │       ├── MainContract.kt        # Main screen IRSE-MVI
 ���       │       ├── MainInteractor.kt
 │       │       ├── MainReducer.kt
 │       │       ├── MainMapper.kt
@@ -109,7 +109,7 @@ Generates a complete Kotlin Multiplatform project with the canonical Synapse mul
 │   │       └── di/
 ���   │           ├── <Name>UseCaseModule.kt
 │   │           └── <Name>UseCaseProvider.kt
-│   └── ui/                                # IRS-MVI screens + navigation (androidMultiplatformLibrary)
+│   └── ui/                                # IRSE-MVI screens + navigation (androidMultiplatformLibrary)
 │       ├── build.gradle.kts
 │       └── src/commonMain/kotlin/<pkg>/feature/<name>/ui/
 │           ├── launcher/<Name>FeatureLauncher.kt
@@ -119,7 +119,7 @@ Generates a complete Kotlin Multiplatform project with the canonical Synapse mul
 │           ├── di/
 │           │   ├── <Name>Module.kt
 │           │   └── <Name>ViewModelComponent.kt
-│           └── screens/landing/           # First screen scaffold (7 IRS-MVI files)
+│           └── screens/landing/           # First screen scaffold (7 IRSE-MVI files)
 │               ├── LandingScreenContract.kt
 │               ├── LandingScreenInteractor.kt
 │               ├── LandingScreenReducer.kt
@@ -193,7 +193,7 @@ Key conventions:
 Invoke this skill whenever a user wants to:
 - Create a new KMP project that uses Synapse
 - Initialize a project with the multi-module DDD architecture
-- Bootstrap a new app with IRS-MVI, kotlin-inject DI, and Compose Multiplatform navigation
+- Bootstrap a new app with IRSE-MVI, kotlin-inject DI, and Compose Multiplatform navigation
 
 Always run the script rather than hand-writing the scaffold — that's the whole point.
 
@@ -211,8 +211,8 @@ The script generates a compiling skeleton. The user still needs to:
 
 ## Related skills
 
-- `/create-screen` — Add a new IRS-MVI screen to an existing feature
-- `/mvi` — IRS-MVI APIs
+- `/create-screen` — Add a new IRSE-MVI screen to an existing feature
+- `/mvi` — IRSE-MVI APIs (Intent → Interactor → Result → Reducer → State/Effect)
 - `/navigation` — NavigatorHost, FeatureLauncher, NavigationCommand
 - `/di-scopes` — SingletonScope, kotlin-inject wiring
 - `/ui-element` — Theme, Colors, Typography, Shape

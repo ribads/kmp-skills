@@ -553,12 +553,10 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.navigation.ModalBottomSheetLayout
 import androidx.compose.material.navigation.rememberBottomSheetNavigator
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -566,10 +564,11 @@ import __APP_PACKAGE__.ui.MainContract
 import __APP_PACKAGE__.ui.MainViewModel
 import __APP_PACKAGE__.ui.navigation.MainNavigationDispatcher
 import com.ribads.synapse.ui.component.scaffold.Scaffold
-import com.ribads.synapse.ui.compose.presentation.navigation.NavigationCommand
 import com.ribads.synapse.ui.compose.presentation.navigation.compose.NavContainer
 import com.ribads.synapse.ui.compose.presentation.navigation.compose.NavigatorHost
 import com.ribads.synapse.ui.compose.presentation.navigation.compose.rememberNavController
+import com.ribads.synapse.ui.mvi.CollectAsEffect
+import com.ribads.synapse.ui.mvi.OnFirstComposition
 
 @Composable
 internal fun RootScreen(
@@ -578,11 +577,7 @@ internal fun RootScreen(
 ) {
     val viewState by remember { derivedStateOf { viewModel.state.value } }
 
-    if (viewModel.isFirstIntent) {
-        androidx.compose.runtime.SideEffect {
-            viewModel.emit(MainContract.Intent.Initial)
-        }
-    }
+    viewModel.OnFirstComposition(MainContract.Intent.Initial)
 
     Scaffold { paddingValues ->
         val bottomSheetNavigator = rememberBottomSheetNavigator()
@@ -596,6 +591,15 @@ internal fun RootScreen(
                     )
                 )
             }
+
+        val navDispatcher =
+            remember { MainNavigationDispatcher(navController = navController) }
+
+        viewModel.effects.CollectAsEffect { effect ->
+            when (effect) {
+                is MainContract.Effect.Navigate -> navDispatcher.navigateTo(effect.command)
+            }
+        }
 
         viewState.startDestinationRoute?.let { startRoute ->
             var route by rememberSaveable { mutableStateOf(startRoute) }
@@ -612,14 +616,6 @@ internal fun RootScreen(
                     pageTransition = viewState.pageTransition,
                 )
             }
-        }
-
-        val navDispatcher =
-            remember { MainNavigationDispatcher(navController = navController) }
-        val command by rememberUpdatedState(newValue = viewState.navCommand)
-        if (command != null) LaunchedEffect(command) {
-            navDispatcher.navigateTo(command = command as NavigationCommand)
-            viewModel.emit(intent = MainContract.Intent.ClearNav)
         }
     }
 }
@@ -659,7 +655,6 @@ internal interface MainContract {
     sealed class Intent {
         data object Initial : Intent()
         data class RouteChanged(val previousRoute: String, val route: String) : Intent()
-        data object ClearNav : Intent()
     }
 
     sealed class Result {
@@ -668,26 +663,24 @@ internal interface MainContract {
             val startDestinationRoute: String,
         ) : Result()
 
-        data class NavigationCommandUpdated(
-            val navCommand: NavigationCommand?,
-        ) : Result()
-
         data class RouteChanged(
             val route: String,
             val pageTransition: PageTransition,
         ) : Result()
     }
 
+    sealed class Effect {
+        data class Navigate(val command: NavigationCommand) : Effect()
+    }
+
     @Immutable
     data class ViewState(
-        val navCommand: NavigationCommand? = null,
         val startDestinationRoute: String? = null,
         val currentRoute: String?,
         val pageTransition: PageTransition,
     ) {
         companion object {
             val Default = ViewState(
-                navCommand = null,
                 startDestinationRoute = null,
                 currentRoute = null,
                 pageTransition = PageTransition.Hierarchical,
@@ -702,22 +695,24 @@ MAIN_INTERACTOR = '''package __APP_PACKAGE__.ui
 import __APP_PACKAGE__.ui.MainContract.Intent
 import __APP_PACKAGE__.ui.MainContract.Mapper
 import __APP_PACKAGE__.ui.MainContract.Result
+import __APP_PACKAGE__.ui.MainContract.ViewState
 import com.ribads.synapse.ui.mvi.Interactor
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 
 internal class MainInteractor constructor(
     private val mapper: Mapper,
-) : Interactor<Intent, Result> {
+) : Interactor<Intent, Result, ViewState> {
 
-    override fun process(intents: Flow<Intent>): Flow<Result> {
+    override fun process(
+        intents: Flow<Intent>,
+        state: StateFlow<ViewState>,
+    ): Flow<Result> {
         return merge(
             intents.filterIsInstance<Intent.Initial>().map(mapper::toResult),
-            intents.filterIsInstance<Intent.ClearNav>().map {
-                Result.NavigationCommandUpdated(null)
-            },
             intents.filterIsInstance<Intent.RouteChanged>().map(mapper::toResult),
         )
     }
@@ -726,19 +721,21 @@ internal class MainInteractor constructor(
 
 MAIN_REDUCER = '''package __APP_PACKAGE__.ui
 
-import __APP_PACKAGE__.ui.MainContract.ViewState
+import __APP_PACKAGE__.ui.MainContract.Effect
 import __APP_PACKAGE__.ui.MainContract.Result
+import __APP_PACKAGE__.ui.MainContract.ViewState
 import com.ribads.synapse.ui.mvi.Reducer
+import com.ribads.synapse.ui.mvi.Reduction
+import com.ribads.synapse.ui.mvi.noEffects
 
-internal class MainReducer constructor() : Reducer<ViewState, Result> {
-    override fun reduce(state: ViewState, result: Result): ViewState {
+internal class MainReducer constructor() : Reducer<ViewState, Result, Effect> {
+    override fun reduce(state: ViewState, result: Result): Reduction<ViewState, Effect> {
         return when (result) {
-            is Result.Initial -> state.copy(startDestinationRoute = result.startDestinationRoute)
-            is Result.NavigationCommandUpdated -> state.copy(navCommand = result.navCommand)
+            is Result.Initial -> state.copy(startDestinationRoute = result.startDestinationRoute).noEffects()
             is Result.RouteChanged -> state.copy(
                 currentRoute = result.route,
                 pageTransition = result.pageTransition,
-            )
+            ).noEffects()
         }
     }
 }
@@ -776,9 +773,9 @@ import me.tatarka.inject.annotations.Inject
 @Inject
 internal class MainViewModel constructor(
     initialState: MainContract.ViewState,
-    interactor: Interactor<MainContract.Intent, MainContract.Result>,
-    reducer: Reducer<MainContract.ViewState, MainContract.Result>,
-) : LifecycleViewModel<MainContract.Intent, MainContract.Result, MainContract.ViewState>(
+    interactor: Interactor<MainContract.Intent, MainContract.Result, MainContract.ViewState>,
+    reducer: Reducer<MainContract.ViewState, MainContract.Result, MainContract.Effect>,
+) : LifecycleViewModel<MainContract.Intent, MainContract.Result, MainContract.ViewState, MainContract.Effect>(
     args = FlowViewModelArgs(
         initialState = initialState,
         reducer = reducer,
@@ -789,9 +786,10 @@ internal class MainViewModel constructor(
 
 MAIN_UI_COMPONENT = '''package __APP_PACKAGE__.ui.di
 
+import __APP_PACKAGE__.ui.MainContract.Effect
 import __APP_PACKAGE__.ui.MainContract.Intent
-import __APP_PACKAGE__.ui.MainContract.ViewState
 import __APP_PACKAGE__.ui.MainContract.Result
+import __APP_PACKAGE__.ui.MainContract.ViewState
 import __APP_PACKAGE__.ui.MainInteractor
 import __APP_PACKAGE__.ui.MainMapper
 import __APP_PACKAGE__.ui.MainReducer
@@ -809,11 +807,11 @@ internal abstract class MainUiComponent {
     protected fun provideDefaultState(): ViewState = ViewState.Default
 
     @Provides
-    protected fun provideInteractor(): Interactor<Intent, Result> =
+    protected fun provideInteractor(): Interactor<Intent, Result, ViewState> =
         MainInteractor(mapper = MainMapper())
 
     @Provides
-    fun provideReducer(): Reducer<ViewState, Result> = MainReducer()
+    fun provideReducer(): Reducer<ViewState, Result, Effect> = MainReducer()
 }
 '''
 
@@ -2007,7 +2005,7 @@ internal abstract class __FEATURE_PASCAL__ViewModelComponent(
 }
 '''
 
-# ── Feature UI: Landing Screen (IRS-MVI 7 files) ──
+# ── Feature UI: Landing Screen (IRSE-MVI 7 files) ──
 
 LANDING_CONTRACT = '''package __BASE_PACKAGE__.feature.__FEATURE__.ui.screens.landing
 
@@ -2018,28 +2016,31 @@ internal object LandingScreenContract {
 
     interface Mapper {
         fun toResult(intent: Intent.LoadInitialData): Result.OnInitialDataLoaded
-        fun toResult(intent: Intent.Navigation): Result.OnNavigationCommandUpdated
+        fun toResult(intent: Intent.Navigation): Result.NavigationRequested
     }
 
     sealed class Intent {
         data object LoadInitialData : Intent()
         sealed class Navigation : Intent() {
-            data object Done : Navigation()
             data object Back : Navigation()
         }
     }
 
     sealed class Result {
         data object OnInitialDataLoaded : Result()
-        data class OnNavigationCommandUpdated(val navigationCommand: NavigationCommand?) : Result()
+        data class NavigationRequested(val command: NavigationCommand) : Result()
+    }
+
+    sealed class Effect {
+        data class Navigate(val command: NavigationCommand) : Effect()
     }
 
     @Immutable
     data class ViewState(
-        val navigationCommand: NavigationCommand?,
+        val isLoading: Boolean = false,
     ) {
         companion object {
-            val Default = ViewState(navigationCommand = null)
+            val Default = ViewState()
         }
     }
 }
@@ -2051,7 +2052,9 @@ import com.ribads.synapse.ui.mvi.Interactor
 import __BASE_PACKAGE__.feature.__FEATURE__.ui.screens.landing.LandingScreenContract.Intent
 import __BASE_PACKAGE__.feature.__FEATURE__.ui.screens.landing.LandingScreenContract.Mapper
 import __BASE_PACKAGE__.feature.__FEATURE__.ui.screens.landing.LandingScreenContract.Result
+import __BASE_PACKAGE__.feature.__FEATURE__.ui.screens.landing.LandingScreenContract.ViewState
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
@@ -2059,9 +2062,12 @@ import me.tatarka.inject.annotations.Inject
 
 internal class LandingScreenInteractor @Inject constructor(
     private val mapper: Mapper,
-) : Interactor<Intent, Result> {
+) : Interactor<Intent, Result, ViewState> {
 
-    override fun process(intents: Flow<Intent>): Flow<Result> {
+    override fun process(
+        intents: Flow<Intent>,
+        state: StateFlow<ViewState>,
+    ): Flow<Result> {
         return merge(
             intents.filterIsInstance<Intent.LoadInitialData>().map(mapper::toResult),
             intents.filterIsInstance<Intent.Navigation>().map(mapper::toResult),
@@ -2073,15 +2079,19 @@ internal class LandingScreenInteractor @Inject constructor(
 LANDING_REDUCER = '''package __BASE_PACKAGE__.feature.__FEATURE__.ui.screens.landing
 
 import com.ribads.synapse.ui.mvi.Reducer
+import com.ribads.synapse.ui.mvi.Reduction
+import com.ribads.synapse.ui.mvi.noEffects
+import com.ribads.synapse.ui.mvi.withEffect
+import __BASE_PACKAGE__.feature.__FEATURE__.ui.screens.landing.LandingScreenContract.Effect
 import __BASE_PACKAGE__.feature.__FEATURE__.ui.screens.landing.LandingScreenContract.Result
 import __BASE_PACKAGE__.feature.__FEATURE__.ui.screens.landing.LandingScreenContract.ViewState
 import me.tatarka.inject.annotations.Inject
 
-internal class LandingScreenReducer @Inject constructor() : Reducer<ViewState, Result> {
-    override fun reduce(state: ViewState, result: Result): ViewState {
+internal class LandingScreenReducer @Inject constructor() : Reducer<ViewState, Result, Effect> {
+    override fun reduce(state: ViewState, result: Result): Reduction<ViewState, Effect> {
         return when (result) {
-            is Result.OnInitialDataLoaded -> state
-            is Result.OnNavigationCommandUpdated -> state.copy(navigationCommand = result.navigationCommand)
+            is Result.OnInitialDataLoaded -> state.noEffects()
+            is Result.NavigationRequested -> state withEffect Effect.Navigate(result.command)
         }
     }
 }
@@ -2101,11 +2111,10 @@ internal class LandingScreenMapper @Inject constructor() : Mapper {
         return Result.OnInitialDataLoaded
     }
 
-    override fun toResult(intent: Intent.Navigation): Result.OnNavigationCommandUpdated {
+    override fun toResult(intent: Intent.Navigation): Result.NavigationRequested {
         return when (intent) {
-            Intent.Navigation.Done -> Result.OnNavigationCommandUpdated(navigationCommand = null)
-            Intent.Navigation.Back -> Result.OnNavigationCommandUpdated(
-                navigationCommand = NavigationCommand.BackCommand(),
+            Intent.Navigation.Back -> Result.NavigationRequested(
+                command = NavigationCommand.BackCommand(),
             )
         }
     }
@@ -2118,6 +2127,7 @@ import com.ribads.synapse.ui.mvi.FlowViewModelArgs
 import com.ribads.synapse.ui.mvi.Interactor
 import com.ribads.synapse.ui.mvi.LifecycleViewModel
 import com.ribads.synapse.ui.mvi.Reducer
+import __BASE_PACKAGE__.feature.__FEATURE__.ui.screens.landing.LandingScreenContract.Effect
 import __BASE_PACKAGE__.feature.__FEATURE__.ui.screens.landing.LandingScreenContract.Intent
 import __BASE_PACKAGE__.feature.__FEATURE__.ui.screens.landing.LandingScreenContract.Result
 import __BASE_PACKAGE__.feature.__FEATURE__.ui.screens.landing.LandingScreenContract.ViewState
@@ -2125,9 +2135,9 @@ import me.tatarka.inject.annotations.Inject
 
 internal class LandingScreenViewModel @Inject constructor(
     initialState: ViewState,
-    interactor: Interactor<Intent, Result>,
-    reducer: Reducer<ViewState, Result>,
-) : LifecycleViewModel<Intent, Result, ViewState>(
+    interactor: Interactor<Intent, Result, ViewState>,
+    reducer: Reducer<ViewState, Result, Effect>,
+) : LifecycleViewModel<Intent, Result, ViewState, Effect>(
     args = FlowViewModelArgs(
         initialState = initialState,
         reducer = reducer,
@@ -2142,7 +2152,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -2150,6 +2159,9 @@ import androidx.compose.ui.Modifier
 import com.ribads.synapse.ui.component.scaffold.Scaffold
 import com.ribads.synapse.ui.compose.presentation.navigation.NavigationDispatcher
 import com.ribads.synapse.ui.element.theme.Theme
+import com.ribads.synapse.ui.mvi.CollectAsEffect
+import com.ribads.synapse.ui.mvi.OnFirstComposition
+import __BASE_PACKAGE__.feature.__FEATURE__.ui.screens.landing.LandingScreenContract.Effect
 import __BASE_PACKAGE__.feature.__FEATURE__.ui.screens.landing.LandingScreenContract.Intent
 
 @Composable
@@ -2159,15 +2171,12 @@ internal fun LandingScreen(
 ) {
     val viewState by remember { derivedStateOf { viewModel.state.value } }
 
-    if (viewModel.isFirstIntent) {
-        SideEffect {
-            viewModel.emit(Intent.LoadInitialData)
-        }
-    }
+    viewModel.OnFirstComposition(Intent.LoadInitialData)
 
-    viewState.navigationCommand?.let {
-        navigationDispatcher.navigateTo(it)
-        viewModel.emit(Intent.Navigation.Done)
+    viewModel.effects.CollectAsEffect { effect ->
+        when (effect) {
+            is Effect.Navigate -> navigationDispatcher.navigateTo(effect.command)
+        }
     }
 
     Scaffold(
@@ -2189,6 +2198,7 @@ LANDING_UI_COMPONENT = '''package __BASE_PACKAGE__.feature.__FEATURE__.ui.screen
 
 import com.ribads.synapse.ui.mvi.Interactor
 import com.ribads.synapse.ui.mvi.Reducer
+import __BASE_PACKAGE__.feature.__FEATURE__.ui.screens.landing.LandingScreenContract.Effect
 import __BASE_PACKAGE__.feature.__FEATURE__.ui.screens.landing.LandingScreenContract.Intent
 import __BASE_PACKAGE__.feature.__FEATURE__.ui.screens.landing.LandingScreenContract.Mapper
 import __BASE_PACKAGE__.feature.__FEATURE__.ui.screens.landing.LandingScreenContract.Result
@@ -2211,10 +2221,10 @@ internal abstract class LandingScreenUiComponent(
     protected fun LandingScreenMapper.bind(): Mapper = this
 
     @Provides
-    protected fun LandingScreenReducer.bind(): Reducer<ViewState, Result> = this
+    protected fun LandingScreenReducer.bind(): Reducer<ViewState, Result, Effect> = this
 
     @Provides
-    fun LandingScreenInteractor.bind(): Interactor<Intent, Result> = this
+    fun LandingScreenInteractor.bind(): Interactor<Intent, Result, ViewState> = this
 
     @Provides
     protected fun provideDefaultViewState(): ViewState = ViewState.Default
@@ -2524,7 +2534,7 @@ def main() -> None:
         write_file(ui_src / "di" / f"{fp}Module.kt", render(FEATURE_MODULE, fctx), force)
         write_file(ui_src / "di" / f"{fp}ViewModelComponent.kt", render(FEATURE_VIEW_MODEL_COMPONENT, fctx), force)
 
-        # landing screen (7 IRS-MVI files)
+        # landing screen (7 IRSE-MVI files)
         landing = ui_src / "screens" / "landing"
         write_file(landing / "LandingScreenContract.kt", render(LANDING_CONTRACT, fctx), force)
         write_file(landing / "LandingScreenInteractor.kt", render(LANDING_INTERACTOR, fctx), force)
