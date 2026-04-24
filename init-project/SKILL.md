@@ -15,8 +15,11 @@ Generates a complete Kotlin Multiplatform project with the canonical Synapse mul
 ├── settings.gradle.kts
 ├── build.gradle.kts
 ├── gradle.properties
+├── gradlew                                # Gradle wrapper script (chmod +x)
+├── gradlew.bat
 ├── gradle/libs.versions.toml
 ├── gradle/wrapper/gradle-wrapper.properties
+├── gradle/wrapper/gradle-wrapper.jar
 │
 ├── androidApp/                             # Android application module
 │   ├── build.gradle.kts                   # com.android.application plugin
@@ -128,15 +131,23 @@ Generates a complete Kotlin Multiplatform project with the canonical Synapse mul
 │               ├── LandingScreen.kt
 │               └── di/LandingScreenUiComponent.kt
 │
-└── iosApp/
-    └── iosApp/
-        ├── iOSApp.swift
-        └── ContentView.swift
+└── iosApp/                                # Xcode project (objectVersion = 77)
+    ├── Configuration/
+    │   └── Config.xcconfig                # PRODUCT_NAME, BUNDLE_IDENTIFIER, TEAM_ID
+    ├── iosApp/
+    │   ├── iOSApp.swift                   # @main App entry
+    │   ├── ContentView.swift              # ComposeView wrapper for KMP UIViewController
+    │   ├── Info.plist
+    │   ├── Assets.xcassets/               # AccentColor + AppIcon stubs
+    │   └── Preview Content/Preview Assets.xcassets/
+    └── iosApp.xcodeproj/
+        ├── project.pbxproj                # PBXFileSystemSynchronizedRootGroup-based
+        └── project.xcworkspace/contents.xcworkspacedata
 ```
 
 ## Script
 
-`scripts/init_project.py` — Python 3, stdlib only.
+`scripts/init_project.py` — Python 3, stdlib only. Static template files live in `scripts/templates/<area>/` and are loaded via `load_template()`. iOS templates are in `scripts/templates/ios/`.
 
 ```
 python3 .claude/skills/init-project/scripts/init_project.py \
@@ -208,7 +219,9 @@ The script generates a compiling skeleton. The user still needs to:
 4. **Add fonts** — place `.ttf`/`.otf` files in `compose-ui/src/commonMain/composeResources/font/`.
 5. **Wire real repositories** — replace `TODO()` stubs in data layer implementations.
 6. **Add screens** — use `/create-screen` to add more screens to existing features.
-7. **Open in Android Studio / Fleet** — sync Gradle, then run on Android/iOS.
+7. **Set Xcode `TEAM_ID`** — open `iosApp/Configuration/Config.xcconfig` and fill in your Apple Developer team identifier (or leave blank for simulator-only builds).
+8. **Add app icon images** — drop 1024×1024 PNGs into `iosApp/iosApp/Assets.xcassets/AppIcon.appiconset/` and update its `Contents.json`.
+9. **Open in Android Studio / Fleet** — sync Gradle, then run on Android. For iOS, open `iosApp/iosApp.xcodeproj` in Xcode.
 
 ## Related skills
 

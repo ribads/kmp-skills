@@ -81,6 +81,91 @@ TopNavBarLeadingIcon.Menu(onClick = { /* open drawer */ })
 
 ---
 
+## BottomNavigationBar
+
+Fixed-height row of icon/label items along the bottom of a screen, intended for top-level destination switching in a `Scaffold.bottomBar` slot. Each item is a `Modifier.selectable(role = Role.Tab)` inside a `selectableGroup()`, spring-free `animateColorAsState` drives icon tint and label color between selected/unselected, and disabled items are rendered at `38%` alpha with ignored clicks. A 1dp hairline divider sits above the bar using `border.secondaryOnLight/Dark`. Label is optional per item (pass `null` for an icon-only bar). When `items` is empty the composable renders nothing. Selection is tracked by `String` id so callers can map directly to routes.
+
+```kotlin
+@Composable fun BottomNavigationBar(
+    model: BottomNavigationBarModel,
+    modifier: Modifier = Modifier,
+    onItemSelected: (id: String) -> Unit,
+    invertedColors: Boolean = Theme.invertedColors,
+)
+
+@Immutable
+data class BottomNavigationBarModel(
+    val items: List<BottomNavigationItem> = emptyList(),
+    val selectedId: String? = null,
+)
+
+@Immutable
+data class BottomNavigationItem(
+    val id: String,
+    val icon: Image,
+    val selectedIcon: Image? = null,
+    val label: Clause? = null,
+    val badge: BottomNavigationBadge? = null,
+    val enabled: Boolean = true,
+)
+
+@Stable
+sealed class BottomNavigationBadge {
+    @Immutable data object Dot : BottomNavigationBadge()
+    @Immutable data class Count(val value: Int) : BottomNavigationBadge()
+}
+```
+
+**Dimensions**: bar height `64dp`, icon size `24dp`, dot badge `8dp`, count badge min `16dp` (widens for `99+`).
+
+**Colors** (via `Theme.colors`):
+- Container: `surface.primaryLight` / `primaryDark`
+- Divider: `border.secondaryOnLight` / `secondaryOnDark`
+- Active icon/label: `surfaceInteractive.enabledOnLight` / `enabledOnDark`
+- Inactive icon/label: `element.secondaryOnLight` / `secondaryOnDark`
+- Disabled: `elementInteractive.disabledOnLight` / `disabledOnDark` @ `0.38` alpha
+- Badge fill: `intents.error.surfaceOnLight` / `surfaceOnDark`
+- Badge text: `intents.error.contentOnLight` / `contentOnDark`
+
+**Behavior**:
+- Selected label uses `Theme.typography.labelXs` at `FontWeight.SemiBold`; unselected at `FontWeight.Normal`.
+- Icon tinting: if only `icon` is provided, it is tinted with the active/inactive color via `ColorFilter.tint` (template image). If `selectedIcon` is also provided, **neither** icon is tinted — the caller owns the visuals for both states (original image). Use the former for monochrome glyph sets, the latter for outline/filled icon pairs that ship their own colors.
+- `BottomNavigationBadge.Count` clamps display to `"99+"` when `value > 99`.
+
+---
+
+## LiquidGlassBottomNavigationBar
+
+Drop-in replacement for `BottomNavigationBar` with a pill-shaped track and a floating capsule that springs between items. Same `BottomNavigationBarModel` — identical call shape. Selection is communicated by the pill's position (not by a bright accent tint), so labels/icons only shift between `element.primary` and `element.secondary`. Fixed 64dp bar height; 4dp inset around the pill; 6dp shadow elevation; 1dp hairline border for the glass edge. When `selectedId` doesn't match any item, the pill is rendered at `alpha=0` — the bar itself stays visible.
+
+```kotlin
+@Composable fun LiquidGlassBottomNavigationBar(
+    model: BottomNavigationBarModel,
+    modifier: Modifier = Modifier,
+    onItemSelected: (id: String) -> Unit,
+    invertedColors: Boolean = Theme.invertedColors,
+)
+```
+
+Shares `BottomNavigationBarModel`, `BottomNavigationItem`, and `BottomNavigationBadge` with `BottomNavigationBar` — see above.
+
+**Colors** (via `Theme.colors`):
+- Track: `surface.subtleLight` / `subtleDark`
+- Pill fill: `surface.primaryLight` / `primaryDark`
+- Pill hairline: `border.secondaryOnLight` / `secondaryOnDark`
+- Active icon/label: `element.primaryOnLight` / `primaryOnDark` @ `FontWeight.SemiBold`
+- Inactive icon/label: `element.secondaryOnLight` / `secondaryOnDark` @ `FontWeight.Normal`
+- Disabled: `elementInteractive.disabledOnLight` / `disabledOnDark` @ `0.38` alpha
+- Badge fill / text: `intents.error.surfaceOnLight` / `contentOnLight` (and Dark equivalents)
+
+**Animation**: `animateDpAsState` with `spring(DampingRatioLowBouncy, StiffnessMediumLow)` drives the pill's x-offset; item tint animates via `animateColorAsState` inside the shared item renderer.
+
+**When to pick which**:
+- `BottomNavigationBar` — standard material-style bar that sits flush against content, communicates selection via a bright accent color on the icon/label. Best for productivity apps, dense interfaces, or when the bar competes with colorful content.
+- `LiquidGlassBottomNavigationBar` — free-standing, prominent, expressive. Best for consumer apps where the nav bar is a showpiece, or when you want a floating chip feel. Wrap it in `.padding(horizontal = Theme.spacing.x4, vertical = Theme.spacing.x2)` inside `Scaffold.bottomBar` for the "floating island" look.
+
+---
+
 ## Trays / Bottom Sheets
 
 ### `Tray`

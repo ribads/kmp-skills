@@ -23,7 +23,7 @@ Depends on `core:context`.
 
 ```kotlin
 interface PermissionsManager {
-    fun requestPermission(request: PermissionsRequest): Flow<PermissionsResult>
+    suspend fun requestPermission(request: PermissionsRequest): PermissionsResult
 
     companion object {
         val shared: PermissionsManager
@@ -64,14 +64,12 @@ sealed class PermissionsResult {
 ```kotlin
 val manager = PermissionsManager.shared
 
-manager.requestPermission(PermissionsRequest.Audio(contextUiDisplayed = false))
-    .collect { result ->
-        when (result) {
-            PermissionsResult.Success -> startRecording()
-            PermissionsResult.Denied -> showDeniedMessage()
-            PermissionsResult.ShouldShowPermissionRationale -> showRationale()
-        }
-    }
+val result = manager.requestPermission(PermissionsRequest.Audio(contextUiDisplayed = false))
+when (result) {
+    PermissionsResult.Success -> startRecording()
+    PermissionsResult.Denied -> showDeniedMessage()
+    PermissionsResult.ShouldShowPermissionRationale -> showRationale()
+}
 ```
 
 Platform details:

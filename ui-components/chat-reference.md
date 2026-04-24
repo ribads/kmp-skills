@@ -50,12 +50,11 @@ sealed interface ChatAttachment {
         val image: com.ribads.synapse.ui.element.image.Image,
     ) : ChatAttachment
 
-    /** Audio recording shown as a compact waveform card. */
+    /** Audio recording shown as a compact chip with a mic icon and duration. */
     @Immutable
     data class Audio(
         override val id: String,
         val durationMs: Long,
-        val waveform: List<Float> = emptyList(),
     ) : ChatAttachment
 }
 ```

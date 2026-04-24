@@ -119,6 +119,50 @@ expect annotation class MyIgnoredOnParcel()
 // iOS: typealias to com.arkivanov.parcelize.darwin
 ```
 
+### Consumer setup (required for `ParcelableArgument`)
+
+`kotlin-parcelize` is a compiler plugin, and the plugin matches annotations by literal FQN — it does NOT follow typealiases. Consumer modules that pass `ParcelableArgument` must apply the plugin AND register Synapse's `@Parcelize` as an additional annotation, otherwise `@Parcelize`-annotated classes compile to plain data classes and the argument crashes at runtime.
+
+In every consumer module whose Android target compiles `@Parcelize` classes:
+
+```kotlin
+plugins {
+    id("kotlin-parcelize")
+}
+
+kotlin {
+    android {
+        @OptIn(ExperimentalKotlinGradlePluginApi::class)
+        compilerOptions {
+            freeCompilerArgs.addAll(
+                "-P",
+                "plugin:org.jetbrains.kotlin.parcelize:additionalAnnotation=com.ribads.synapse.ui.compose.presentation.navigation.Parcelize"
+            )
+        }
+    }
+    sourceSets {
+        iosMain.dependencies {
+            implementation("com.arkivanov.parcelize.darwin:runtime:<version>")
+        }
+    }
+}
+```
+
+Then in `commonMain`:
+
+```kotlin
+import com.ribads.synapse.ui.compose.presentation.navigation.MyParcelable
+import com.ribads.synapse.ui.compose.presentation.navigation.Parcelize
+
+@Parcelize
+data class DetailArgs(val id: String, val title: String) : MyParcelable
+
+NavigationCommand.ScreenCommand(
+    route = "detail",
+    arguments = mapOf("args" to NavigationArgument.ParcelableArgument(DetailArgs("1", "Hi")))
+)
+```
+
 ---
 
 ## Usage

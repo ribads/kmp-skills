@@ -112,6 +112,14 @@ def render(template: str, ctx: dict) -> str:
     return result
 
 
+TEMPLATES_DIR = Path(__file__).parent / "templates"
+
+
+def load_template(rel_path: str) -> str:
+    """Read a template file from scripts/templates/<rel_path>."""
+    return (TEMPLATES_DIR / rel_path).read_text()
+
+
 def write_file(path: Path, content: str, force: bool) -> None:
     if path.exists() and not force:
         print(f"  SKIP {path} (exists)", file=sys.stderr)
@@ -119,6 +127,18 @@ def write_file(path: Path, content: str, force: bool) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content.lstrip("\n"))
     print(f"  wrote {path}")
+
+
+def copy_template_file(src_rel: str, dest: Path, force: bool, executable: bool = False) -> None:
+    """Copy a template file byte-for-byte (preserves binary content and line endings)."""
+    if dest.exists() and not force:
+        print(f"  SKIP {dest} (exists)", file=sys.stderr)
+        return
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(TEMPLATES_DIR / src_rel, dest)
+    if executable:
+        dest.chmod(0o755)
+    print(f"  wrote {dest}")
 
 
 # ─── Root Build Files ──────────────────────────────────────────────────────────
@@ -2303,39 +2323,7 @@ internal abstract class LandingScreenUiComponent(
 '''
 
 # ─── iOS App ───────────────────────────────────────────────────────────────────
-
-IOS_APP_SWIFT = '''import SwiftUI
-import ComposeApp
-
-@main
-struct iOSApp: App {
-    var body: some Scene {
-        WindowGroup {
-            ContentView()
-        }
-    }
-}
-'''
-
-CONTENT_VIEW_SWIFT = '''import UIKit
-import SwiftUI
-import ComposeApp
-
-struct ComposeView: UIViewControllerRepresentable {
-    func makeUIViewController(context: Context) -> UIViewController {
-        MainViewControllerKt.MainViewController()
-    }
-
-    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {}
-}
-
-struct ContentView: View {
-    var body: some View {
-        ComposeView()
-            .ignoresSafeArea()
-    }
-}
-'''
+# Templates live in scripts/templates/ios/ — loaded via load_template() at runtime.
 
 # ─── Main Generator ───────────────────────────────────────────────────────────
 
@@ -2412,6 +2400,9 @@ def main() -> None:
     write_file(out / "gradle.properties", GRADLE_PROPERTIES, force)
     write_file(out / "gradle" / "libs.versions.toml", render(LIBS_VERSIONS_TOML, ctx), force)
     write_file(out / "gradle" / "wrapper" / "gradle-wrapper.properties", GRADLE_WRAPPER_PROPERTIES, force)
+    copy_template_file("gradle/wrapper/gradle-wrapper.jar", out / "gradle" / "wrapper" / "gradle-wrapper.jar", force)
+    copy_template_file("gradle/gradlew", out / "gradlew", force, executable=True)
+    copy_template_file("gradle/gradlew.bat", out / "gradlew.bat", force)
 
     # ── androidApp ──
     android_app = out / "androidApp"
@@ -2624,9 +2615,28 @@ def main() -> None:
         write_file(landing / "di" / "LandingScreenUiComponent.kt", render(LANDING_UI_COMPONENT, fctx), force)
 
     # ── iosApp ──
-    ios_app = out / "iosApp" / "iosApp"
-    write_file(ios_app / "iOSApp.swift", IOS_APP_SWIFT, force)
-    write_file(ios_app / "ContentView.swift", CONTENT_VIEW_SWIFT, force)
+    ios_root = out / "iosApp"
+    ios_src = ios_root / "iosApp"
+    ios_xcodeproj = ios_root / "iosApp.xcodeproj"
+    ios_workspace = ios_xcodeproj / "project.xcworkspace"
+    ios_assets = ios_src / "Assets.xcassets"
+    ios_preview = ios_src / "Preview Content" / "Preview Assets.xcassets"
+
+    # Swift sources (no placeholders, but render() is a no-op when none match)
+    write_file(ios_src / "iOSApp.swift", load_template("ios/iOSApp.swift"), force)
+    write_file(ios_src / "ContentView.swift", load_template("ios/ContentView.swift"), force)
+    write_file(ios_src / "Info.plist", load_template("ios/Info.plist"), force)
+
+    # Asset catalogs (Xcode complains if AppIcon/AccentColor are missing — empty stubs)
+    write_file(ios_assets / "Contents.json", load_template("ios/Assets.Contents.json"), force)
+    write_file(ios_assets / "AccentColor.colorset" / "Contents.json", load_template("ios/AccentColor.Contents.json"), force)
+    write_file(ios_assets / "AppIcon.appiconset" / "Contents.json", load_template("ios/AppIcon.Contents.json"), force)
+    write_file(ios_preview / "Contents.json", load_template("ios/PreviewAssets.Contents.json"), force)
+
+    # Xcode project + xcconfig — these need PROJECT_NAME/BASE_PACKAGE substitution
+    write_file(ios_root / "Configuration" / "Config.xcconfig", render(load_template("ios/Config.xcconfig"), ctx), force)
+    write_file(ios_xcodeproj / "project.pbxproj", render(load_template("ios/project.pbxproj"), ctx), force)
+    write_file(ios_workspace / "contents.xcworkspacedata", load_template("ios/contents.xcworkspacedata"), force)
 
     # ── Done ──
     print()

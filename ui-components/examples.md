@@ -38,6 +38,89 @@ Scaffold(topBar = { /* toolbar */ }) { padding ->
 }
 ```
 
+## Bottom Navigation Bar
+
+```kotlin
+Scaffold(
+    bottomBar = {
+        BottomNavigationBar(
+            model = BottomNavigationBarModel(
+                items = listOf(
+                    BottomNavigationItem(
+                        id = "home",
+                        icon = Image.Drawable(Res.drawable.ic_home),
+                        label = "Home".asText(),
+                    ),
+                    BottomNavigationItem(
+                        id = "search",
+                        icon = Image.Drawable(Res.drawable.ic_search),
+                        label = "Search".asText(),
+                    ),
+                    BottomNavigationItem(
+                        id = "inbox",
+                        icon = Image.Drawable(Res.drawable.ic_inbox),
+                        selectedIcon = Image.Drawable(Res.drawable.ic_inbox_filled),
+                        label = "Inbox".asText(),
+                        badge = BottomNavigationBadge.Count(3),
+                    ),
+                    BottomNavigationItem(
+                        id = "profile",
+                        icon = Image.Drawable(Res.drawable.ic_profile),
+                        label = "Profile".asText(),
+                        badge = BottomNavigationBadge.Dot,
+                    ),
+                ),
+                selectedId = currentTab,
+            ),
+            onItemSelected = { id -> viewModel.emit(Intent.SwitchTab(id)) },
+        )
+    },
+) { padding ->
+    Column(Modifier.padding(padding)) { /* content */ }
+}
+```
+
+## Liquid Glass Bottom Navigation Bar
+
+```kotlin
+// Floating-island placement: horizontal padding lifts the pill off the edges.
+Scaffold(
+    bottomBar = {
+        LiquidGlassBottomNavigationBar(
+            model = BottomNavigationBarModel(
+                items = listOf(
+                    BottomNavigationItem(
+                        id = "home",
+                        icon = Image.Drawable(Res.drawable.ic_home),
+                        label = "Home".asText(),
+                    ),
+                    BottomNavigationItem(
+                        id = "discover",
+                        icon = Image.Drawable(Res.drawable.ic_compass),
+                        label = "Discover".asText(),
+                    ),
+                    BottomNavigationItem(
+                        id = "library",
+                        icon = Image.Drawable(Res.drawable.ic_library),
+                        selectedIcon = Image.Drawable(Res.drawable.ic_library_filled),
+                        label = "Library".asText(),
+                        badge = BottomNavigationBadge.Count(12),
+                    ),
+                ),
+                selectedId = currentTab,
+            ),
+            modifier = Modifier.padding(
+                horizontal = Theme.spacing.x4,
+                vertical = Theme.spacing.x2,
+            ),
+            onItemSelected = { id -> viewModel.emit(Intent.SwitchTab(id)) },
+        )
+    },
+) { padding ->
+    Column(Modifier.padding(padding)) { /* content */ }
+}
+```
+
 ## Tray
 
 ```kotlin
@@ -128,6 +211,25 @@ TabLayout(
     when (selectedIndex) {
         0 -> OverviewContent()
         1 -> DetailsContent()
+    }
+}
+```
+
+## Liquid Glass Tab Layout
+
+```kotlin
+LiquidGlassTabLayout(
+    model = TabLayoutModel(
+        tabs = listOf(TabItem("Day".asText()), TabItem("Week".asText()), TabItem("Month".asText())),
+        selectedIndex = range,
+    ),
+    modifier = Modifier.padding(horizontal = Theme.spacing.x4),
+    onTabSelected = { range = it },
+) { selectedIndex ->
+    when (selectedIndex) {
+        0 -> DayChart()
+        1 -> WeekChart()
+        2 -> MonthChart()
     }
 }
 ```
@@ -255,7 +357,7 @@ ChatTextArea(
         placeholder = "Message".asText(),
         attachments = listOf(
             ChatAttachment.Image(id = "1", image = Image.Bitmap(filePath = photoPath)),
-            ChatAttachment.Audio(id = "2", durationMs = 15_000, waveform = waveformData),
+            ChatAttachment.Audio(id = "2", durationMs = 15_000),
         ),
         actions = listOf(
             ChatInputAction(id = "camera", image = Image.Drawable(Res.drawable.ic_camera)),

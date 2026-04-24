@@ -267,7 +267,7 @@ fun MyScreen(viewModel: MyViewModel) {
 }
 ```
 
-This replaces the old `if (viewModel.isFirstIntent) viewModel.emit(...)` pattern. `OnFirstComposition` runs exactly once per composition lifetime via `LaunchedEffect(Unit)`.
+This replaces the old `if (viewModel.isFirstIntent) viewModel.emit(...)` pattern. `OnFirstComposition` emits the intents **exactly once per ViewModel lifetime** — the guard lives on the `LifecycleViewModel`, not the composition, so navigating away and returning (ViewModel retained by the nav back stack) will **not** re-emit. A fresh ViewModel instance (e.g. after `onCleared`) emits again.
 
 ---
 

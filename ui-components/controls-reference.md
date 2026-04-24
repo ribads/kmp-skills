@@ -74,6 +74,53 @@ data class CircularProgressModel(
 }
 ```
 
+### Waveform
+
+Bar-style audio waveform visualizer. Pure visualizer — no audio engine coupling. Two modes share the same API:
+
+- **Live, right-edge** (recording, real-time visualization). Append samples to a bounded buffer and leave `progress` at its default of `1f`. Buffers smaller than the bar count are right-aligned so the newest sample sits at the right edge.
+- **Playback with playhead** (audio messages, podcasts). Pass the full waveform plus a `progress` fraction. Bars at-or-before the playhead use `progressColor`; the rest use `barColor`.
+
+```kotlin
+@Composable fun Waveform(
+    samples: List<Float>,                                  // amplitudes 0.0..1.0, oldest -> newest
+    modifier: Modifier = Modifier,
+    progress: Float = 1f,                                  // 0.0..1.0; default = entire waveform tinted as "played"
+    invertedColors: Boolean = Theme.invertedColors,
+    barColor: Color? = null,                               // unplayed bars; defaults to Theme.colors.border.secondary
+    progressColor: Color? = null,                          // played bars; defaults to Theme.colors.intents.accent.content
+    barWidth: Dp = 2.5.dp,
+    barGap: Dp = 1.5.dp,
+)
+```
+
+Live wiring example (decoupled from `core:playback`):
+
+```kotlin
+val player = remember { buildAudioPlayer() }
+val samples = remember { mutableStateListOf<Float>() }
+
+LaunchedEffect(player) {
+    player.amplitudes.collect { info ->
+        samples.add(info.rms)
+        if (samples.size > 120) samples.removeAt(0)         // bound the buffer
+    }
+}
+
+Waveform(samples = samples, modifier = Modifier.fillMaxWidth().height(28.dp))
+```
+
+Playback example with playhead:
+
+```kotlin
+val position by player.position.collectAsState()
+val progress = if (position.durationMs > 0) {
+    position.currentMs.toFloat() / position.durationMs
+} else 0f
+
+Waveform(samples = waveform, progress = progress)
+```
+
 ---
 
 ## Rating
@@ -129,14 +176,14 @@ data class ChipOption(
 
 ## Tab Layout
 
-Tab bar with indicator + content slot keyed by selected index.
+Underline-style tab bar: row of labels with a sliding 2dp indicator beneath the selected tab, animated via a spring. Selected label renders in `Theme.typography.bodyM` at `FontWeight.SemiBold`; unselected at `FontWeight.Normal`. Uses `Modifier.selectable(role = Role.Tab)` inside a `selectableGroup()` for a11y. Renders nothing when `tabs` is empty; `selectedIndex` is coerced into `0..tabs.lastIndex`.
 
 ```kotlin
 @Composable fun TabLayout(
     model: TabLayoutModel,
     modifier: Modifier = Modifier,
     onTabSelected: (Int) -> Unit,
-    invertedColors: Boolean = isSystemInDarkTheme(),
+    invertedColors: Boolean = Theme.invertedColors,
     content: @Composable (selectedIndex: Int) -> Unit,
 )
 
@@ -151,6 +198,37 @@ data class TabItem(
     val label: Clause,
 )
 ```
+
+Colors (via `Theme.colors`):
+- Active indicator: `surfaceInteractive.enabledOnLight` / `enabledOnDark`
+- Track (inactive indicator baseline): `border.secondaryOnLight` / `secondaryOnDark`
+- Active label: `element.primaryOnLight` / `primaryOnDark`
+- Inactive label: `element.secondaryOnLight` / `secondaryOnDark`
+
+---
+
+## Liquid Glass Tab Layout
+
+Pill-shaped tab bar with a floating capsule that springs between tabs. Solid (non-transparent) fills: a subtle track surface, a raised primary-surface pill behind the selected tab, a 1dp hairline border on the pill for the glass edge, and a 6dp shadow elevation. Fixed 48dp bar height. Same `TabLayoutModel` as `TabLayout`; drop-in replacement with identical call shape.
+
+```kotlin
+@Composable fun LiquidGlassTabLayout(
+    model: TabLayoutModel,
+    modifier: Modifier = Modifier,
+    onTabSelected: (Int) -> Unit,
+    invertedColors: Boolean = Theme.invertedColors,
+    content: @Composable (selectedIndex: Int) -> Unit,
+)
+```
+
+Colors (via `Theme.colors`):
+- Track: `surface.subtleLight` / `subtleDark`
+- Pill fill: `surface.primaryLight` / `primaryDark`
+- Pill hairline: `border.secondaryOnLight` / `secondaryOnDark`
+- Selected label: `element.primaryOnLight` / `primaryOnDark` @ `FontWeight.SemiBold`
+- Unselected label: `element.secondaryOnLight` / `secondaryOnDark` @ `FontWeight.Normal`
+
+Pick `TabLayout` for a standard underline indicator inline in content; pick `LiquidGlassTabLayout` for a free-standing segmented selector (e.g., a toolbar control, top-of-sheet filter, or view-mode switch).
 
 ---
 

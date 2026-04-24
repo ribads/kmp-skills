@@ -1,6 +1,6 @@
 ---
 name: ui-components
-description: Use when implementing buttons, text fields, password fields, phone inputs, currency inputs, date pickers, cards, dividers, scaffolds, trays, bottom sheets, checkboxes, progress bars, circular progress, rating inputs, chip groups, tab layouts, sliders, timers, steppers, time pickers, confirm dialogs, empty states, radio groups, bar charts, line charts, pie charts, chat text areas, or message bubbles in a KMP Compose project.
+description: Use when implementing buttons, text fields, password fields, phone inputs, currency inputs, date pickers, cards, dividers, scaffolds, trays, bottom sheets, top nav bars, bottom navigation bars, liquid-glass navigation bars, checkboxes, progress bars, circular progress, rating inputs, chip groups, tab layouts, sliders, timers, steppers, time pickers, confirm dialogs, empty states, radio groups, bar charts, line charts, pie charts, chat text areas, message bubbles, or toasts/snackbars in a KMP Compose project.
 user-invocable: true
 ---
 
@@ -38,6 +38,8 @@ Depends on `ui:element`.
 | Divider | `Divider` | — | [layout](layout-reference.md) |
 | Scaffold | `Scaffold` | — | [layout](layout-reference.md) |
 | Top nav bar | `TopNavBar` | `TopNavBarModel` | [layout](layout-reference.md) |
+| Bottom navigation bar | `BottomNavigationBar` | `BottomNavigationBarModel` | [layout](layout-reference.md) |
+| Liquid-glass bottom navigation bar | `LiquidGlassBottomNavigationBar` | `BottomNavigationBarModel` | [layout](layout-reference.md) |
 | Tray | `Tray` | — | [layout](layout-reference.md) |
 | Scrollable tray | `ScrollableTray` | — | [layout](layout-reference.md) |
 | Checkbox | `LabelCheckbox` | `CheckboxModel` | [controls](controls-reference.md) |
@@ -46,6 +48,7 @@ Depends on `ui:element`.
 | Rating input | `RatingInput` | `RatingInputModel` | [controls](controls-reference.md) |
 | Chip group | `ChipGroup` | `ChipGroupModel` | [controls](controls-reference.md) |
 | Tab layout | `TabLayout` | `TabLayoutModel` | [controls](controls-reference.md) |
+| Liquid-glass tab layout | `LiquidGlassTabLayout` | `TabLayoutModel` | [controls](controls-reference.md) |
 | Radio group | `RadioGroup` | `RadioGroupModel` | [controls](controls-reference.md) |
 | Slider | `Slider` | `SliderModel` | [controls](controls-reference.md) |
 | Stepper | `Stepper` | `StepperModel` | [controls](controls-reference.md) |
@@ -53,11 +56,13 @@ Depends on `ui:element`.
 | Time picker | `TimePicker` | `TimePickerModel` | [controls](controls-reference.md) |
 | Confirm dialog | `ConfirmDialog` | `ConfirmDialogModel` | [controls](controls-reference.md) |
 | Empty state | `EmptyState` | `EmptyStateModel` | [controls](controls-reference.md) |
+| Waveform | `Waveform` | — | [controls](controls-reference.md) |
 | Bar chart | `BarChart` | `BarChartModel` | [charts](charts-reference.md) |
 | Line chart | `LineChart` | `LineChartModel` | [charts](charts-reference.md) |
 | Pie chart | `PieChart` | `PieChartModel` | [charts](charts-reference.md) |
 | Chat text area | `ChatTextArea` | `ChatTextAreaModel` | [chat](chat-reference.md) |
 | Message bubble | `MessageBubble` | `MessageBubbleModel` | [chat](chat-reference.md) |
+| Toast | `ToastHandler` + `Toast.current` | `ToastModel` | [toast](toast-reference.md) |
 
 ---
 
@@ -68,6 +73,7 @@ Depends on `ui:element`.
 - [Controls](controls-reference.md) — Checkbox, progress, rating, chips, tabs, radio, slider, stepper, timer, time picker, confirm dialog, empty state
 - [Charts](charts-reference.md) — Bar, line, pie charts + models
 - [Chat](chat-reference.md) — ChatTextArea, MessageBubble + models
+- [Toast](toast-reference.md) — ToastHandler, ToastController, ToastModel, ToastStyle
 - [Usage Examples](examples.md) — Code examples for all components
 
 ---
