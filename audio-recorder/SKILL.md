@@ -50,7 +50,7 @@ interface AudioRecorder {
     fun pause(): Result<Unit>
     fun resume(): Result<Unit>
     suspend fun stop(): Result<RecordingOutput>
-    fun release()
+    suspend fun release()  // suspends until the capture loop has fully exited
 }
 ```
 
@@ -62,7 +62,7 @@ interface PersistentAudioRecorder {
     val isBound: Boolean
 
     suspend fun bind(notification: Any? = null)  // Android: pass a Notification object
-    fun unbind()
+    suspend fun unbind()                         // suspends through the underlying recorder.release()
 }
 ```
 
