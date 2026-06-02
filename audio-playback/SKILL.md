@@ -63,9 +63,13 @@ interface AudioPlayer {
 
     fun dispatch(command: PlaybackCommand): CommandResult
 
-    fun release()
+    suspend fun release()
 }
 ```
+
+`release()` is a `suspend fun`: it awaits engine/listener teardown (and, for
+`buildPersistentAudioPlayer`, service detach) before returning, so callers can
+deterministically sequence shutdown. Call it from a coroutine.
 
 **Separation of concerns:**
 - Lifecycle → `load` / `release`
@@ -243,7 +247,7 @@ player.amplitudes.collect { amp -> waveform.push(amp.rms) }
 // Seek
 player.dispatch(PlaybackCommand.SeekTo(30_000L))
 
-// Clean up
+// Clean up (suspends until teardown completes; call from a coroutine)
 player.release()
 ```
 
@@ -269,7 +273,7 @@ player.load(
 player.dispatch(PlaybackCommand.Play)
 // Audio continues when the app is backgrounded.
 // Lock-screen / Control Center play/pause/seek buttons are wired automatically.
-player.release()
+player.release() // suspends until the service detaches; call from a coroutine
 ```
 
 ---

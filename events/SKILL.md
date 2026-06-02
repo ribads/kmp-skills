@@ -42,7 +42,7 @@ interface StickyEvent : AppEvent
 
 interface EventPublisher {
     suspend fun emit(event: AppEvent)
-    fun tryEmit(event: AppEvent): Boolean
+    fun tryEmit(event: AppEvent)
 }
 
 interface EventSubscriber {
@@ -82,7 +82,7 @@ inline fun <reified T : AppEvent> EventSubscriber.sticky(): Flow<T>
 ### `emit` vs `tryEmit`
 
 - `emit(event)` — suspending. Use from coroutine scopes.
-- `tryEmit(event)` — non-suspending. Returns `true` on success, `false` if the buffer overflowed. Use from synchronous contexts (callbacks, interceptors).
+- `tryEmit(event)` — non-suspending; returns `Unit`. Because the buffer is drop-oldest it always delivers without suspending, so there is no success/failure to report. On overflow the **oldest** still-undelivered event is dropped, not the one you pass. Use from synchronous contexts (callbacks, interceptors). If you need confirmation an event was buffered, redesign the producer — the bus cannot report a drop.
 
 Sticky retention happens for both — there is no separate sticky emit API. Detection is via the `StickyEvent` marker on the event type.
 
@@ -254,7 +254,9 @@ val bus = EventBus.create(
 Semantics:
 
 - Interceptors **cannot** filter, transform, or short-circuit events — they run as independent collectors on the bus's `scope`. To block or mutate events, do it at the producer.
-- Exceptions thrown from `intercept` are **swallowed** per interceptor — one throwing interceptor never kills the others or the subscribers.
+- Exceptions thrown from `intercept` are **swallowed** per interceptor — one throwing interceptor never kills the others or the subscribers. `CancellationException` is the exception: it is re-thrown so scope teardown and the interceptor's own structured cleanup still run.
+- **Per-interceptor isolation** — each interceptor drains its own drop-oldest mailbox, so a slow `intercept` only drops *its own* events and never causes drops for other interceptors or normal subscribers.
+- **No startup gap** — interceptor collection subscribes synchronously during `EventBus.create`, so an interceptor observes every event from bus construction onward, including events emitted in the same tick the bus is built.
 - Dispatch order between interceptors and normal subscribers is **not guaranteed**. Do not rely on interceptor-before-subscriber ordering.
 - Cancelling the `scope` passed to `create` tears down all interceptor collectors. External subscribers keep their own scopes and are unaffected.
 

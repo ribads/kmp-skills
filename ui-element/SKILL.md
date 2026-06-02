@@ -137,15 +137,29 @@ All theme values (colors, typography styles, spacing sizes, shapes) are **define
 
 ```kotlin
 @Immutable
-sealed class Image {
-    @Immutable data class Drawable(val resId: DrawableResource) : Image()
-    @Immutable data class Bitmap(val filePath: String, val placeholder: Drawable? = null) : Image()
-    @Immutable data class LocalIdentifier(val localIdentifier: String, val placeholder: Drawable? = null) : Image()
+sealed class Image(open val contentDescription: String? = null) {
+    @Immutable data class Drawable(
+        val resId: DrawableResource,
+        override val contentDescription: String? = null,
+    ) : Image()
+    @Immutable data class Bitmap(
+        val filePath: String,
+        val placeholder: Drawable? = null,
+        override val contentDescription: String? = null,
+    ) : Image()
+    @Immutable data class LocalIdentifier(
+        val localIdentifier: String,
+        val placeholder: Drawable? = null,
+        override val contentDescription: String? = null,
+    ) : Image()
 
     companion object {
         const val DefaultAspectRatio: Float = 4f / 5f
     }
 }
+
+/** Returns a copy of this image with [description] as its accessibility label. */
+fun Image.withContentDescription(description: String): Image
 
 typealias OptionalClickCallback = (() -> Unit)?
 fun OptionalClickCallback.isEnabled(): Boolean = this != null
@@ -186,6 +200,8 @@ object ImagePainterFactory {
  */
 expect fun ImageLoader.Builder.installSynapseImageComponents(): ImageLoader.Builder
 ```
+
+`contentDescription` is an optional accessibility label carried by the `Image` model and the `Graphics` clause. `null` (the default) marks the image as decorative, so screen readers skip it. When set, the `Icon` / `Image` composables and inline `Graphics` rendering announce it. An explicit `contentDescription` argument on a composable, or on a `Graphics` clause, overrides the model value; resolution is `argument ?: image.contentDescription`.
 
 ---
 

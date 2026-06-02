@@ -10,7 +10,7 @@ user-invocable: true
 
 ### core:paystack:core — SDK Core
 
-**Package**: `com.synapse.paystack.core`
+**Package**: `com.ribads.synapse.paystack.core`
 
 ```kotlin
 // DSL initialization
@@ -44,7 +44,7 @@ sealed class PaystackError {
 
 ### core:paystack:ui — Payment Screens
 
-**Package**: `com.synapse.paystack.ui`
+**Package**: `com.ribads.synapse.paystack.ui`
 
 ```kotlin
 // --- Compose Multiplatform modal entry point (recommended) ---

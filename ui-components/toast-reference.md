@@ -88,6 +88,14 @@ object Toast {
 - Applies the relevant `WindowInsets` automatically (`statusBars` for Top, `navigationBars` for Bottom).
 - Caller controls theming via `style` — all defaults read from `Theme`.
 
+## Modal surfaces (trays, sheets, dialogs)
+
+The overlay is part of the host window's composition. Compose renders the modal surfaces in a **separate window stacked above that composition**: `Tray`, `ScrollableTray`, and `DatePickerBottomSheet` go through Material3 `ModalBottomSheet` (a top-level `Dialog`), and `ConfirmDialog` uses a `Popup`. A toast shown while any of them is open is painted behind it (behind the scrim) and only becomes visible once the surface closes. This is the same constraint that applies to Material's own `SnackbarHost`.
+
+Calling `Toast.current.show(...)` from inside a tray or dialog does not change this. The controller state is shared across the window boundary, but the overlay still draws in the host window, beneath the surface.
+
+For feedback while a modal surface is open, render the message inside that surface's own content instead of relying on the global toast.
+
 ## Style
 
 ```kotlin
@@ -210,3 +218,4 @@ ToastHandler(
 2. **`Toast.current` panics** if no handler is above it in the tree — the error message points to the fix.
 3. **Build `ToastModel` outside composables** — in the Contract, Mapper, or effect emission. Do not inline inside `@Composable`.
 4. **`Indefinite` toasts must be dismissed explicitly** — use the returned `ToastId`.
+5. **Toasts do not paint over open trays, sheets, or dialogs.** Those render in a separate window above the host composition; surface in-sheet feedback inside the sheet's own content.

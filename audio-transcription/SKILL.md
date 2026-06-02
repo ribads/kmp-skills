@@ -25,10 +25,10 @@ commonMain.dependencies {
 interface Transcriber {
     val events: Flow<TranscriptEvent>
     val isActive: StateFlow<Boolean>
-    fun start(audioChunks: SharedFlow<FloatArray>, scope: CoroutineScope)
+    fun start(audioChunks: Flow<FloatArray>, scope: CoroutineScope)
     suspend fun stop()
     suspend fun transcribeFile(filePath: String, format: AudioFormat = AudioFormat.WAV): Result<List<TranscriptLine>>
-    fun release()
+    suspend fun release()
 }
 ```
 
@@ -50,38 +50,11 @@ interface TranscriberSession {
     val lines: StateFlow<List<TranscriptLine>>
     val isActive: StateFlow<Boolean>
     val currentSessionId: String?
-    fun start(audioChunks: SharedFlow<FloatArray>, scope: CoroutineScope): String
+    fun start(audioChunks: Flow<FloatArray>, scope: CoroutineScope): String
     suspend fun stop(): Result<SessionResult>
 }
 
 fun TranscriberSession(transcriber: Transcriber): TranscriberSession
-```
-
-### AudioCapture
-
-```kotlin
-interface AudioCapture {
-    val isAvailable: Flow<Boolean>
-    val audioChunks: SharedFlow<FloatArray>
-    fun start()
-    fun stop()
-    fun release()
-}
-
-expect fun buildAudioCapture(): AudioCapture
-```
-
-### AudioSession
-
-```kotlin
-class AudioSession(audioCapture: AudioCapture) {
-    val audioChunks: SharedFlow<FloatArray>
-    val sessionAudio: StateFlow<ByteArray?>
-    val isRecording: StateFlow<Boolean>
-    fun startSession(scope: CoroutineScope)
-    fun stopSession(): ByteArray
-    fun release()
-}
 ```
 
 ### WavDecoder
@@ -95,7 +68,9 @@ expect object WavDecoder {
 ### Utility
 
 ```kotlin
-fun SharedFlow<ByteArray>.pcmBytesToFloat(scope: CoroutineScope): SharedFlow<FloatArray>
+// Cold operator: decodes 16-bit LE PCM bytes to normalized floats as they are collected,
+// so cancellation and back-pressure propagate from the transcriber to the audio source.
+fun Flow<ByteArray>.pcmBytesToFloat(): Flow<FloatArray>
 ```
 
 ---
@@ -151,15 +126,18 @@ enum class AudioFormat { WAV, AAC_M4A }
 
 ### Real-time microphone transcription
 
+This module does not own a microphone. Supply a live audio source (e.g. `core:record`'s
+`AudioRecorder.audioChunks`) and bridge 16-bit LE PCM bytes to floats with `pcmBytesToFloat()`.
+
 ```kotlin
 val transcriber = buildLocalTranscriber(TranscriberOptions(modelArch = ModelArch.BaseStreaming))
 transcriber.loadModel(modelPath = "/path/to/model")
 
-val capture = buildAudioCapture()
 val session = TranscriberSession(transcriber)
 
-capture.start()
-val sessionId = session.start(capture.audioChunks, viewModelScope)
+val recorder = buildAudioRecorder(RecordingConfig.Wav())
+recorder.start()
+val sessionId = session.start(recorder.audioChunks.pcmBytesToFloat(), viewModelScope)
 
 // Observe transcript events
 session.lines.collect { lines ->
@@ -167,8 +145,8 @@ session.lines.collect { lines ->
 }
 
 // Stop
+recorder.stop()
 val result = session.stop()
-capture.stop()
 result.onSuccess { println("Session ${it.sessionId}: ${it.lines.size} lines") }
 ```
 
@@ -182,19 +160,6 @@ val result = transcriber.transcribeFile("/path/to/audio.wav")
 result.onSuccess { lines ->
     lines.forEach { println("${it.startTime}s: ${it.text}") }
 }
-```
-
-### Using AudioSession for managed capture
-
-```kotlin
-val capture = buildAudioCapture()
-val audioSession = AudioSession(capture)
-
-audioSession.startSession(viewModelScope)
-// audioSession.audioChunks flows to transcriber
-// audioSession.sessionAudio accumulates all audio bytes
-val allAudio = audioSession.stopSession()
-audioSession.release()
 ```
 
 ---
@@ -225,7 +190,7 @@ In your **app module's** manifest (not the library module):
 <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 ```
 
-`POST_NOTIFICATIONS` is required on API 33+ because the permissions framework maps audio permission to both.
+`POST_NOTIFICATIONS` (API 33+) is only needed if you drive the persistent foreground-service recorder, whose ongoing notification requires it; the `RECORD_AUDIO` permission request no longer bundles it.
 
 #### 3. minSdk override
 
@@ -244,9 +209,9 @@ val options = TranscriberOptions(modelArch = ModelArch.Base)
 val transcriber = buildLocalTranscriber(options)
 transcriber.loadModel("base-en", context = activity)
 
-val capture = buildAudioCapture()
-capture.start()
-transcriber.start(capture.audioChunks, coroutineScope)
+val recorder = buildAudioRecorder(RecordingConfig.Wav())
+recorder.start()
+transcriber.start(recorder.audioChunks.pcmBytesToFloat(), coroutineScope)
 ```
 
 ### iOS
@@ -304,9 +269,9 @@ val options = TranscriberOptions(modelArch = ModelArch.Base)
 val transcriber = buildLocalTranscriber(options)
 transcriber.loadModel(NSBundle.mainBundle.resourcePath!!)
 
-val capture = buildAudioCapture()
-capture.start()
-transcriber.start(capture.audioChunks, coroutineScope)
+val recorder = buildAudioRecorder(RecordingConfig.Wav())
+recorder.start()
+transcriber.start(recorder.audioChunks.pcmBytesToFloat(), coroutineScope)
 ```
 
 ---
@@ -314,7 +279,6 @@ transcriber.start(capture.audioChunks, coroutineScope)
 ## Key Notes
 
 - **ModelArch**: Use `ModelArch.Base` for non-streaming `base-en` models. `ModelArch.BaseStreaming` is for streaming-specific model files.
-- **AudioCapture**: Records at the device's native sample rate and downsamples to 16kHz mono internally. Call `onPermissionGranted()` after microphone permission is obtained.
-- **AudioSession**: Wraps `AudioCapture` and accumulates audio chunks. On `stop()`, it converts the buffered float32 PCM to int16 PCM bytes.
+- **Audio source**: This module transcribes from any `Flow<FloatArray>` (16 kHz mono, normalized to [-1.0, 1.0]); it does not capture audio itself. Use `core:record` for the microphone and bridge its 16-bit LE PCM `ByteArray` chunks with `pcmBytesToFloat()`.
 - **WavDecoder**: Use `WavDecoder.decode(filePath)` to decode a `.wav` file into a `FloatArray` for offline transcription via `transcriber.transcribeFile()`.
-- **Event flow**: Collect from `transcriber.events` (not `AudioSession.events`) to receive `TranscriptEvent` updates.
+- **Event flow**: Collect from `transcriber.events` to receive raw `TranscriptEvent` updates, or from `TranscriberSession.lines` for the accumulated transcript.

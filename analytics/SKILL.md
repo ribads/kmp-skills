@@ -13,7 +13,7 @@ user-invocable: true
 ```kotlin
 interface Analytics {
     fun setUserId(id: String)
-    fun log(eventName: String, params: Map<String, AnalyticsParams> = mapOf(), appConfig: Set<AnalyticsConfig> = setOf())
+    fun log(eventName: String, params: Map<String, AnalyticsParams> = mapOf())
     fun logScreen(screenName: String, screenClass: String)
     fun setUserProperties(key: String, params: AnalyticsParams)
 }
@@ -24,8 +24,6 @@ sealed class AnalyticsParams {
     data class BooleanType(val value: Boolean) : AnalyticsParams()
     val getAsStringValue: String
 }
-
-enum class AnalyticsConfig { AppendRole }
 ```
 
 ## core:analytics:compose

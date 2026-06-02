@@ -22,7 +22,7 @@ commonMain.dependencies {
 ```kotlin
 expect object AppContextProvider {
     val applicationContext: Any?   // Android: android.content.Context, iOS: null
-    val currentActivity: Any?     // Android: FragmentActivity or null, iOS: null
+    val currentActivity: Any?     // Android: androidx.activity.ComponentActivity or null, iOS: null
 }
 ```
 
@@ -33,7 +33,7 @@ Auto-initialized on Android via a `ContentProvider` registered in the manifest â
 ```kotlin
 // In platform-specific code (androidMain)
 val context = AppContextProvider.applicationContext as Context
-val activity = AppContextProvider.currentActivity as? FragmentActivity
+val activity = AppContextProvider.currentActivity as? ComponentActivity
 ```
 
 This module is a transitive dependency of `core:file`, `core:permissions`, `core:record`, and `core:sharedpref`. You rarely need to depend on it directly.

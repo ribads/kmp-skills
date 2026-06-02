@@ -57,6 +57,13 @@ sealed class PermissionsResult {
 }
 ```
 
+`ShouldShowPermissionRationale` is **Android-only**. It is returned when the OS reports that a
+rationale should be shown before re-requesting (and `contextUiDisplayed` is `false`). iOS never
+produces it: the system handles rationale via its own pre-prompt and only ever returns `Success`
+or `Denied`. Shared code must branch on all three results, but should treat
+`ShouldShowPermissionRationale` as a softer, retry-able form of denial: on iOS the equivalent denial
+surfaces as `Denied`.
+
 ---
 
 ## Usage
@@ -75,3 +82,31 @@ when (result) {
 Platform details:
 - **Android**: Wraps `ActivityCompat` runtime permissions
 - **iOS**: Wraps AVCaptureDevice, PHPhotoLibrary, CLLocationManager, etc.
+
+### Per-request mapping
+
+| Request | Android | iOS |
+|---------|---------|-----|
+| `Audio` | `RECORD_AUDIO` | microphone (`AVAudioSession`) |
+| `Camera` | `CAMERA` | camera (`AVCaptureDevice`, video) |
+| `MediaStorage` | none (modern photo-picker APIs) | photo library read/write (`PHPhotoLibrary`) |
+| `VideoCall` | required `RECORD_AUDIO` + `CAMERA`; optional `READ_PHONE_STATE` + `BLUETOOTH_SCAN` (API 31+) | camera + microphone |
+| `Location` | `ACCESS_FINE_LOCATION` + `ACCESS_COARSE_LOCATION` (foreground) | when-in-use (`CLLocationManager`) |
+
+`VideoCall` succeeds once the **required** mic + camera are granted. The optional permissions are
+still prompted on Android 12+ but declining them does not fail the request. Declare
+`BLUETOOTH_SCAN` with `android:usesPermissionFlags="neverForLocation"` if the call does not derive
+location from it; otherwise it triggers a runtime prompt.
+
+`Location` requests **when-in-use** authorization only (no Always/background scope). The host app
+**must** declare `NSLocationWhenInUseUsageDescription` in its `Info.plist`. Without that key iOS
+silently suppresses the prompt; the request is bounded and resolves to `Denied` rather than hanging.
+
+Required iOS `Info.plist` usage-description keys per request:
+
+| Request | Info.plist key |
+|---------|----------------|
+| `Audio`, `VideoCall` | `NSMicrophoneUsageDescription` |
+| `Camera`, `VideoCall` | `NSCameraUsageDescription` |
+| `MediaStorage` | `NSPhotoLibraryUsageDescription` / `NSPhotoLibraryAddUsageDescription` |
+| `Location` | `NSLocationWhenInUseUsageDescription` |

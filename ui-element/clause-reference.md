@@ -52,6 +52,7 @@ data class Graphics(
     val actionId: String? = null,
     val size: Int? = null,         // Size in sp (default 20sp)
     val blend: Boolean = false,    // Blend with text color
+    val contentDescription: String? = null,  // Screen-reader label; null = decorative
 ) : Clause()
 
 data class CompositeClause(val items: List<Clause>) : Clause()

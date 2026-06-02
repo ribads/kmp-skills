@@ -44,7 +44,7 @@ expect suspend fun exportRecording(
 ```kotlin
 interface AudioRecorder {
     val state: StateFlow<RecordingState>
-    val audioChunks: SharedFlow<ByteArray>
+    val audioChunks: SharedFlow<ByteArray>  // lossy under backpressure: drops oldest chunks (file unaffected)
 
     fun start(): Result<Unit>
     fun pause(): Result<Unit>
