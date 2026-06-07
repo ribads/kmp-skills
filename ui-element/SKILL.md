@@ -21,20 +21,31 @@ commonMain.dependencies {
 
 ```kotlin
 @Composable
-fun SynapseTheme(invertedColors: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit)
-
-@Composable
-fun AuroraTheme(invertedColors: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit)
-
-@Composable
-fun WithTheme(colors: Colors, typography: Typography, shape: Shape, content: @Composable () -> Unit)
+fun WithTheme(
+    colors: Colors,
+    typography: Typography,
+    shape: Shape,
+    invertedColors: Boolean = LocalInvertedColors.current,
+    spacing: Spacing? = null,                       // null keeps the built-in default spacing scale
+    contentColor: Color = Color.Unspecified,        // ignored when Unspecified
+    secondaryContentColor: Color = Color.Unspecified,
+    content: @Composable () -> Unit,
+)
 
 object Theme {
-    val colors: Colors          @Composable get()
-    val typography: Typography  @Composable get()
-    val spacing: Spacing        @Composable get()
-    val shape: Shape            @Composable get()
+    val invertedColors: Boolean         @Composable get()
+    val colors: Colors                  @Composable get()
+    val typography: Typography          @Composable get()
+    val spacing: Spacing                @Composable get()
+    val shape: Shape                    @Composable get()
+    val contentColor: Color             @Composable get()
+    val secondaryContentColor: Color    @Composable get()
 }
+
+// Public CompositionLocals — read directly when you need the raw provided value
+val LocalInvertedColors: ProvidableCompositionLocal<Boolean>          // default false
+val LocalContentColor: ProvidableCompositionLocal<Color>             // default Color.Unspecified
+val LocalSecondaryContentColor: ProvidableCompositionLocal<Color>    // default Color.Unspecified
 ```
 
 ### Colors
@@ -129,7 +140,7 @@ data class Shape(
 )
 ```
 
-All theme values (colors, typography styles, spacing sizes, shapes) are **defined by the consuming app**, not by this library. The library provides the data structures and the `WithTheme` composable to wire them into the composition. `SynapseTheme` and `AuroraTheme` are example/preset themes — apps should create their own theme composable using `WithTheme`.
+All theme values (colors, typography styles, spacing sizes, shapes) are **defined by the consuming app**, not by this library. The library provides the data structures and the `WithTheme` composable to wire them into the composition; apps create their own theme composable that calls `WithTheme`. There are no preset/ready-made theme composables in this module. `spacing` is optional: when omitted, `WithTheme` keeps a built-in default spacing scale (`x1 = 4.dp` … `x32 = 128.dp`).
 
 ---
 
@@ -177,7 +188,7 @@ fun Icon(
     contentDescription: String? = null, adaptive: Boolean = false,
     contentScale: ContentScale = ContentScale.Fit, alpha: Float = DefaultAlpha,
     colorFilter: ColorFilter? = null, onClick: OptionalClickCallback = null,
-    isDarkTheme: Boolean = isSystemInDarkTheme(),
+    isDarkTheme: Boolean = Theme.invertedColors,
 )
 
 typealias AsyncImagePainterFactory =
@@ -222,5 +233,5 @@ fun Modifier.shimmer(showShimmer: Boolean = true): Modifier
 
 ## Detailed Reference
 
-- [Rich Text — Clause System](clause-reference.md) — Clause, Text, Graphics, TextFormat, TextIntent, Currency, MoneyParser, Text composables, extensions
+- [Rich Text — Clause System](clause-reference.md) — Clause, Text, Graphics, TextFormat, TextIntent, Currency, MoneyParser, Text composables, Markdown, extensions
 - [Usage Examples](examples.md) — Theme setup, rich text, image/icon, shimmer examples

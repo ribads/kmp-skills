@@ -3,10 +3,14 @@
 ## Buttons
 
 ```kotlin
-@Composable fun PrimaryButton(model: ButtonModel, modifier: Modifier = Modifier, state: ButtonState = ButtonState.Enabled, onClick: (() -> Unit)?, invertedColors: Boolean = isSystemInDarkTheme())
-@Composable fun SmallButton(model: ButtonModel, modifier: Modifier = Modifier, state: ButtonState = ButtonState.Enabled, onClick: OptionalClickCallback, invertedColors: Boolean = isSystemInDarkTheme())
-@Composable fun OutlineButton(model: ButtonModel, modifier: Modifier = Modifier, state: ButtonState = ButtonState.Enabled, style: ButtonStyle = ButtonStyle.Regular, onClick: OptionalClickCallback, invertedColors: Boolean = isSystemInDarkTheme())
-@Composable fun SmallOutlineButton(model: ButtonModel, modifier: Modifier = Modifier, state: ButtonState = ButtonState.Enabled, onClick: OptionalClickCallback, invertedColors: Boolean = isSystemInDarkTheme())
+@Composable fun PrimaryButton(model: ButtonModel, modifier: Modifier = Modifier, state: ButtonState = ButtonState.Enabled, onClick: (() -> Unit)?, invertedColors: Boolean = Theme.invertedColors)
+@Composable fun SmallButton(model: ButtonModel, modifier: Modifier = Modifier, state: ButtonState = ButtonState.Enabled, onClick: OptionalClickCallback, invertedColors: Boolean = Theme.invertedColors)
+@Composable fun OutlineButton(model: ButtonModel, modifier: Modifier = Modifier, state: ButtonState = ButtonState.Enabled, style: ButtonStyle = ButtonStyle.Regular, onClick: OptionalClickCallback, invertedColors: Boolean = Theme.invertedColors)
+@Composable fun SmallOutlineButton(model: ButtonModel, modifier: Modifier = Modifier, state: ButtonState = ButtonState.Enabled, onClick: OptionalClickCallback, invertedColors: Boolean = Theme.invertedColors)
+
+// Lower-level button used by PrimaryButton/SmallButton. Reads its colors from the
+// surrounding ProvideBaseButtonColors composition; no invertedColors parameter.
+@Composable fun BaseButton(model: ButtonModel, modifier: Modifier = Modifier, style: ButtonStyle, state: ButtonState, onClick: OptionalClickCallback)
 
 @Immutable
 data class ButtonModel(val title: Clause, val leadingImage: Image? = null, val trailingImage: Image? = null)
@@ -32,7 +36,7 @@ fun Clause.asButton() = ButtonModel(leadingImage = null, trailingImage = null, t
     onValueChange: (String) -> Unit,
     leadingContent: @Composable (RowScope.() -> Unit)? = null,
     trailingContent: @Composable (() -> Unit)? = null,
-    invertedColors: Boolean = isSystemInDarkTheme()
+    invertedColors: Boolean = Theme.invertedColors
 )
 
 @Composable fun PasswordTextField(
@@ -42,14 +46,14 @@ fun Clause.asButton() = ButtonModel(leadingImage = null, trailingImage = null, t
     modifier: Modifier = Modifier,
     onValueChange: (String) -> Unit,
     onPasswordToggleChange: ((Boolean) -> Unit)? = null,
-    invertedColors: Boolean = isSystemInDarkTheme()
+    invertedColors: Boolean = Theme.invertedColors
 )
 
 @Composable fun PhoneTextField(
     model: PhoneInputModel, modifier: Modifier = Modifier,
     onPhoneNumberChanged: (String) -> Unit,
     onCountryCodePickClick: OptionalClickCallback,
-    invertedColors: Boolean = isSystemInDarkTheme()
+    invertedColors: Boolean = Theme.invertedColors
 )
 
 @Composable fun CurrencyTextField(
@@ -57,14 +61,21 @@ fun Clause.asButton() = ButtonModel(leadingImage = null, trailingImage = null, t
     onClick: OptionalClickCallback = null,
     onAmountChanged: (Long?) -> Unit,
     dropDownContent: @Composable ((Dp) -> Unit)? = null,
-    invertedColors: Boolean = isSystemInDarkTheme()
+    invertedColors: Boolean = Theme.invertedColors
 )
 
 @Composable fun SelectionTextField(
     model: TextInputModel, modifier: Modifier = Modifier,
     trailingIcon: Image = Image.Drawable(Res.drawable.sc_icon_chevron_down),
     onClick: OptionalClickCallback,
-    invertedColors: Boolean = isSystemInDarkTheme()
+    invertedColors: Boolean = Theme.invertedColors
+)
+
+@Composable fun DropdownSelectionField(
+    model: SelectionFieldModel,
+    modifier: Modifier = Modifier,
+    onOptionSelected: (SelectionOption) -> Unit,
+    invertedColors: Boolean = Theme.invertedColors,
 )
 
 @Composable fun TextArea(
@@ -73,7 +84,7 @@ fun Clause.asButton() = ButtonModel(leadingImage = null, trailingImage = null, t
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     keyboardActions: KeyboardActions = KeyboardActions(),
     onValueChange: (value: String) -> Unit,
-    invertedColors: Boolean = isSystemInDarkTheme()
+    invertedColors: Boolean = Theme.invertedColors
 )
 ```
 
@@ -109,6 +120,24 @@ data class CurrencyInputModel(
 data class CurrencyAmount(val amount: Long, val currency: Currency = Currency.USD) {
     fun toValue(): String
 }
+
+@Stable
+data class SelectionFieldModel(
+    val label: Clause? = null,
+    val placeholder: Clause = Text.Simple("Select"),
+    val options: List<SelectionOption> = emptyList(),
+    val selectedKey: String? = null,
+    val isError: Boolean = false,
+    val footerText: Clause? = null,
+) {
+    companion object { val Default: SelectionFieldModel }
+}
+
+@Stable
+data class SelectionOption(
+    val key: String,
+    val label: Clause,
+)
 
 object CountryLocale {
     fun getCountryDialingCode(countryCode: String): String?

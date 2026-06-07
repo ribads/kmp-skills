@@ -9,7 +9,7 @@ Animated checkbox with optional label. Custom Canvas-drawn checkmark — no Mate
     model: CheckboxModel,
     modifier: Modifier = Modifier,
     onCheckedChange: (Boolean) -> Unit,
-    invertedColors: Boolean = isSystemInDarkTheme(),
+    invertedColors: Boolean = Theme.invertedColors,
 )
 
 @Stable
@@ -34,7 +34,7 @@ Animated horizontal progress bar. Custom Canvas track with rounded corners.
     modifier: Modifier = Modifier,
     animate: Boolean = true,
     overrideColor: Color? = null,
-    invertedColors: Boolean = isSystemInDarkTheme(),
+    invertedColors: Boolean = Theme.invertedColors,
 )
 
 @Stable
@@ -59,7 +59,7 @@ Animated circular arc with percentage text in center. Custom Canvas-drawn — no
     modifier: Modifier = Modifier,
     animate: Boolean = true,
     overrideColor: Color? = null,
-    invertedColors: Boolean = isSystemInDarkTheme(),
+    invertedColors: Boolean = Theme.invertedColors,
 )
 
 @Stable
@@ -133,7 +133,7 @@ Star-based rating input. Custom Canvas-drawn filled/empty stars.
     modifier: Modifier = Modifier,
     starSize: Dp = 28.dp,
     onRatingChange: (Int) -> Unit,
-    invertedColors: Boolean = isSystemInDarkTheme(),
+    invertedColors: Boolean = Theme.invertedColors,
 )
 
 @Stable
@@ -155,7 +155,7 @@ Multi/single-select chip group using `FlowRow` layout.
     model: ChipGroupModel,
     modifier: Modifier = Modifier,
     onSelectionChange: (Set<String>) -> Unit,
-    invertedColors: Boolean = isSystemInDarkTheme(),
+    invertedColors: Boolean = Theme.invertedColors,
 )
 
 @Stable
@@ -242,7 +242,7 @@ Custom Canvas-drawn radio buttons with inner dot. Supports vertical and horizont
     modifier: Modifier = Modifier,
     horizontal: Boolean = false,
     onSelectionChange: (String) -> Unit,
-    invertedColors: Boolean = isSystemInDarkTheme(),
+    invertedColors: Boolean = Theme.invertedColors,
 )
 
 @Stable
@@ -269,7 +269,7 @@ Custom Canvas track + thumb with pointer input for tap/drag and step snapping.
     model: SliderModel,
     modifier: Modifier = Modifier,
     onValueChange: (Float) -> Unit,
-    invertedColors: Boolean = isSystemInDarkTheme(),
+    invertedColors: Boolean = Theme.invertedColors,
 )
 
 @Stable
@@ -295,7 +295,7 @@ Increment/decrement control with circular bordered `+`/`-` buttons and min/max c
     model: StepperModel,
     modifier: Modifier = Modifier,
     onValueChange: (Int) -> Unit,
-    invertedColors: Boolean = isSystemInDarkTheme(),
+    invertedColors: Boolean = Theme.invertedColors,
 )
 
 @Stable
@@ -321,7 +321,7 @@ Label + formatted time display (`HH:MM:SS`) with Start/Stop and Reset buttons.
     modifier: Modifier = Modifier,
     onStartStop: () -> Unit,
     onReset: () -> Unit,
-    invertedColors: Boolean = isSystemInDarkTheme(),
+    invertedColors: Boolean = Theme.invertedColors,
 )
 
 @Stable
@@ -343,7 +343,7 @@ Hour/minute spinners with up/down arrows. Supports 12h (AM/PM toggle) and 24h mo
     model: TimePickerModel,
     modifier: Modifier = Modifier,
     onTimeChange: (hour: Int, minute: Int) -> Unit,
-    invertedColors: Boolean = isSystemInDarkTheme(),
+    invertedColors: Boolean = Theme.invertedColors,
 )
 
 @Stable
@@ -367,7 +367,7 @@ Modal dialog with scrim overlay, surface card, title/message, and confirm/cancel
     modifier: Modifier = Modifier,
     onConfirm: () -> Unit,
     onCancel: () -> Unit,
-    invertedColors: Boolean = isSystemInDarkTheme(),
+    invertedColors: Boolean = Theme.invertedColors,
 )
 
 @Stable
@@ -390,7 +390,7 @@ Centered placeholder for empty screens — optional icon, title, subtitle, and a
     model: EmptyStateModel,
     modifier: Modifier = Modifier,
     onActionClick: (() -> Unit)? = null,
-    invertedColors: Boolean = isSystemInDarkTheme(),
+    invertedColors: Boolean = Theme.invertedColors,
 )
 
 @Stable

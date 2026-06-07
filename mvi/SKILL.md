@@ -45,6 +45,10 @@ abstract class LifecycleViewModel<Intent, Result, ViewState, Effect> protected c
     val state: androidx.compose.runtime.State<ViewState>
     val effects: Flow<Effect>
     fun emit(intent: Intent)
+
+    // Public extension point for supplying a ViewModel's pipeline.
+    // Its members are internal — subtype it inside the module (see FlowViewModelArgs).
+    abstract class ViewModelArgs<Intent, Result, ViewState, Effect>
 }
 
 class FlowViewModelArgs<Intent, Result, State, Effect>(

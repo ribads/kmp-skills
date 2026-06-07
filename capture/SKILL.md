@@ -71,12 +71,12 @@ interface CaptureController {
 
 ### Contracts that matter
 
-- **Exactly-once start**: `start()` is rejected with `CaptureError.InvalidState` if the controller is already running *or* has been released. Build a new controller via `createCaptureController` to start a fresh session.
+- **Start gating**: `start()` is valid from `Idle` (initial) and from `Error` (retry after a failed previous attempt). It is rejected with `CaptureError.InvalidState` from `Initializing` / `Ready` (already in progress / already started) and from `Released` (terminally torn down — build a new controller via `createCaptureController`).
 - **`release()`** suspends until in-flight recording flushes and in-flight photo capture completes. Safe to call from any state, including `Released`.
 - **`setZoom`** returns the actually-applied (clamped) ratio so pinch gestures can match resistance to engine state without an extra read of `session`.
 - **`focus`** suspends through the camera's focus + metering pass. `Result.success(Unit)` means the request was issued; whether the device achieved lock is delivered via `events` as `CaptureEvent.FocusCompleted(locked)`.
 - **`setMode` / `setFacing`** are rejected during active recording (`InvalidState`). Consult `session.capabilities.canChangeMode` / `canChangeFacing` to render disabled state.
-- **`setFlash`** is rejected for modes outside `session.capabilities.supportedFlashModes` with `CaptureError.Unsupported`. Front cameras with no flash unit expose only `FlashMode.Off`.
+- **`setFlash`** accepts `FlashMode.Off` unconditionally. On iOS, any non-`Off` mode outside `session.capabilities.supportedFlashModes` is rejected with `CaptureError.Unsupported`; Android forwards the request straight to CameraX without that guard. Front cameras with no flash unit typically expose only `FlashMode.Off` in `supportedFlashModes`.
 - **Concurrent commands** serialize on the controller's internal mutex. State updates are atomic across every dimension of `CaptureSession`.
 - **`stopRecording` returns `InvalidState`** if no recording is active — including when an OS interrupt or auto-stop already finalized the recording (the outcome of those exits is delivered via `events`).
 - **Out-of-band recording ends**: OS interrupts → `CaptureEvent.RecordingInterrupted(outcome?, reason)`. Duration / file-size limit → `CaptureEvent.RecordingAutoStopped(outcome)`. `outcome` carries whatever the encoder finalized.
@@ -195,7 +195,7 @@ sealed class CaptureLifecycle {
 }
 ```
 
-Transition graph: `Idle -> Initializing -> Ready -> Released`. `Error` is reachable from any non-terminal state and is unrecoverable; release and rebuild.
+Transition graph: `Idle -> Initializing -> Ready -> Released`. `Error` is reachable from any non-terminal state. It is recoverable: `start()` may be re-invoked from `Error` to retry initialization. (`release` then rebuild is also fine.)
 
 ### RecordingProgress
 
@@ -300,7 +300,7 @@ The engine does **not** request permissions. Use `requiredPermissions(config)` t
 
 `ui:capture` ships flat, composable building blocks plus one opinionated assembly (`CaptureScreen`). There are no slots: customize by composing the parts yourself rather than overriding hooks.
 
-Each control subscribes to `session.capabilities` and **renders nothing** when its action is unavailable — front cameras with no flash hide the flash button entirely, recording disables the mode + flip controls. Failing actions become impossible to invoke, which is the cleanest error handling there is.
+Most controls subscribe to `session.capabilities` and **render nothing** when their action is unavailable — recording hides the mode + flip controls, a single-facing device hides the flip control. Hiding controls makes the failing action impossible to invoke, which is the cleanest error handling there is. (`CaptureFlashButton` is the deliberate exception — it always renders; see its section below.)
 
 ### CapturePreview
 
@@ -375,7 +375,7 @@ Opinionated default visual. Extension on `CaptureShutterScope` so it's callable 
 fun CaptureFlashButton(controller: CaptureController, modifier: Modifier = Modifier)
 ```
 
-Flash-mode toggle. Cycles through the modes supported by the **currently active** camera in the **currently active** mode (Off → Auto → On for photo; Off → Torch for video). Renders nothing when `session.capabilities.supportedFlashModes.size <= 1`.
+Flash-mode toggle. Cycles through the natural sequence for the **currently active** capture mode: Off → Auto → On → Off for photo, Off → Torch → Off for video. **Always renders** — the cycle is not gated by `session.capabilities.supportedFlashModes`, because `hasFlashUnit()`-style signals are unreliable across emulators and some hardware. On a camera that genuinely can't honor a mode, `setFlash` leaves `session.flash` unchanged and the label reflects the real engine state.
 
 ### CaptureFlipButton
 

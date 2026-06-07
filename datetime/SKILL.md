@@ -41,6 +41,7 @@ These pattern characters auto-delegate to platform-native formatters:
 - `a` — AM/PM marker
 - `h`, `k`, `K` — 12-hour / clock-hour fields (e.g. `hh:mm`, `h:mm a`)
 - `E`, `e`, `c` — day of week names
+- `G` — era
 - `MMM`, `MMMM` — abbreviated/full month names
 - `LLL`, `LLLL` — standalone month names
 - `zzz`, `zzzz` — timezone names

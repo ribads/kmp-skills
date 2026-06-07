@@ -5,7 +5,7 @@
 ```kotlin
 @Composable fun BarChart(
     model: BarChartModel, modifier: Modifier = Modifier,
-    height: Dp = 240.dp, invertedColors: Boolean = isSystemInDarkTheme(),
+    height: Dp = 240.dp, invertedColors: Boolean = Theme.invertedColors,
 )
 ```
 
@@ -14,7 +14,7 @@
 ```kotlin
 @Composable fun LineChart(
     model: LineChartModel, modifier: Modifier = Modifier,
-    height: Dp = 240.dp, invertedColors: Boolean = isSystemInDarkTheme(),
+    height: Dp = 240.dp, invertedColors: Boolean = Theme.invertedColors,
 )
 ```
 
@@ -23,7 +23,7 @@
 ```kotlin
 @Composable fun PieChart(
     model: PieChartModel, modifier: Modifier = Modifier,
-    invertedColors: Boolean = isSystemInDarkTheme(),
+    invertedColors: Boolean = Theme.invertedColors,
 )
 ```
 

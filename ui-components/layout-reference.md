@@ -8,12 +8,14 @@
     onDateSelected: (Long) -> Unit,
     onResetClick: (() -> Unit)? = null,
     onDoneClick: () -> Unit,
+    invertedColors: Boolean = Theme.invertedColors,
 )
 
 @Composable fun DatePickerBottomSheet(
     isVisible: Boolean, model: DatePickerModel,
     onDateSelected: (Long) -> Unit,
     onDismissRequest: OptionalClickCallback,
+    invertedColors: Boolean = Theme.invertedColors,
 )
 
 @Immutable
@@ -25,13 +27,13 @@ data class DatePickerModel(val selectedDate: Long?, val minDate: Long?, val maxD
 ## Card
 
 ```kotlin
-@Composable fun Card(modifier: Modifier = Modifier, invertedColors: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit)
+@Composable fun Card(modifier: Modifier = Modifier, invertedColors: Boolean = Theme.invertedColors, content: @Composable () -> Unit)
 ```
 
 ## Divider
 
 ```kotlin
-@Composable fun Divider(color: Color? = null, modifier: Modifier = Modifier.fillMaxWidth(), thickness: Dp = 1.dp, invertedColors: Boolean = isSystemInDarkTheme())
+@Composable fun Divider(color: Color? = null, modifier: Modifier = Modifier.fillMaxWidth(), thickness: Dp = 1.dp, invertedColors: Boolean = Theme.invertedColors)
 ```
 
 ## Scaffold
@@ -39,7 +41,7 @@ data class DatePickerModel(val selectedDate: Long?, val minDate: Long?, val maxD
 ```kotlin
 @Composable fun Scaffold(
     modifier: Modifier = Modifier, contentWindowInsets: WindowInsets = WindowInsets(0),
-    backgroundColor: Color? = null, invertedColors: Boolean = isSystemInDarkTheme(),
+    backgroundColor: Color? = null, invertedColors: Boolean = Theme.invertedColors,
     topBar: @Composable () -> Unit = {}, bottomBar: @Composable () -> Unit = {},
     floatingActionBar: @Composable () -> Unit = {},
     content: @Composable (PaddingValues) -> Unit,
@@ -50,34 +52,70 @@ data class DatePickerModel(val selectedDate: Long?, val minDate: Long?, val maxD
 
 ## TopNavBar
 
-Top navigation bar with optional leading icon, title, and trailing actions. Wraps Material 3 `TopAppBar` with Synapse theme colours.
+Top navigation bar with an optional leading icon, optional title, and optional trailing content (either a clickable title or a row of icon buttons). A plain themed `Row` (56dp tall), not Material 3 `TopAppBar`. The leading icon slot is 48dp; tapping it invokes `onLeadingClick` (the slot is only clickable when `onLeadingClick` is non-null). Trailing icons are keyed by `String` id so callers can dispatch on which one was tapped.
 
 ```kotlin
 @Composable fun TopNavBar(
     model: TopNavBarModel,
     modifier: Modifier = Modifier,
-    leadingIcon: @Composable (() -> Unit)? = null,
-    onTrailingActionClick: ((index: Int) -> Unit)? = null,
+    onLeadingClick: (() -> Unit)? = null,
+    onTrailingTitleClick: (() -> Unit)? = null,
+    onTrailingIconClick: ((id: String) -> Unit)? = null,
     invertedColors: Boolean = Theme.invertedColors,
 )
 ```
 
 **TopNavBarModel**:
 ```kotlin
-@Stable data class TopNavBarModel(
-    val title: Clause,
-    val trailingActions: List<ActionModel> = emptyList(),
+@Immutable
+data class TopNavBarModel(
+    val leadingIcon: Image? = null,
+    val title: Clause? = null,
+    val trailing: TopNavBarTrailingContentModel? = null,
 ) {
-    @Stable data class ActionModel(val label: Clause? = null, val icon: Image? = null)
+    companion object {
+        val BackIcon: Image    // Image.Drawable(Res.drawable.sc_icon_chevron_left)
+        val CloseIcon: Image   // Image.Drawable(Res.drawable.sc_icon_close)
+        val MenuIcon: Image    // Image.Drawable(Res.drawable.sc_icon_menu)
+
+        fun withTitle(
+            title: Clause,
+            leadingIconType: NavBarIconType? = null,
+            trailing: TopNavBarTrailingContentModel? = null,
+        ): TopNavBarModel
+    }
+}
+
+enum class NavBarIconType { Back, Close, Menu }
+
+@Immutable
+data class TrailingIconModel(
+    val id: String,
+    val icon: Image,
+)
+
+@Stable
+sealed class TopNavBarTrailingContentModel {
+    @Immutable
+    data class Title(
+        val clause: Clause,
+        val enabled: Boolean = true,
+    ) : TopNavBarTrailingContentModel()
+
+    @Immutable
+    data class Icons(
+        val icons: List<TrailingIconModel>,
+    ) : TopNavBarTrailingContentModel()
 }
 ```
 
-**TopNavBarLeadingIcon** — pre-built leading-icon composables:
-```kotlin
-TopNavBarLeadingIcon.Back(onClick = { /* navigate back */ })
-TopNavBarLeadingIcon.Close(onClick = { /* dismiss */ })
-TopNavBarLeadingIcon.Menu(onClick = { /* open drawer */ })
-```
+- `TopNavBarModel.withTitle(...)` is the convenient factory: pass a `NavBarIconType` and it resolves the matching `BackIcon`/`CloseIcon`/`MenuIcon` for the leading slot.
+- `TopNavBarTrailingContentModel.Title` renders a tappable text action on the trailing edge; when `enabled = false` it draws at `0.38` alpha and ignores taps. Its tap invokes `onTrailingTitleClick`.
+- `TopNavBarTrailingContentModel.Icons` renders one 48dp icon button per `TrailingIconModel`; each tap invokes `onTrailingIconClick(id)`.
+
+**Colors** (via `Theme.colors`):
+- Container: `surface.primaryLight` / `primaryDark`
+- Content: `element.primaryOnLight` / `primaryOnDark`
 
 ---
 
@@ -199,7 +237,7 @@ Standalone bottom sheet designed for modals whose **inner content scrolls** (e.g
 ```kotlin
 @Composable fun ScrollableTray(
     onDismissRequest: OptionalClickCallback,
-    invertedColors: Boolean = isSystemInDarkTheme(),
+    invertedColors: Boolean = Theme.invertedColors,
     content: @Composable BoxScope.() -> Unit,
 )
 ```

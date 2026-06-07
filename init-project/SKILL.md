@@ -15,6 +15,7 @@ Generates a complete Kotlin Multiplatform project with the canonical Synapse mul
 ├── settings.gradle.kts
 ├── build.gradle.kts
 ├── gradle.properties
+├── .gitignore                             # Gradle, Android, Xcode, IDE ignores
 ├── gradlew                                # Gradle wrapper script (chmod +x)
 ├── gradlew.bat
 ├── gradle/libs.versions.toml
@@ -42,7 +43,7 @@ Generates a complete Kotlin Multiplatform project with the canonical Synapse mul
 │       │   │   ├── RootAppBuilder.kt      # Assembles entire DI graph
 │       │   │   ├── ComposeAppComponent.kt # Merges all feature modules
 │       │   │   ├── NetworkComponent.kt    # CoreClient provider
-│       │   │   └── AppConfigurationProvider.kt
+│       │   │   └── AppConfigurationProviderFactory.kt
 │       │   └── ui/
 │       │       ├── MainContract.kt        # Main screen IRSE-MVI
 ���       │       ├── MainInteractor.kt
@@ -62,7 +63,7 @@ Generates a complete Kotlin Multiplatform project with the canonical Synapse mul
 ├── compose-ui/                            # Theme layer
 │   ├── build.gradle.kts
 │   └── src/commonMain/kotlin/<pkg>/compose/ui/theme/
-│       └── AppTheme.kt                   # WithTheme wrapper (colors, typography, shapes)
+│       └── <Name>Theme.kt              # WithTheme wrapper (colors, typography, shapes)
 │
 ├── core/
 │   ├── network/                           # HTTP client (Ktor)
@@ -187,7 +188,7 @@ Omit `--synapse-version` to use the latest published release. Pass it explicitly
 
 ## Gradle conventions
 
-The generated project targets **Gradle 9.4.1** with **Kotlin 2.3.20** and **KSP 2.3.4**.
+The generated project targets **Gradle 9.4.1** with **Kotlin 2.3.21** and **KSP 2.3.4**.
 
 Key conventions:
 - **`androidApp`** is a separate module using `com.android.application` plugin — it contains `MainActivity`, `AndroidManifest.xml`, and Android resources
@@ -198,7 +199,7 @@ Key conventions:
 - **MVI files go in `ui/` package** (e.g., `app.ui.MainContract`), not `mvi/`
 - **Landing screen files use `LandingScreen` prefix** (e.g., `LandingScreenContract`, `LandingScreenViewModel`)
 - **`kotlin-inject-runtime-kmp`** is used instead of `kotlin-inject-runtime`
-- **Domain data modules** use `androidMultiplatformLibrary` plugin with `kspCommonMainMetadata` declared twice
+- **Modules with kotlin-inject codegen** declare `add("kspCommonMainMetadata", libs.kotlin.inject.compiler)` and call the shared `configureCommonMainKsp()` helper, which puts the generated sources on the common compile path
 
 ## When to use
 
@@ -211,17 +212,15 @@ Always run the script rather than hand-writing the scaffold — that's the whole
 
 ## After running the script
 
-The script generates a compiling skeleton. The user still needs to:
+The script generates a compiling skeleton. Synapse artifacts resolve from Maven Central (already configured in `settings.gradle.kts`), so no extra credentials are needed for a default build. The user still needs to:
 
-1. **Add Google Services** — place `google-services.json` (Android) and `GoogleService-Info.plist` (iOS) if using Firebase.
-2. **Configure GitHub Packages** — set `gpr.user` / `gpr.key` in `gradle.properties` or env vars for Synapse artifact resolution.
-3. **Customize the theme** — edit `compose-ui/.../AppTheme.kt` with brand colors, fonts, shapes.
-4. **Add fonts** — place `.ttf`/`.otf` files in `compose-ui/src/commonMain/composeResources/font/`.
-5. **Wire real repositories** — replace `TODO()` stubs in data layer implementations.
-6. **Add screens** — use `/create-screen` to add more screens to existing features.
-7. **Set Xcode `TEAM_ID`** — open `iosApp/Configuration/Config.xcconfig` and fill in your Apple Developer team identifier (or leave blank for simulator-only builds).
-8. **Add app icon images** — drop 1024×1024 PNGs into `iosApp/iosApp/Assets.xcassets/AppIcon.appiconset/` and update its `Contents.json`.
-9. **Open in Android Studio / Fleet** — sync Gradle, then run on Android. For iOS, open `iosApp/iosApp.xcodeproj` in Xcode.
+1. **Customize the theme** — edit `compose-ui/.../<Name>Theme.kt` with brand colors, fonts, shapes.
+2. **Add fonts** — place `.ttf`/`.otf` files in `compose-ui/src/commonMain/composeResources/font/`.
+3. **Wire real repositories** — replace `TODO()` stubs in the data layer, then connect each domain's `RepositoryProvidersImpl` to the use-case module that needs it (see the `// TODO` in `RootAppBuilder.build()`).
+4. **Add screens** — use `/create-screen` to add more screens to existing features.
+5. **Set Xcode `TEAM_ID`** — open `iosApp/Configuration/Config.xcconfig` and fill in your Apple Developer team identifier; it feeds `DEVELOPMENT_TEAM` for code signing (leave blank for simulator-only builds).
+6. **Add app icon images** — drop 1024×1024 PNGs into `iosApp/iosApp/Assets.xcassets/AppIcon.appiconset/` and update its `Contents.json`.
+7. **Open in Android Studio / Fleet** — sync Gradle, then run on Android. For iOS, open `iosApp/iosApp.xcodeproj` in Xcode.
 
 ## Related skills
 

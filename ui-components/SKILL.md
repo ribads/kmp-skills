@@ -32,6 +32,7 @@ Depends on `ui:element`.
 | Phone text field | `PhoneTextField` | `PhoneInputModel` | [inputs](inputs-reference.md) |
 | Currency text field | `CurrencyTextField` | `CurrencyInputModel` | [inputs](inputs-reference.md) |
 | Selection text field | `SelectionTextField` | `TextInputModel` | [inputs](inputs-reference.md) |
+| Dropdown selection field | `DropdownSelectionField` | `SelectionFieldModel` | [inputs](inputs-reference.md) |
 | Text area | `TextArea` | `TextInputModel` | [inputs](inputs-reference.md) |
 | Date picker | `DatePicker` / `DatePickerBottomSheet` | `DatePickerModel` | [layout](layout-reference.md) |
 | Card | `Card` | — | [layout](layout-reference.md) |

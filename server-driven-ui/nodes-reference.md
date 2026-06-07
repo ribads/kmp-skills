@@ -72,6 +72,7 @@ Shared fields: `title`, `leadingImageUrl`, `trailingImageUrl`, `state`, `stateCo
 | `Slider` | `min` (Float, default 0), `max` (Float, default 1), `step` (Float), `showValue` (Boolean), `label`, `stateKey`, `bind`, `onValueChangeActionId` |
 | `Stepper` | `min` (Int, default 0), `max` (Int), `step` (Int, default 1), `label`, `stateKey`, `bind`, `onValueChangeActionId` |
 | `TimePicker` | `label`, `is24Hour` (Boolean, default true), `stateKey`, `bind`, `onTimeChangeActionId` |
+| `Timer` | `label`, `autoStart` (Boolean, default false), `stateKey`, `bind` |
 
 **UISelectionOption**: `key` (String), `label` (String)
 
@@ -144,7 +145,7 @@ When both `iconUrl` and `label` are set, the icon is rendered and the label is u
 | `PieChart` | `slices` (List\<UIPieSlice\>), `title`, `donutFraction` (Float, default 0), `showPercentages`, `showLegend`, `animate`, `dataSource`, `valueField`, `labelField`, `filter` (DataCondition?) |
 
 **UIChartSeries**: `entries` (List\<UIChartEntry\>), `label` (String?), `color` (hex String?)
-**UIChartEntry**: `value` (Float), `label` (String)
+**UIChartEntry**: `value` (Float), `label` (String, default "")
 **UIPieSlice**: `value` (Float), `label` (String?), `color` (hex String?)
 
 ---

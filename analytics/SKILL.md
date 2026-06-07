@@ -34,7 +34,7 @@ sealed class AnalyticsParams {
 @Composable
 fun WithAnalytics(analytics: Analytics, content: @Composable () -> Unit)
 
-val LocalAnalyticsLogger: CompositionLocal<Analytics>  // throws if not provided
+val LocalAnalyticsLogger: ProvidableCompositionLocal<Analytics>  // throws if not provided
 ```
 
 ---

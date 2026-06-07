@@ -29,6 +29,8 @@ interface FilePicker {
         val shared: FilePicker
     }
 }
+
+expect fun buildFilePicker(): FilePicker
 ```
 
 ### FilePickerRequest
@@ -91,8 +93,20 @@ interface PhotoSaver {
         fun create(): PhotoSaver
     }
 }
+```
+
+`PermissionResult` and `IosPickerResult` live in the `com.ribads.synapse.core.file.dto` package; the other iOS types are in `com.ribads.synapse.core.file`.
+
+```kotlin
+package com.ribads.synapse.core.file.dto
 
 enum class PermissionResult { Granted, NotGranted }
+
+sealed class IosPickerResult {
+    data class Success(val identifiers: List<String>) : IosPickerResult()
+    data class Failure(val message: String) : IosPickerResult()
+    object Cancelled : IosPickerResult()
+}
 ```
 
 ---

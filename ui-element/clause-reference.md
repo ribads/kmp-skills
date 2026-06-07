@@ -117,6 +117,9 @@ fun textIntentPalette(
 
 @Composable
 fun WithTextIntentPalette(palette: TextIntentPalette, content: @Composable () -> Unit)
+
+// Holds the optional palette provided by WithTextIntentPalette; null means resolve from Theme.
+val LocalTextIntentPalette: ProvidableCompositionLocal<TextIntentPalette?>   // default null
 ```
 
 ---
@@ -167,7 +170,7 @@ fun TextLink(
     textDecoration: TextDecoration = TextDecoration.Underline,
     style: TextStyle = Theme.typography.body.copy(fontWeight = FontWeight.SemiBold),
     enabled: Boolean = true,
-    invertedColors: Boolean = isSystemInDarkTheme(),
+    invertedColors: Boolean = Theme.invertedColors,
     onClick: () -> Unit,
 )
 
@@ -191,3 +194,24 @@ fun Text.withFormat(format: TextFormat): Text
 fun Clause.toComposite(): CompositeClause
 fun localizedClause(resId: StringResource, args: List<Clause> = emptyList(), format: TextFormat? = null): Text.Localized
 ```
+
+---
+
+## Markdown
+
+```kotlin
+// package: com.ribads.synapse.ui.element.text.markdown
+fun String.asMarkdown(): Clause
+```
+
+Parses inline Markdown into a `Clause` for rendering with `Text`. Supported syntax:
+
+- `*italic*`
+- `**bold**`
+- `***bold italic***`
+- `~~strikethrough~~`
+- `[text](actionId)` — clickable link (handle via `WithTextClickHandler`)
+- `\*` — escape a special character
+- Nesting: `**bold *and italic* text**`
+
+A string with no Markdown syntax produces a single `Text.Simple`.

@@ -22,7 +22,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 
-SYNAPSE_VERSION_FALLBACK = "0.0.24-alpha1"
+SYNAPSE_VERSION_FALLBACK = "0.0.27-alpha1"
 SYNAPSE_METADATA_URL = (
     "https://repo1.maven.org/maven2/com/ribads/synapse/ui-element/maven-metadata.xml"
 )
@@ -170,13 +170,6 @@ dependencyResolutionManagement {
             }
         }
         mavenCentral()
-        maven {
-            url = uri("https://maven.pkg.github.com/ribads/outside-claude-api-server")
-            credentials {
-                username = providers.gradleProperty("gpr.user").orNull ?: System.getenv("GITHUB_ACTOR")
-                password = providers.gradleProperty("gpr.key").orNull ?: System.getenv("GITHUB_TOKEN")
-            }
-        }
     }
 }
 
@@ -201,7 +194,6 @@ ROOT_BUILD_GRADLE = '''plugins {
     alias(libs.plugins.composeCompiler) apply false
     alias(libs.plugins.ksp) apply false
     alias(libs.plugins.kotlinMultiplatform) apply false
-    alias(libs.plugins.kotlin.android) apply false
 }
 '''
 
@@ -220,6 +212,44 @@ android.useAndroidX=true
 android.dependency.useConstraints=true
 '''
 
+GITIGNORE = '''# Gradle
+.gradle/
+build/
+
+# Kotlin
+.kotlin/
+
+# IntelliJ IDEA / Android Studio / Fleet
+.idea/
+.fleet/
+*.iml
+*.ipr
+*.iws
+out/
+
+# Android & local machine config
+local.properties
+*.apk
+*.aab
+*.ap_
+*.dex
+captures/
+.cxx/
+
+# Xcode / iOS
+**/xcuserdata/
+**/*.xcuserstate
+DerivedData/
+*.ipa
+.swiftpm/
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
+'''
+
 GRADLE_WRAPPER_PROPERTIES = '''distributionBase=GRADLE_USER_HOME
 distributionPath=wrapper/dists
 distributionUrl=https\\://services.gradle.org/distributions/gradle-9.4.1-bin.zip
@@ -230,7 +260,7 @@ zipStorePath=wrapper/dists
 '''
 
 LIBS_VERSIONS_TOML = '''[versions]
-agp = "9.1.0"
+agp = "9.1.1"
 android-compileSdk = "36"
 android-minSdk = "24"
 android-targetSdk = "36"
@@ -239,7 +269,7 @@ androidx-appcompat = "1.7.1"
 androidx-core = "1.18.0"
 androidx-lifecycle = "2.10.0"
 composeMultiplatform = "1.10.3"
-kotlin = "2.3.20"
+kotlin = "2.3.21"
 synapse = "__SYNAPSE_VERSION__"
 kotlinInject = "0.9.0"
 ksp = "2.3.4"
@@ -297,7 +327,6 @@ kotlinxSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", versi
 composeMultiplatform = { id = "org.jetbrains.compose", version.ref = "composeMultiplatform" }
 composeCompiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 '''
 
 # ─── androidApp ───────────────────────────────────────────────────────────────
@@ -922,12 +951,9 @@ internal class MainNavigatorHost constructor(
 ) : NavigatorHost.Root {
 
     override fun buildGraph(builder: NavGraphBuilder, navigationDispatcher: NavigationDispatcher) {
-        launcher
-            .map { launcher -> launcher.value }
-            .map { navigationHost -> navigationHost.navigationGraph() }
-            .onEach { navigationHost: NavigatorHost.Child ->
-                navigationHost.buildGraph(builder, navigationDispatcher)
-            }
+        launcher.values.forEach { featureLauncher ->
+            featureLauncher.navigationGraph().buildGraph(builder, navigationDispatcher)
+        }
     }
 }
 '''
@@ -938,11 +964,10 @@ import androidx.navigation.NavController
 import androidx.navigation.NavOptionsBuilder
 import com.ribads.synapse.ui.compose.presentation.navigation.NavigationCommand
 import com.ribads.synapse.ui.compose.presentation.navigation.NavigationDispatcher
-import me.tatarka.inject.annotations.Inject
 
 internal class NavigationNotSupportedException(message: String) : Exception(message)
 
-internal class MainNavigationDispatcher @Inject constructor(
+internal class MainNavigationDispatcher constructor(
     private val navController: NavController,
     private val builderProducer: NavOptionsBuilderProducer = NavOptionsBuilderProducer(navController = navController),
 ) : NavigationDispatcher {
@@ -1005,15 +1030,9 @@ internal abstract class NetworkComponent(
 ROOT_APP_BUILDER_HEAD = '''package __APP_PACKAGE__.di
 
 import __APP_PACKAGE__.AppContext
-import __APP_PACKAGE__.buildErrorLogger
 import __APP_PACKAGE__.ui.MainViewModel
 import __APP_PACKAGE__.ui.di.MainUiComponent
 import __APP_PACKAGE__.ui.di.create
-import __BASE_PACKAGE__.core.auth.OauthTokenProvider
-'''
-
-ROOT_APP_BUILDER_DOMAIN_IMPORT = '''import __BASE_PACKAGE__.domain.__DOMAIN__.data.di.__DOMAIN_PASCAL__RepositoryProvidersImpl
-import __BASE_PACKAGE__.domain.__DOMAIN__.data.di.create
 '''
 
 ROOT_APP_BUILDER_FEATURE_IMPORT = '''import __BASE_PACKAGE__.feature.__FEATURE__.ui.di.__FEATURE_PASCAL__Module
@@ -1022,8 +1041,7 @@ import __BASE_PACKAGE__.feature.__FEATURE__.usecase.di.__FEATURE_PASCAL__UseCase
 import __BASE_PACKAGE__.feature.__FEATURE__.usecase.di.create
 '''
 
-ROOT_APP_BUILDER_CLASS = '''import com.ribads.synapse.core.sharedpref.buildSharedPrefManager
-import com.ribads.synapse.ui.compose.presentation.navigation.compose.NavigatorHost
+ROOT_APP_BUILDER_CLASS = '''import com.ribads.synapse.ui.compose.presentation.navigation.compose.NavigatorHost
 
 internal class __PROJECT_NAME__App(
     val root: NavigatorHost.Root,
@@ -1034,12 +1052,7 @@ internal object RootAppBuilder {
 
     fun build(appContext: AppContext): __PROJECT_NAME__App {
 
-        val authTokenStorage = buildSharedPrefManager("__PROJECT_NAME_LOWER__")
-        val tokenProvider = OauthTokenProvider.create(authTokenStorage)
-        val networkComponent = NetworkComponent::class.create(tokenProvider)
-        val errorLogger = buildErrorLogger()
-
-__DOMAIN_BUILDS__
+__DATA_LAYER_TODO__
 __FEATURE_BUILDS__
         val mainViewModel = MainUiComponent::class.create()
 
@@ -1113,7 +1126,6 @@ kotlin {
     }
 
     listOf(
-        iosX64(),
         iosArm64(),
         iosSimulatorArm64()
     ).forEach { iosTarget ->
@@ -1367,7 +1379,6 @@ plugins {
 kotlin {
     jvm()
     listOf(
-        iosX64(),
         iosArm64(),
         iosSimulatorArm64()
     ).forEach { iosTarget ->
@@ -1376,6 +1387,7 @@ kotlin {
             isStatic = true
         }
     }
+    configureCommonMainKsp()
     sourceSets {
         commonMain.dependencies {
             implementation(libs.coroutine.core)
@@ -1400,8 +1412,18 @@ kotlin {
 }
 
 dependencies {
-    add("commonMainImplementation", libs.ktor.client.core)
     add("kspCommonMainMetadata", libs.kotlin.inject.compiler)
+}
+
+fun KotlinMultiplatformExtension.configureCommonMainKsp() {
+    sourceSets.named("commonMain").configure {
+        kotlin.srcDir("build/generated/ksp/metadata/commonMain/kotlin")
+    }
+    project.tasks.withType(KotlinCompilationTask::class.java).configureEach {
+        if (name != "kspCommonMainKotlinMetadata") {
+            dependsOn("kspCommonMainKotlinMetadata")
+        }
+    }
 }
 '''
 
@@ -1436,7 +1458,6 @@ kotlin {
 }
 
 dependencies {
-    kspCommonMainMetadata(libs.kotlin.inject.compiler)
     add("kspCommonMainMetadata", libs.kotlin.inject.compiler)
 }
 
@@ -1460,7 +1481,6 @@ CORE_CONFIG_BUILD_GRADLE = '''plugins {
 kotlin {
     jvm()
     listOf(
-        iosX64(),
         iosArm64(),
         iosSimulatorArm64()
     ).forEach { iosTarget ->
@@ -1485,12 +1505,11 @@ CORE_LOG_BUILD_GRADLE = '''plugins {
 kotlin {
     jvm()
     listOf(
-        iosX64(),
         iosArm64(),
         iosSimulatorArm64()
     ).forEach { iosTarget ->
         iosTarget.binaries.framework {
-            baseName = "core.discopes"
+            baseName = "CoreLog"
             isStatic = true
         }
     }
@@ -1663,7 +1682,6 @@ DOMAIN_ENTITIES_BUILD_GRADLE = '''plugins {
 kotlin {
     jvm()
     listOf(
-        iosX64(),
         iosArm64(),
         iosSimulatorArm64()
     )
@@ -1719,7 +1737,6 @@ kotlin {
     }
 
     listOf(
-        iosX64(),
         iosArm64(),
         iosSimulatorArm64()
     ).forEach { iosTarget ->
@@ -1749,7 +1766,6 @@ kotlin {
 }
 
 dependencies {
-    kspCommonMainMetadata(libs.kotlin.inject.compiler)
     add("kspCommonMainMetadata", libs.kotlin.inject.compiler)
     add("commonMainApi", project(":domain:__DOMAIN__:entities"))
 }
@@ -1812,7 +1828,6 @@ plugins {
 kotlin {
     jvm()
     listOf(
-        iosX64(),
         iosArm64(),
         iosSimulatorArm64()
     )
@@ -1830,7 +1845,6 @@ __USECASE_DOMAIN_DEPS__
 }
 
 dependencies {
-    kspCommonMainMetadata(libs.kotlin.inject.compiler)
     add("kspCommonMainMetadata", libs.kotlin.inject.compiler)
 }
 
@@ -1914,7 +1928,6 @@ kotlin {
     }
 
     listOf(
-        iosX64(),
         iosArm64(),
         iosSimulatorArm64()
     ).forEach { iosTarget ->
@@ -1952,7 +1965,6 @@ kotlin {
 }
 
 dependencies {
-    kspCommonMainMetadata(libs.kotlin.inject.compiler)
     add("kspCommonMainMetadata", libs.kotlin.inject.compiler)
 }
 
@@ -1976,9 +1988,8 @@ import __BASE_PACKAGE__.feature.__FEATURE__.ui.navigation.__FEATURE_PASCAL__Navi
 import __BASE_PACKAGE__.feature.__FEATURE__.ui.navigation.ViewModelProviders
 import com.ribads.synapse.ui.compose.presentation.feature.FeatureLauncher
 import com.ribads.synapse.ui.compose.presentation.navigation.compose.NavigatorHost
-import me.tatarka.inject.annotations.Inject
 
-internal class __FEATURE_PASCAL__FeatureLauncher @Inject constructor(
+internal class __FEATURE_PASCAL__FeatureLauncher constructor(
     private val viewModelProviders: ViewModelProviders,
 ) : FeatureLauncher {
 
@@ -2398,6 +2409,7 @@ def main() -> None:
     write_file(out / "settings.gradle.kts", render(SETTINGS_GRADLE, ctx), force)
     write_file(out / "build.gradle.kts", ROOT_BUILD_GRADLE, force)
     write_file(out / "gradle.properties", GRADLE_PROPERTIES, force)
+    write_file(out / ".gitignore", GITIGNORE, force)
     write_file(out / "gradle" / "libs.versions.toml", render(LIBS_VERSIONS_TOML, ctx), force)
     write_file(out / "gradle" / "wrapper" / "gradle-wrapper.properties", GRADLE_WRAPPER_PROPERTIES, force)
     copy_template_file("gradle/wrapper/gradle-wrapper.jar", out / "gradle" / "wrapper" / "gradle-wrapper.jar", force)
@@ -2454,23 +2466,32 @@ def main() -> None:
 
     # DI
     write_file(common_src / "di" / "NetworkComponent.kt", render(NETWORK_COMPONENT, ctx), force)
-    write_file(common_src / "di" / "AppConfigurationProvider.kt", render(BUILD_APP_CONFIGURATION_PROVIDER, ctx), force)
+    write_file(common_src / "di" / "AppConfigurationProviderFactory.kt", render(BUILD_APP_CONFIGURATION_PROVIDER, ctx), force)
 
     # DI: RootAppBuilder
     rab_imports = ROOT_APP_BUILDER_HEAD
-    for d in domains:
-        rab_imports += render(ROOT_APP_BUILDER_DOMAIN_IMPORT, {**ctx, "DOMAIN": d, "DOMAIN_PASCAL": to_pascal(d)})
     for f in features:
         rab_imports += render(ROOT_APP_BUILDER_FEATURE_IMPORT, {**ctx, "FEATURE": f, "FEATURE_PASCAL": to_pascal(f)})
 
-    domain_builds = ""
-    for d in domains:
-        dp = to_pascal(d)
-        dc = to_camel(d)
-        domain_builds += f"        val {dc}Repositories = {dp}RepositoryProvidersImpl::class.create(\n"
-        domain_builds += f"            client = networkComponent.client,\n"
-        domain_builds += f"            logger = errorLogger,\n"
-        domain_builds += f"        )\n\n"
+    data_layer_todo = (
+        "        // TODO: Wire the data layer when a feature needs it. Build the auth/network\n"
+        "        //       stack and each domain's repository-providers component, then pass the\n"
+        "        //       repositories into the use-case module that depends on them, e.g.:\n"
+        "        //\n"
+        f'        //       val authTokenStorage = buildSharedPrefManager("{name.lower()}")\n'
+        "        //       val tokenProvider = OauthTokenProvider.create(authTokenStorage)\n"
+        "        //       val networkComponent = NetworkComponent::class.create(tokenProvider)\n"
+        "        //       val errorLogger = buildErrorLogger()\n"
+    )
+    if domains:
+        dp = to_pascal(domains[0])
+        dc = to_camel(domains[0])
+        data_layer_todo += (
+            f"        //       val {dc}Repositories = {dp}RepositoryProvidersImpl::class.create(\n"
+            "        //           client = networkComponent.client,\n"
+            "        //           logger = errorLogger,\n"
+            "        //       )\n"
+        )
 
     feature_builds = ""
     for f in features:
@@ -2484,7 +2505,7 @@ def main() -> None:
         f"            {to_camel(f)}Module = {to_camel(f)}Module" for f in features
     )
 
-    ctx["DOMAIN_BUILDS"] = domain_builds
+    ctx["DATA_LAYER_TODO"] = data_layer_todo
     ctx["FEATURE_BUILDS"] = feature_builds
     ctx["FEATURE_PARAMS"] = feature_params
 
@@ -2647,11 +2668,10 @@ def main() -> None:
     print()
     print("Next steps:")
     print(f"  1. cd {out}")
-    print(f"  2. Configure GitHub Packages credentials for Synapse artifacts")
-    print(f"  3. Customize the theme in compose-ui/.../theme/{name}Theme.kt")
-    print(f"  4. Add custom fonts to compose-ui/src/commonMain/composeResources/font/")
-    print(f"  5. Wire real repositories in domain/*/data/ implementations")
-    print(f"  6. Open in Android Studio / Fleet and sync Gradle")
+    print(f"  2. Customize the theme in compose-ui/.../theme/{name}Theme.kt")
+    print(f"  3. Add custom fonts to compose-ui/src/commonMain/composeResources/font/")
+    print(f"  4. Wire real repositories in domain/*/data/ implementations")
+    print(f"  5. Open in Android Studio / Fleet and sync Gradle")
 
 
 if __name__ == "__main__":

@@ -13,29 +13,163 @@ user-invocable: true
 **Package**: `com.ribads.synapse.paystack.core`
 
 ```kotlin
-// DSL initialization
-val paystack = paystack { publicKey = "pk_live_..." }
-// Or factory
-val paystack = Paystack.create(publicKey = "pk_live_...")
+// --- Initialization ---
 
-// Services
-class TransactionService { suspend fun charge(...): Result<ChargeResponse> }
-class CardPaymentService { suspend fun chargeCard(...): Result<ChargeResponse> }
-class MobileMoneyService { suspend fun chargeMobileMoney(...): Result<ChargeResponse> }
+// DSL (returns the singleton and stores it)
+val paystack = paystack {
+    publicKey = "pk_live_..."      // required, non-blank
+    enableLogging = false           // default false
+    sdkVersion = "0.0.1"            // default "0.0.1"
+}
+// Or factory overloads
+val paystack = Paystack.create(publicKey = "pk_live_...", enableLogging = false)
+val paystack = Paystack.create(config = PaystackConfig(publicKey = "pk_live_..."))
 
-// Event streaming
-class EventManager { fun subscribe(): Flow<String> }
+data class PaystackConfig(
+    val publicKey: String,
+    val enableLogging: Boolean = false,
+    val sdkVersion: String = "0.0.1",
+)
 
-// Errors
-sealed class PaystackError {
-    class Api(val message: String, val code: Int) : PaystackError()
-    class Network(val cause: Throwable) : PaystackError()
-    class Authentication(val message: String) : PaystackError()
-    object NoResponseBody : PaystackError()
+class Paystack /* private constructor */ {
+    val config: PaystackConfig
+    val logger: Logger
+    val transactions: TransactionService
+    val cards: CardPaymentService
+    val mobileMoney: MobileMoneyService
+
+    companion object {
+        val instance: Paystack                 // throws if not initialized
+        val isInitialized: Boolean
+        fun create(config: PaystackConfig): Paystack
+        fun create(publicKey: String, enableLogging: Boolean = false): Paystack
+        fun reset()
+    }
+}
+
+class PaystackConfigBuilder {
+    var publicKey: String = ""
+    var enableLogging: Boolean = false
+    var sdkVersion: String = "0.0.1"
+}
+
+fun paystack(block: PaystackConfigBuilder.() -> Unit): Paystack
+
+// --- Services (accessed via Paystack instance; constructors are internal) ---
+
+class TransactionService {
+    suspend fun verifyAccessCode(accessCode: String): Result<AccessCodeData>
+    suspend fun checkPendingCharge(accessCode: String): Result<ChargeResponse>
+    fun getSupportedPaymentChannels(): List<PaymentChannel>
+    fun transactionEvents(channelName: String): Flow<Result<TransactionEvent>>
+}
+
+class CardPaymentService {
+    suspend fun charge(
+        accessCode: String,
+        cardParams: CardParams,
+        encryptionKey: String,
+    ): Result<ChargeResponse>
+    suspend fun authenticateWithPin(accessCode: String, pin: String, encryptionKey: String): Result<ChargeResponse>
+    suspend fun authenticateWithOtp(accessCode: String, otp: String): Result<ChargeResponse>
+    suspend fun authenticateWithPhone(accessCode: String, phoneNumber: String): Result<ChargeResponse>
+    suspend fun authenticateWithAddress(
+        accessCode: String,
+        address: String,
+        city: String,
+        state: String,
+        zipCode: String,
+    ): Result<ChargeResponse>
+    suspend fun authenticateWithBirthday(accessCode: String, day: String, month: String, year: String): Result<ChargeResponse>
+    suspend fun getAddressStates(countryCode: String): Result<List<AddressState>>
+    fun redirectAuthResults(transactionId: String): Flow<Result<RedirectAuthResponse>>
+}
+
+class MobileMoneyService {
+    suspend fun charge(
+        transactionId: String,
+        provider: String,
+        phone: String? = null,
+    ): Result<MobileMoneyChargeResponse>
+}
+
+// --- Logging ---
+
+interface Logger {
+    fun debug(message: String?)
+    fun error(throwable: Throwable? = null, message: String?)
+}
+
+// --- Errors ---
+
+sealed class PaystackError(
+    override val message: String,
+    override val cause: Throwable? = null,
+) : Exception(message, cause) {
+    class NotInitialized(message: String = "Paystack SDK has not been initialized.") : PaystackError(message)
+    class InvalidKey(message: String = "Invalid or missing Paystack API Key.") : PaystackError(message)
+    class Network(message: String, cause: Throwable? = null) : PaystackError(message, cause)
+    class Api(message: String, val statusCode: Int? = null) : PaystackError(message)
+    class NoResponseBody(message: String = "No response body returned by the server.") : PaystackError(message)
+    class Authentication(message: String, cause: Throwable? = null) : PaystackError(message, cause)
+    class Unknown(message: String = "An unexpected error occurred.", cause: Throwable? = null) : PaystackError(message, cause)
+}
+
+fun Throwable.asPaystackError(): PaystackError
+```
+
+**Models** (package `com.ribads.synapse.paystack.core.api.models`, all `@Serializable`):
+
+```kotlin
+data class AccessCodeData(
+    val id: String, val accessCode: String, val amount: Long,
+    val currency: String, val domain: PaystackDomain, val email: String,
+    val merchantName: String, val reference: String, val encryptionKey: String,
+    val channelOptions: ChannelOptions,
+) { val isTestTransaction: Boolean; val channels: List<PaymentChannel> }
+
+data class CardParams(
+    val number: String, val cvv: String,
+    val expiryMonth: String, val expiryYear: String, val pin: String? = null,
+)
+
+data class ChargeResponse(
+    val status: TransactionStatus, val amount: Long, val currency: String,
+    val reference: String, val channel: PaymentChannel, val domain: PaystackDomain,
+    val transactionDate: String, val gatewayResponse: String,
+    val fees: Long? = 0, val metadata: Map<String, String>? = null,
+    val customer: Customer? = null, val message: String? = null,
+    val displayText: String? = null, val authUrl: String? = null,
+    val authorization: ChargeAuthorization? = null,
+)
+
+data class MobileMoneyChargeResponse(
+    val channelName: String, val displayParams: DisplayParams,
+    val phone: String? = null, val provider: String, val transactionId: String,
+) // nested: DisplayParams, enum DisplayType { ENTER_NUMBER, POP, ... }
+
+data class TransactionEvent(val status: TransactionStatus, val message: String? = null)
+
+data class RedirectAuthResponse(
+    val status: TransactionStatus, val transactionId: String? = null,
+    val message: String? = null, val response: String? = null,
+) { val reference: String? }
+
+data class AddressState(val name: String, val slug: String, val abbreviation: String)
+data class Customer(/* firstName, lastName, email, customerCode, phone, metadata, riskAction — all String? */)
+data class ChannelOptions(/* bankTransfer, ussd, qr, card: List<String>?; mobileMoney: List<MobileMoneyChannelOption>? */)
+data class ChargeAuthorization(/* code, bin, last4, expiryMonth, expiryYear, cardType, countryCode, bank — all String? */)
+data class MobileMoneyChannelOption(/* ... */)
+
+enum class PaymentChannel { CARD, MOBILE_MONEY, UNKNOWN }   // companion.supported = [CARD, MOBILE_MONEY]
+enum class PaystackDomain { LIVE, TEST }
+enum class TransactionStatus {
+    Success, Failed, Pending, Timeout, SentOtp, SendBirthday,
+    SendPin, SendAddress, SendPhone, OpenUrl, Requery, Unknown
 }
 ```
 
-**Architecture**: Suspend functions returning `Result<T>`, Flow-based events, sealed error hierarchy, no callbacks.
+**Architecture**: Suspend functions returning `Result<T>`, Flow-based events, sealed error hierarchy, no callbacks. `EventManager`, `EncryptionManager`, `PaystackApi`, and the HTTP/encryption/event factory functions are `internal` — not part of the public surface.
 
 **Platform details**:
 - Android: OkHttp + Pusher Java client
@@ -54,6 +188,7 @@ fun rememberPaystackPaymentSheetState(): PaystackPaymentSheetState
 
 @Stable
 class PaystackPaymentSheetState {
+    // constructor is internal — obtain via rememberPaystackPaymentSheetState()
     val isPresented: Boolean
     fun present(accessCode: String)
     // dismiss() is internal — sheet manages its own lifecycle
@@ -88,8 +223,15 @@ typealias PaymentSheetResultCallback = (PaymentSheetResult) -> Unit
 
 // --- Platform entry points ---
 
-// Android: PaymentSheet(activity: ComponentActivity, callback) → launch(accessCode)
-// iOS: PaymentSheetViewController(accessCode, onResult) → UIViewController
+// Android (androidMain):
+class PaymentSheet(activity: ComponentActivity, callback: PaymentSheetResultCallback) {
+    fun launch(accessCode: String)
+}
+// iOS (iosMain):
+fun PaymentSheetViewController(
+    accessCode: String,
+    onResult: (PaymentSheetResult) -> Unit,
+): UIViewController
 ```
 
 **Usage**:
@@ -120,10 +262,18 @@ PaystackPaymentSheet(
 
 ## Stripe
 
-### core:payment:stripe — Stripe SDK Wrapper
+### core:payment:stripe — Stripe SDK Wrapper (scaffold only)
 
-**Package**: `com.ribads.synapse.core.payment.stripe`
+**Package / namespace**: `com.ribads.synapse.core.payment.stripe`
+**Gradle path**: `:core:payment:stripe`
 
-Wraps Stripe Android SDK for payment processing.
-- Android: `stripe.android.sdk`
-- Payment initialization and method management
+> Status: the module is registered in `settings.gradle.kts` and has a Gradle build
+> configured, but it currently contains **no source code** (no `src/`). There is no
+> public API to consume yet.
+
+Build configuration (`build.gradle.kts`):
+- KMP targets: Android + iOS (iosX64, iosArm64, iosSimulatorArm64)
+- iOS framework: `baseName = "CorePayment"`, `isStatic = true`
+- Dependencies — androidMain: `stripe-android-sdk`, `androidx-appcompat`; commonMain: `coroutines-core`
+
+When implementation lands, document the public surface here.

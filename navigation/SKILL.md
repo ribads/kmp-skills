@@ -100,6 +100,34 @@ fun SavedState.getString(key: String): String?
 @Composable fun <T> SavedStateHandle.get(key: String, remove: Boolean = false): T?
 ```
 
+## Back Stack Result Handler
+
+Lives in the root package `com.ribads.synapse.ui.compose.presentation` (no `.navigation` suffix).
+
+```kotlin
+class BackStackResultKey<T : Any>(val name: String)
+
+@Composable
+inline fun <reified T : Any> BackStackResultHandler(
+    backStackEntry: NavBackStackEntry,
+    key: BackStackResultKey<T>,
+    crossinline onResult: (T) -> Unit
+)
+```
+
+Observes a typed back stack result and consumes it (observe → process → remove): when a non-null value lands on `backStackEntry.savedStateHandle` under `key.name`, `onResult` is invoked once and the entry is cleared to `null`.
+
+```kotlin
+val DetailResult = BackStackResultKey<DetailArgs>("detail_result")
+
+@Composable
+fun HomeScreen(entry: NavBackStackEntry, viewModel: HomeViewModel) {
+    BackStackResultHandler(backStackEntry = entry, key = DetailResult) { result ->
+        viewModel.onIntent(HomeIntent.DetailReturned(result))
+    }
+}
+```
+
 ## Feature Launcher
 
 ```kotlin
