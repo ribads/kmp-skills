@@ -188,7 +188,7 @@ Omit `--synapse-version` to use the latest published release. Pass it explicitly
 
 ## Gradle conventions
 
-The generated project targets **Gradle 9.4.1** with **Kotlin 2.3.21** and **KSP 2.3.4**.
+The generated project targets **Gradle 9.4.1** with **Kotlin 2.4.0** and **KSP 2.3.4**.
 
 Key conventions:
 - **`androidApp`** is a separate module using `com.android.application` plugin — it contains `MainActivity`, `AndroidManifest.xml`, and Android resources

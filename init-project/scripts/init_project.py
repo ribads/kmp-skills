@@ -22,7 +22,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 
-SYNAPSE_VERSION_FALLBACK = "0.0.27-alpha1"
+SYNAPSE_VERSION_FALLBACK = "0.0.28-alpha1"
 SYNAPSE_METADATA_URL = (
     "https://repo1.maven.org/maven2/com/ribads/synapse/ui-element/maven-metadata.xml"
 )
@@ -260,24 +260,24 @@ zipStorePath=wrapper/dists
 '''
 
 LIBS_VERSIONS_TOML = '''[versions]
-agp = "9.1.1"
-android-compileSdk = "36"
+agp = "9.2.1"
+android-compileSdk = "37"
 android-minSdk = "24"
-android-targetSdk = "36"
+android-targetSdk = "37"
 androidx-activity = "1.13.0"
 androidx-appcompat = "1.7.1"
-androidx-core = "1.18.0"
+androidx-core = "1.19.0"
 androidx-lifecycle = "2.10.0"
-composeMultiplatform = "1.10.3"
-kotlin = "2.3.21"
+composeMultiplatform = "1.11.1"
+kotlin = "2.4.0"
 synapse = "__SYNAPSE_VERSION__"
 kotlinInject = "0.9.0"
 ksp = "2.3.4"
-ktor = "3.4.2"
+ktor = "3.5.0"
 composeNavigation = "2.9.2"
-materialNavigation = "1.10.3"
+materialNavigation = "1.11.1"
 coilCompose = "3.4.0"
-coroutines = "1.10.2"
+coroutines = "1.11.0"
 kermitLogger = "2.1.0"
 
 [libraries]
@@ -1440,7 +1440,6 @@ plugins {
 kotlin {
     jvm()
     listOf(
-        iosX64(),
         iosArm64(),
         iosSimulatorArm64()
     )
