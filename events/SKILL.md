@@ -151,12 +151,25 @@ class AuthInterceptor(private val publisher: EventPublisher) {
 
 ### Publishing (sticky state)
 
+Bridge `core:connectivity` (`/connectivity`) into the bus so features react via sticky events:
+
 ```kotlin
-class ConnectivityMonitor(private val publisher: EventPublisher) {
-    fun onNetworkChange(online: Boolean) {
-        publisher.tryEmit(
-            if (online) ConnectivityEvent.Restored else ConnectivityEvent.Lost
-        )
+class ConnectivityEventBridge(
+    monitor: ConnectivityMonitor,   // from core:connectivity
+    publisher: EventPublisher,
+    scope: CoroutineScope,
+) {
+    init {
+        monitor.observe()
+            .onEach { status ->
+                publisher.tryEmit(
+                    when (status) {
+                        is ConnectivityStatus.Connected -> ConnectivityEvent.Restored
+                        ConnectivityStatus.Disconnected -> ConnectivityEvent.Lost
+                    }
+                )
+            }
+            .launchIn(scope)
     }
 }
 ```
