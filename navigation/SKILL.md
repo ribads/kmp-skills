@@ -1,6 +1,6 @@
 ---
 name: navigation
-description: Use when implementing screen navigation, route management, deep links, feature modules, Parcelize, or Compose navigation in a KMP project.
+description: Use when implementing screen navigation, typed routes, feature modules, back-stack results, or Compose navigation in a KMP project.
 user-invocable: true
 ---
 
@@ -9,224 +9,222 @@ user-invocable: true
 **Module**: `ui:compose-presentation` | **Artifact**: `com.ribads.synapse:ui-compose-presentation`
 **Package**: `com.ribads.synapse.ui.compose.presentation`
 
+Built on **Jetpack Navigation 3** (`org.jetbrains.androidx.navigation3`). You own a typed back stack of `NavKey`s; the library wires the `NavDisplay`, entry-scoped ViewModels, saved state, scenes, and transitions, and exposes a small command-based seam (`NavigationDispatcher`) so screens stay decoupled from the engine.
+
 ```kotlin
 commonMain.dependencies {
     implementation("com.ribads.synapse:ui-compose-presentation:<version>")
 }
 ```
 
+Consumer modules that declare destinations also need the kotlinx-serialization plugin (routes are `@Serializable`):
+
+```kotlin
+plugins { alias(libs.plugins.kotlinSerialization) }
+```
+
 ---
+
+## Destinations are typed keys
+
+A destination is an `@Serializable` type implementing `NavKey`, carrying its arguments as properties. No string routes, no argument bags.
+
+```kotlin
+typealias NavKey = androidx.navigation3.runtime.NavKey  // re-exported from Synapse
+
+@Serializable data object HomeRoute : NavKey
+@Serializable data class DetailRoute(val id: String) : NavKey
+```
+
+Each feature exposes a `SerializersModule` registering its keys polymorphically so they survive saved-state serialization on iOS/web (no reflection on native):
+
+```kotlin
+val serializers = SerializersModule {
+    polymorphic(NavKey::class) {
+        subclass(HomeRoute::class)
+        subclass(DetailRoute::class)
+    }
+}
+```
 
 ## NavigationCommand
 
 ```kotlin
-sealed class NavigationCommand {
-    data class ScreenCommand(val route: String, val clearStack: Boolean = false, val arguments: Map<String, NavigationArgument> = emptyMap()) : NavigationCommand()
-    data class BackCommand(val result: Map<String, NavigationArgument> = emptyMap()) : NavigationCommand()
-    data class CloseFeature(val result: Map<String, NavigationArgument> = emptyMap()) : NavigationCommand()
-    data class FlowCompletionCommand(val route: String, val arguments: Map<String, NavigationArgument> = emptyMap()) : NavigationCommand()
-    data class FeatureCommand(val featureName: String, val clearStack: Boolean = false, val arguments: Map<String, NavigationArgument> = emptyMap()) : NavigationCommand()
-    data class ExternalUriCommand(val uri: String) : NavigationCommand()
-}
-
-sealed class NavigationArgument {
-    data class StringArgument(val value: String) : NavigationArgument()
-    data class IntArgument(val value: Int) : NavigationArgument()
-    data class FloatArgument(val value: Float) : NavigationArgument()
-    data class BooleanArgument(val value: Boolean) : NavigationArgument()
-    data class ParcelableArgument(val value: MyParcelable) : NavigationArgument()
+sealed interface NavigationCommand {
+    data class ScreenCommand(val key: NavKey, val clearStack: Boolean = false) : NavigationCommand
+    data class BackCommand(val result: NavigationResult = NavigationResult.Empty) : NavigationCommand
+    data class CloseFeature(val result: NavigationResult = NavigationResult.Empty) : NavigationCommand
+    data class FlowCompletionCommand(val key: NavKey) : NavigationCommand
+    data class FeatureCommand(val featureName: String, val clearStack: Boolean = false) : NavigationCommand
+    data class ExternalUriCommand(val uri: String) : NavigationCommand
 }
 ```
 
+- `ScreenCommand` — push `key`; with `clearStack`, reset the back stack so `key` becomes the only (root) entry.
+- `BackCommand` — pop the current destination, delivering `result` to the one beneath.
+- `CloseFeature` — pop the current feature's subtree entirely, delivering `result` beneath it.
+- `FlowCompletionCommand` — replace the current feature subtree with `key` (flow handoff).
+- `FeatureCommand` — switch to a top-level feature by its `featureName`; the host resolves it to that feature's `startKey`, so callers stay decoupled from other features' route types. With `clearStack`, reset the back stack to it.
+- `ExternalUriCommand` — open `uri` outside the app.
+
 ## NavigationDispatcher
+
+The seam screens use. The interface never changes; the implementation is provided by `NavContainer`.
 
 ```kotlin
 interface NavigationDispatcher {
     fun navigateTo(command: NavigationCommand)
 }
+```
 
-class ComposeNavigationDispatcher(
-    private val screenNavigationController: NavController,
-    private val uriHandler: UriHandler,
-    private val addArgs: NavBackStackEntry.(Map<String, NavigationArgument>) -> Unit,
-) : NavigationDispatcher {
-    override fun navigateTo(command: NavigationCommand)
+In an MVI screen, collect a navigation effect and forward it:
 
-    companion object {
-        fun addArguments(backStackEntry: NavBackStackEntry, args: Map<String, NavigationArgument>)
+```kotlin
+viewModel.effects.CollectAsEffect { effect ->
+    when (effect) {
+        is Effect.Navigate -> navigationDispatcher.navigateTo(effect.command)
     }
 }
 ```
 
-## NavContainer & NavigatorHost
+## FeatureLauncher
+
+Each feature module contributes its destinations, serializers, and start key. Injected into the app's `Map<String, FeatureLauncher>`.
 
 ```kotlin
-sealed interface NavigatorHost {
-    fun buildGraph(builder: NavGraphBuilder, navigationDispatcher: NavigationDispatcher)
-    interface Root : NavigatorHost
-    interface Child : NavigatorHost
+interface FeatureLauncher {
+    val featureName: String                          // DI map key / analytics
+    val startKey: NavKey                             // shown when entered as a top-level entry point
+    val serializers: SerializersModule              // polymorphic NavKey registration (iOS/web saved state)
+    fun EntryProviderScope<NavKey>.register(dispatcher: NavigationDispatcher)
 }
+```
 
+```kotlin
+@Inject
+internal class HomeFeatureLauncher(
+    private val viewModelProviders: ViewModelProviders,
+) : FeatureLauncher {
+    override val featureName = "home"
+    override val startKey: NavKey = HomeRoute
+    override val serializers = SerializersModule {
+        polymorphic(NavKey::class) {
+            subclass(HomeRoute::class)
+            subclass(DetailRoute::class)
+        }
+    }
+    override fun EntryProviderScope<NavKey>.register(dispatcher: NavigationDispatcher) {
+        entry<HomeRoute> {
+            HomeScreen(viewModel { viewModelProviders.homeViewModel() }, dispatcher)
+        }
+        entry<DetailRoute> { key ->                 // typed args arrive as the destructured key
+            DetailScreen(id = key.id, dispatcher = dispatcher)
+        }
+        entry<FilterRoute>(metadata = dialog()) {    // present as a dialog
+            FilterDialog(dispatcher)
+        }
+    }
+}
+```
+
+`viewModel { ... }` inside an `entry` block is scoped to that entry (its ViewModel store is cleared when the entry leaves the back stack).
+
+## NavContainer
+
+Owns the back stack and renders it. Returns the single `NavigationDispatcher` for routing app-level effects.
+
+```kotlin
 @Composable
 fun NavContainer(
-    modifier: Modifier, startDestination: String, navigatorHost: NavigatorHost.Root,
-    navHostController: NavHostController, uriHandler: UriHandler = LocalUriHandler.current,
+    startKey: NavKey,
+    features: Collection<FeatureLauncher>,
+    modifier: Modifier = Modifier,
+    uriHandler: UriHandler = LocalUriHandler.current,
     pageTransition: PageTransition = PageTransition.Hierarchical,
-)
-
-@Composable
-fun rememberNavController(
-    navigators: Array<Navigator<out NavDestination>> = emptyArray(),
-    onDestinationChangedListener: NavController.OnDestinationChangedListener
-): NavHostController
+    onKeyChanged: (NavKey) -> Unit = {},            // called with the top destination on every change
+): NavigationDispatcher
 
 enum class PageTransition { TopLevel, Hierarchical }
 ```
 
-## NavGraphBuilder Extensions
-
 ```kotlin
-fun NavGraphBuilder.composable(route: String, arguments: List<NamedNavArgument> = emptyList(), deepLinks: List<NavDeepLink> = emptyList(), content: @Composable (NavBackStackEntry) -> Unit)
-fun NavGraphBuilder.modal(route: String, arguments: List<NamedNavArgument> = emptyList(), deepLinks: List<NavDeepLink> = emptyList(), content: @Composable (NavBackStackEntry) -> Unit)
+@Composable
+fun App(features: Collection<FeatureLauncher>) {
+    NavContainer(
+        startKey = HomeRoute,
+        features = features,
+        modifier = Modifier.fillMaxSize(),
+        onKeyChanged = { key -> /* analytics */ },
+    )
+}
 ```
 
-## BackStackEntry Extensions
+## Scenes
 
 ```kotlin
-fun NavBackStackEntry.requireStringParameter(paramName: String): String
-fun NavBackStackEntry.requireBooleanParameter(paramName: String, defaultValue: Boolean? = null): Boolean
-fun SavedState.getString(key: String): String?
-@Composable fun SavedStateHandle.getString(key: String, remove: Boolean = false): String?
-@Composable fun <T> SavedStateHandle.get(key: String, remove: Boolean = false): T?
+fun dialog(properties: DialogProperties = DialogProperties()): Map<String, Any>
+fun bottomSheet(): Map<String, Any>
 ```
 
-## Back Stack Result Handler
-
-Lives in the root package `com.ribads.synapse.ui.compose.presentation` (no `.navigation` suffix).
+Pass as `entry<X>(metadata = …) { ... }` to present a destination as an overlay rather than a full screen:
 
 ```kotlin
-class BackStackResultKey<T : Any>(val name: String)
+entry<ConfirmRoute>(metadata = dialog()) { ConfirmDialog() }
+entry<FilterRoute>(metadata = bottomSheet()) { FilterScreen() }
+```
+
+`bottomSheet()` renders the destination as a Material 3 modal bottom sheet; dismissing it (scrim tap, drag-down, or back) pops the back stack. Both overlays host their content with a sheet/dialog-scoped lifecycle, so entry-scoped `viewModel { }` works inside them.
+
+## Back-stack results
+
+Results are typed and addressed by their `NavigationResult` subtype and the receiving destination's key (observe → process → remove, single delivery).
+
+```kotlin
+interface NavigationResult { data object Empty : NavigationResult }
 
 @Composable
-inline fun <reified T : Any> BackStackResultHandler(
-    backStackEntry: NavBackStackEntry,
-    key: BackStackResultKey<T>,
-    crossinline onResult: (T) -> Unit
+inline fun <reified T : NavigationResult> BackStackResultHandler(
+    owner: NavKey,
+    store: NavigationResultStore = LocalNavigationResultStore.current,
+    crossinline onResult: (T) -> Unit,
 )
 ```
 
-Observes a typed back stack result and consumes it (observe → process → remove): when a non-null value lands on `backStackEntry.savedStateHandle` under `key.name`, `onResult` is invoked once and the entry is cleared to `null`.
+The child returns a result by popping with it; the parent observes it by type:
 
 ```kotlin
-val DetailResult = BackStackResultKey<DetailArgs>("detail_result")
+@Serializable data class DetailResult(val picked: String) : NavigationResult
 
-@Composable
-fun HomeScreen(entry: NavBackStackEntry, viewModel: HomeViewModel) {
-    BackStackResultHandler(backStackEntry = entry, key = DetailResult) { result ->
+// child:
+dispatcher.navigateTo(NavigationCommand.BackCommand(result = DetailResult(picked = "x")))
+
+// parent (inside its own entry block, passing the entry's key as owner):
+entry<HomeRoute> { key ->
+    HomeScreen(...)
+    BackStackResultHandler<DetailResult>(owner = key) { result ->
         viewModel.onIntent(HomeIntent.DetailReturned(result))
     }
 }
 ```
 
-## Feature Launcher
-
-```kotlin
-interface FeatureLauncher {
-    val featureName: String
-    fun navigationGraph(): NavigatorHost.Child
-}
-```
-
-## Parcelize (Cross-Platform)
-
-```kotlin
-@OptionalExpectation expect annotation class Parcelize()
-expect interface MyParcelable
-expect annotation class MyIgnoredOnParcel()
-// Android: typealias to kotlinx.parcelize.Parcelize + Parcelable
-// iOS: typealias to com.arkivanov.parcelize.darwin
-```
-
-### Consumer setup (required for `ParcelableArgument`)
-
-`kotlin-parcelize` is a compiler plugin, and the plugin matches annotations by literal FQN — it does NOT follow typealiases. Consumer modules that pass `ParcelableArgument` must apply the plugin AND register Synapse's `@Parcelize` as an additional annotation, otherwise `@Parcelize`-annotated classes compile to plain data classes and the argument crashes at runtime.
-
-In every consumer module whose Android target compiles `@Parcelize` classes:
-
-```kotlin
-plugins {
-    id("kotlin-parcelize")
-}
-
-kotlin {
-    android {
-        @OptIn(ExperimentalKotlinGradlePluginApi::class)
-        compilerOptions {
-            freeCompilerArgs.addAll(
-                "-P",
-                "plugin:org.jetbrains.kotlin.parcelize:additionalAnnotation=com.ribads.synapse.ui.compose.presentation.navigation.Parcelize"
-            )
-        }
-    }
-    sourceSets {
-        iosMain.dependencies {
-            implementation("com.arkivanov.parcelize.darwin:runtime:<version>")
-        }
-    }
-}
-```
-
-Then in `commonMain`:
-
-```kotlin
-import com.ribads.synapse.ui.compose.presentation.navigation.MyParcelable
-import com.ribads.synapse.ui.compose.presentation.navigation.Parcelize
-
-@Parcelize
-data class DetailArgs(val id: String, val title: String) : MyParcelable
-
-NavigationCommand.ScreenCommand(
-    route = "detail",
-    arguments = mapOf("args" to NavigationArgument.ParcelableArgument(DetailArgs("1", "Hi")))
-)
-```
+Model each distinct result you return as its own type. The store lives only while hosted in a `NavContainer` (`LocalNavigationResultStore`).
 
 ---
 
 ## Usage
 
 ```kotlin
-// Define a NavigatorHost
-class MainNavigator @Inject constructor() : NavigatorHost.Root {
-    override fun buildGraph(builder: NavGraphBuilder, navigationDispatcher: NavigationDispatcher) {
-        builder.composable("home") { HomeScreen(navigationDispatcher) }
-        builder.composable("detail/{id}") { entry ->
-            DetailScreen(id = entry.requireStringParameter("id"))
-        }
-        builder.modal("settings") { SettingsScreen() }
-    }
-}
+// 1. Define routes (in the feature module, with the kotlinx-serialization plugin applied)
+@Serializable data object HomeRoute : NavKey
+@Serializable data class DetailRoute(val id: String) : NavKey
 
-// Set up NavContainer
-@Composable
-fun App(navigator: MainNavigator) {
-    val navController = rememberNavController(
-        onDestinationChangedListener = { _, dest, _ -> /* analytics */ }
-    )
-    NavContainer(
-        modifier = Modifier.fillMaxSize(),
-        startDestination = "home",
-        navigatorHost = navigator,
-        navHostController = navController,
-        pageTransition = PageTransition.Hierarchical,
-    )
-}
+// 2. Contribute them via a FeatureLauncher (see above), provided into Map<String, FeatureLauncher> via DI.
 
-// Navigate
-navigationDispatcher.navigateTo(NavigationCommand.ScreenCommand(
-    route = "detail/123",
-    arguments = mapOf("title" to NavigationArgument.StringArgument("My Item"))
-))
-navigationDispatcher.navigateTo(NavigationCommand.BackCommand())
-navigationDispatcher.navigateTo(NavigationCommand.ExternalUriCommand("https://example.com"))
+// 3. Host them
+val dispatcher = NavContainer(startKey = HomeRoute, features = appFeatures)
+
+// 4. Navigate (typed)
+dispatcher.navigateTo(NavigationCommand.ScreenCommand(DetailRoute(id = "123")))
+dispatcher.navigateTo(NavigationCommand.BackCommand())
+dispatcher.navigateTo(NavigationCommand.ExternalUriCommand("https://example.com"))
 ```

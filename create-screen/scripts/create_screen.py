@@ -384,7 +384,8 @@ def main() -> None:
     print()
     print("Done. Next steps:")
     print(f"  1. Add {name}UiComponent to your feature's ViewModelComponent.")
-    print(f"  2. Register the route in your FeatureLauncher's NavigatorHost.")
+    print(f"  2. Add `@Serializable data object {name}Route : NavKey`, register `entry<{name}Route>` in your")
+    print(f"     feature's FeatureLauncher.register, and add {name}Route to that feature's `serializers`.")
     print(f"  3. Extend {name}Contract.Intent/Result/Effect/ViewState with feature-specific state.")
     print(f"  4. Wire UseCases through the Mapper + Interactor.")
 

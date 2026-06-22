@@ -274,8 +274,6 @@ synapse = "__SYNAPSE_VERSION__"
 kotlinInject = "0.9.0"
 ksp = "2.3.4"
 ktor = "3.5.0"
-composeNavigation = "2.9.2"
-materialNavigation = "1.11.1"
 coilCompose = "3.4.0"
 coroutines = "1.11.0"
 kermitLogger = "2.1.0"
@@ -287,8 +285,6 @@ androidx-appcompat = { module = "androidx.appcompat:appcompat", version.ref = "a
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity" }
 androidx-lifecycle-viewmodelCompose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "androidx-lifecycle" }
 androidx-lifecycle-runtimeCompose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose", version.ref = "androidx-lifecycle" }
-navigation-compose = { module = "org.jetbrains.androidx.navigation:navigation-compose", version.ref = "composeNavigation" }
-material-navigation = { module = "org.jetbrains.compose.material:material-navigation", version.ref = "materialNavigation" }
 
 coil-svg = { module = "io.coil-kt.coil3:coil-svg", version.ref = "coilCompose" }
 coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coilCompose" }
@@ -447,6 +443,7 @@ plugins {
     alias(libs.plugins.androidMultiplatformLibrary)
     alias(libs.plugins.composeMultiplatform)
     alias(libs.plugins.composeCompiler)
+    alias(libs.plugins.kotlinxSerialization)
     alias(libs.plugins.ksp)
 }
 
@@ -494,8 +491,6 @@ kotlin {
             implementation(compose.components.uiToolingPreview)
             implementation(libs.androidx.lifecycle.viewmodelCompose)
             implementation(libs.androidx.lifecycle.runtimeCompose)
-            implementation(libs.navigation.compose)
-            implementation(libs.material.navigation)
 
             implementation(libs.coil.svg)
             implementation(libs.kotlin.inject.runtime.kmp)
@@ -651,7 +646,7 @@ fun CoreComposeApp(appContext: AppContext) {
         __PROJECT_NAME__Theme {
             RootScreen(
                 viewModel = viewModel { app.mainViewModel },
-                navigatorHost = app.root,
+                features = app.features,
             )
         }
     }
@@ -662,78 +657,53 @@ fun CoreComposeApp(appContext: AppContext) {
 
 ROOT_SCREEN = '''package __APP_PACKAGE__
 
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.material.navigation.ModalBottomSheetLayout
-import androidx.compose.material.navigation.rememberBottomSheetNavigator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import __APP_PACKAGE__.ui.MainContract
 import __APP_PACKAGE__.ui.MainViewModel
-import __APP_PACKAGE__.ui.navigation.MainNavigationDispatcher
 import com.ribads.synapse.ui.component.scaffold.Scaffold
+import com.ribads.synapse.ui.compose.presentation.feature.FeatureLauncher
 import com.ribads.synapse.ui.compose.presentation.navigation.compose.NavContainer
-import com.ribads.synapse.ui.compose.presentation.navigation.compose.NavigatorHost
-import com.ribads.synapse.ui.compose.presentation.navigation.compose.rememberNavController
 import com.ribads.synapse.ui.mvi.CollectAsEffect
 import com.ribads.synapse.ui.mvi.OnFirstComposition
 
 @Composable
 internal fun RootScreen(
     viewModel: MainViewModel,
-    navigatorHost: NavigatorHost.Root,
+    features: Collection<FeatureLauncher>,
 ) {
     val viewState by remember { derivedStateOf { viewModel.state.value } }
 
     viewModel.OnFirstComposition(MainContract.Intent.Initial)
 
     Scaffold { paddingValues ->
-        val bottomSheetNavigator = rememberBottomSheetNavigator()
-        val navController =
-            rememberNavController(arrayOf(bottomSheetNavigator)) { _, destination, _ ->
-                val cRoute = "${destination.parent?.route}/${destination.route}"
-                viewModel.emit(
-                    intent = MainContract.Intent.RouteChanged(
-                        previousRoute = viewState.currentRoute ?: "",
-                        route = cRoute,
-                    )
-                )
-            }
-
-        val navDispatcher =
-            remember { MainNavigationDispatcher(navController = navController) }
-
-        viewModel.effects.CollectAsEffect { effect ->
-            when (effect) {
-                is MainContract.Effect.Navigate -> navDispatcher.navigateTo(effect.command)
-            }
+        val startKey = viewState.startFeatureName?.let { name ->
+            features.firstOrNull { it.featureName == name }?.startKey
         }
+        startKey?.let { key ->
+            val navDispatcher = NavContainer(
+                startKey = key,
+                features = features,
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth()
+                    .padding(paddingValues = paddingValues),
+                pageTransition = viewState.pageTransition,
+                onKeyChanged = { changed ->
+                    viewModel.emit(intent = MainContract.Intent.RouteChanged(key = changed))
+                },
+            )
 
-        viewState.startDestinationRoute?.let { startRoute ->
-            var route by rememberSaveable { mutableStateOf(startRoute) }
-            if (route != startRoute) route = startRoute
-            ModalBottomSheetLayout(bottomSheetNavigator) {
-                NavContainer(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .fillMaxWidth()
-                        .padding(paddingValues = paddingValues),
-                    startDestination = route,
-                    navigatorHost = navigatorHost,
-                    navHostController = navController,
-                    pageTransition = viewState.pageTransition,
-                )
+            viewModel.effects.CollectAsEffect { effect ->
+                when (effect) {
+                    is MainContract.Effect.Navigate -> navDispatcher.navigateTo(effect.command)
+                }
             }
         }
     }
@@ -761,6 +731,7 @@ fun MainViewController(): UIViewController {
 MAIN_CONTRACT = '''package __APP_PACKAGE__.ui
 
 import androidx.compose.runtime.Immutable
+import com.ribads.synapse.ui.compose.presentation.navigation.NavKey
 import com.ribads.synapse.ui.compose.presentation.navigation.NavigationCommand
 import com.ribads.synapse.ui.compose.presentation.navigation.compose.PageTransition
 
@@ -773,17 +744,17 @@ internal interface MainContract {
 
     sealed class Intent {
         data object Initial : Intent()
-        data class RouteChanged(val previousRoute: String, val route: String) : Intent()
+        data class RouteChanged(val key: NavKey) : Intent()
     }
 
     sealed class Result {
 
         data class Initial(
-            val startDestinationRoute: String,
+            val startFeatureName: String,
         ) : Result()
 
         data class RouteChanged(
-            val route: String,
+            val key: NavKey,
             val pageTransition: PageTransition,
         ) : Result()
     }
@@ -794,16 +765,12 @@ internal interface MainContract {
 
     @Immutable
     data class ViewState(
-        val startDestinationRoute: String? = null,
-        val currentRoute: String?,
-        val pageTransition: PageTransition,
+        val startFeatureName: String? = null,
+        val currentKey: NavKey? = null,
+        val pageTransition: PageTransition = PageTransition.Hierarchical,
     ) {
         companion object {
-            val Default = ViewState(
-                startDestinationRoute = null,
-                currentRoute = null,
-                pageTransition = PageTransition.Hierarchical,
-            )
+            val Default = ViewState()
         }
     }
 }
@@ -850,9 +817,9 @@ import com.ribads.synapse.ui.mvi.noEffects
 internal class MainReducer constructor() : Reducer<ViewState, Result, Effect> {
     override fun reduce(state: ViewState, result: Result): Reduction<ViewState, Effect> {
         return when (result) {
-            is Result.Initial -> state.copy(startDestinationRoute = result.startDestinationRoute).noEffects()
+            is Result.Initial -> state.copy(startFeatureName = result.startFeatureName).noEffects()
             is Result.RouteChanged -> state.copy(
-                currentRoute = result.route,
+                currentKey = result.key,
                 pageTransition = result.pageTransition,
             ).noEffects()
         }
@@ -871,11 +838,11 @@ import me.tatarka.inject.annotations.Inject
 internal class MainMapper @Inject constructor() : Mapper {
 
     override fun toResult(intent: Intent.Initial): Result {
-        return Result.Initial(startDestinationRoute = "__FIRST_FEATURE__")
+        return Result.Initial(startFeatureName = "__FIRST_FEATURE__")
     }
 
     override fun toResult(intent: Intent.RouteChanged) = Result.RouteChanged(
-        route = intent.route,
+        key = intent.key,
         pageTransition = PageTransition.Hierarchical,
     )
 }
@@ -934,72 +901,6 @@ internal abstract class MainUiComponent {
 }
 '''
 
-# ── composeApp: Navigation ──
-
-MAIN_NAVIGATOR_HOST = '''package __APP_PACKAGE__.ui.navigation
-
-import androidx.navigation.NavGraphBuilder
-import com.ribads.synapse.ui.compose.presentation.feature.FeatureLauncher
-import com.ribads.synapse.ui.compose.presentation.navigation.NavigationDispatcher
-import com.ribads.synapse.ui.compose.presentation.navigation.compose.NavigatorHost
-import me.tatarka.inject.annotations.Inject
-import kotlin.jvm.JvmSuppressWildcards
-
-@Inject
-internal class MainNavigatorHost constructor(
-    private val launcher: Map<String, @JvmSuppressWildcards FeatureLauncher>,
-) : NavigatorHost.Root {
-
-    override fun buildGraph(builder: NavGraphBuilder, navigationDispatcher: NavigationDispatcher) {
-        launcher.values.forEach { featureLauncher ->
-            featureLauncher.navigationGraph().buildGraph(builder, navigationDispatcher)
-        }
-    }
-}
-'''
-
-MAIN_NAVIGATION_DISPATCHER = '''package __APP_PACKAGE__.ui.navigation
-
-import androidx.navigation.NavController
-import androidx.navigation.NavOptionsBuilder
-import com.ribads.synapse.ui.compose.presentation.navigation.NavigationCommand
-import com.ribads.synapse.ui.compose.presentation.navigation.NavigationDispatcher
-
-internal class NavigationNotSupportedException(message: String) : Exception(message)
-
-internal class MainNavigationDispatcher constructor(
-    private val navController: NavController,
-    private val builderProducer: NavOptionsBuilderProducer = NavOptionsBuilderProducer(navController = navController),
-) : NavigationDispatcher {
-
-    override fun navigateTo(command: NavigationCommand) {
-        when (command) {
-            is NavigationCommand.FeatureCommand -> {
-                when (command.clearStack) {
-                    true -> navController.navigate(
-                        route = command.featureName,
-                        builder = builderProducer::navOptionsBuilder,
-                    )
-                    false -> navController.navigate(route = command.featureName)
-                }
-            }
-            else -> throw NavigationNotSupportedException(message = "navigation to $command is not supported")
-        }
-    }
-}
-
-internal class NavOptionsBuilderProducer(
-    private val navController: NavController,
-) {
-    fun navOptionsBuilder(builder: NavOptionsBuilder) {
-        var popResult = navController.popBackStack()
-        while (popResult) {
-            popResult = navController.popBackStack()
-        }
-    }
-}
-'''
-
 # ── composeApp: DI ──
 
 NETWORK_COMPONENT = '''package __APP_PACKAGE__.di
@@ -1041,10 +942,10 @@ import __BASE_PACKAGE__.feature.__FEATURE__.usecase.di.__FEATURE_PASCAL__UseCase
 import __BASE_PACKAGE__.feature.__FEATURE__.usecase.di.create
 '''
 
-ROOT_APP_BUILDER_CLASS = '''import com.ribads.synapse.ui.compose.presentation.navigation.compose.NavigatorHost
+ROOT_APP_BUILDER_CLASS = '''import com.ribads.synapse.ui.compose.presentation.feature.FeatureLauncher
 
 internal class __PROJECT_NAME__App(
-    val root: NavigatorHost.Root,
+    val features: Collection<FeatureLauncher>,
     val mainViewModel: MainViewModel,
 )
 
@@ -1061,7 +962,7 @@ __FEATURE_PARAMS__
         )
 
         return __PROJECT_NAME__App(
-            root = appComponent.root,
+            features = appComponent.features.values,
             mainViewModel = mainViewModel.viewModel,
         )
     }
@@ -1071,8 +972,6 @@ __FEATURE_PARAMS__
 # ── ComposeAppComponent (assembled dynamically) ──
 
 COMPOSE_APP_COMPONENT_HEAD = '''package __APP_PACKAGE__.di
-
-import __APP_PACKAGE__.ui.navigation.MainNavigatorHost
 '''
 
 COMPOSE_APP_COMPONENT_FEATURE_IMPORT = '''import __BASE_PACKAGE__.feature.__FEATURE__.ui.di.__FEATURE_PASCAL__Module
@@ -1080,7 +979,6 @@ COMPOSE_APP_COMPONENT_FEATURE_IMPORT = '''import __BASE_PACKAGE__.feature.__FEAT
 
 COMPOSE_APP_COMPONENT_CLASS = '''import com.ribads.synapse.core.discopes.SingletonScope
 import com.ribads.synapse.ui.compose.presentation.feature.FeatureLauncher
-import com.ribads.synapse.ui.compose.presentation.navigation.compose.NavigatorHost
 import me.tatarka.inject.annotations.Component
 import me.tatarka.inject.annotations.Provides
 
@@ -1089,10 +987,7 @@ import me.tatarka.inject.annotations.Provides
 internal abstract class ComposeAppComponent(
 __FEATURE_CONSTRUCTOR_PARAMS__
 ) {
-    abstract val root: NavigatorHost.Root
-
-    protected val MainNavigatorHost.bind: NavigatorHost.Root
-        @Provides get() = this
+    abstract val features: Map<String, FeatureLauncher>
 
     @Provides
     fun provideFeatures(): Map<String, FeatureLauncher> =
@@ -1910,6 +1805,7 @@ plugins {
     alias(libs.plugins.androidMultiplatformLibrary)
     alias(libs.plugins.composeMultiplatform)
     alias(libs.plugins.composeCompiler)
+    alias(libs.plugins.kotlinxSerialization)
     alias(libs.plugins.ksp)
 }
 
@@ -1947,7 +1843,6 @@ kotlin {
         commonMain.dependencies {
             implementation(compose.components.resources)
             implementation(libs.androidx.lifecycle.viewmodelCompose)
-            implementation(libs.navigation.compose)
 
             implementation(libs.kotlin.inject.runtime.kmp)
 
@@ -1983,10 +1878,20 @@ fun KotlinMultiplatformExtension.configureCommonMainKsp() {
 
 FEATURE_LAUNCHER = '''package __BASE_PACKAGE__.feature.__FEATURE__.ui.launcher
 
-import __BASE_PACKAGE__.feature.__FEATURE__.ui.navigation.__FEATURE_PASCAL__NavigationHost
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation3.runtime.EntryProviderScope
 import __BASE_PACKAGE__.feature.__FEATURE__.ui.navigation.ViewModelProviders
+import __BASE_PACKAGE__.feature.__FEATURE__.ui.screens.landing.LandingScreen
 import com.ribads.synapse.ui.compose.presentation.feature.FeatureLauncher
-import com.ribads.synapse.ui.compose.presentation.navigation.compose.NavigatorHost
+import com.ribads.synapse.ui.compose.presentation.navigation.NavKey
+import com.ribads.synapse.ui.compose.presentation.navigation.NavigationDispatcher
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.modules.SerializersModule
+import kotlinx.serialization.modules.polymorphic
+import kotlinx.serialization.modules.subclass
+
+@Serializable
+internal data object __FEATURE_PASCAL__LandingRoute : NavKey
 
 internal class __FEATURE_PASCAL__FeatureLauncher constructor(
     private val viewModelProviders: ViewModelProviders,
@@ -1994,8 +1899,21 @@ internal class __FEATURE_PASCAL__FeatureLauncher constructor(
 
     override val featureName: String = FEATURE_NAME
 
-    override fun navigationGraph(): NavigatorHost.Child {
-        return __FEATURE_PASCAL__NavigationHost(viewModelProviders = viewModelProviders)
+    override val startKey: NavKey = __FEATURE_PASCAL__LandingRoute
+
+    override val serializers: SerializersModule = SerializersModule {
+        polymorphic(NavKey::class) {
+            subclass(__FEATURE_PASCAL__LandingRoute::class)
+        }
+    }
+
+    override fun EntryProviderScope<NavKey>.register(dispatcher: NavigationDispatcher) {
+        entry<__FEATURE_PASCAL__LandingRoute> {
+            LandingScreen(
+                viewModel = viewModel { viewModelProviders.landingScreenViewModel.invoke() },
+                navigationDispatcher = dispatcher,
+            )
+        }
     }
 
     companion object {
@@ -2012,43 +1930,6 @@ import __BASE_PACKAGE__.feature.__FEATURE__.ui.screens.landing.LandingScreenView
 
 internal interface ViewModelProviders {
     val landingScreenViewModel: () -> LandingScreenViewModel
-}
-'''
-
-# ── Feature UI: NavigationHost ──
-
-FEATURE_NAVIGATION_HOST = '''package __BASE_PACKAGE__.feature.__FEATURE__.ui.navigation
-
-import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavGraphBuilder
-import androidx.navigation.navigation
-import __BASE_PACKAGE__.feature.__FEATURE__.ui.launcher.__FEATURE_PASCAL__FeatureLauncher
-import __BASE_PACKAGE__.feature.__FEATURE__.ui.screens.landing.LandingScreen
-import com.ribads.synapse.ui.compose.presentation.navigation.NavigationDispatcher
-import com.ribads.synapse.ui.compose.presentation.navigation.compose.NavigatorHost
-import com.ribads.synapse.ui.compose.presentation.navigation.compose.composable
-
-internal class __FEATURE_PASCAL__NavigationHost(
-    private val viewModelProviders: ViewModelProviders,
-) : NavigatorHost.Child {
-
-    override fun buildGraph(
-        builder: NavGraphBuilder,
-        navigationDispatcher: NavigationDispatcher,
-    ) {
-        builder.navigation(route = ROOT_ROUTE, startDestination = "landing") {
-            composable(route = "landing") {
-                LandingScreen(
-                    viewModel = viewModel { viewModelProviders.landingScreenViewModel.invoke() },
-                    navigationDispatcher = navigationDispatcher,
-                )
-            }
-        }
-    }
-
-    companion object {
-        private const val ROOT_ROUTE = __FEATURE_PASCAL__FeatureLauncher.FEATURE_NAME
-    }
 }
 '''
 
@@ -2459,10 +2340,6 @@ def main() -> None:
     write_file(common_src / "ui" / "MainViewModel.kt", render(MAIN_VIEW_MODEL, ctx), force)
     write_file(common_src / "ui" / "di" / "MainUiComponent.kt", render(MAIN_UI_COMPONENT, ctx), force)
 
-    # Navigation (in ui/navigation)
-    write_file(common_src / "ui" / "navigation" / "MainNavigatorHost.kt", render(MAIN_NAVIGATOR_HOST, ctx), force)
-    write_file(common_src / "ui" / "navigation" / "MainNavigationDispatcher.kt", render(MAIN_NAVIGATION_DISPATCHER, ctx), force)
-
     # DI
     write_file(common_src / "di" / "NetworkComponent.kt", render(NETWORK_COMPONENT, ctx), force)
     write_file(common_src / "di" / "AppConfigurationProviderFactory.kt", render(BUILD_APP_CONFIGURATION_PROVIDER, ctx), force)
@@ -2620,7 +2497,6 @@ def main() -> None:
         write_file(ui / "build.gradle.kts", render(FEATURE_UI_BUILD_GRADLE, fctx), force)
         write_file(ui_src / "launcher" / f"{fp}FeatureLauncher.kt", render(FEATURE_LAUNCHER, fctx), force)
         write_file(ui_src / "navigation" / "ViewModelProviders.kt", render(FEATURE_VIEW_MODEL_PROVIDERS, fctx), force)
-        write_file(ui_src / "navigation" / f"{fp}NavigationHost.kt", render(FEATURE_NAVIGATION_HOST, fctx), force)
         write_file(ui_src / "di" / f"{fp}Module.kt", render(FEATURE_MODULE, fctx), force)
         write_file(ui_src / "di" / f"{fp}ViewModelComponent.kt", render(FEATURE_VIEW_MODEL_COMPONENT, fctx), force)
 

@@ -120,12 +120,23 @@ data class UIPage(val id: String, val root: UINode)
 fun String.toUIScreen(): UIScreen
 ```
 
-### renderedComposable
+### renderedEntries / renderedEntry
 
-When `config.dataSchema` is provided, `ReactiveDataStore`, `MutationExecutor`, `SchemaConditionEvaluator`, and `CollectionProvider` are created automatically. The `mutation:` action prefix is intercepted and routed to the executor.
+Server-driven pages are addressed by a single typed key carrying the dynamic page id as data, so they fit Navigation 3's typed entry provider:
 
 ```kotlin
-fun NavGraphBuilder.renderedComposable(
+@Serializable
+data class RenderedPageKey(val baseRoute: String, val pageId: String) : NavKey
+
+// Fold into a feature's FeatureLauncher.serializers so rendered pages survive saved state on iOS/web:
+val rendererNavigationSerializers: SerializersModule
+```
+
+Register rendered pages inside a feature's `EntryProviderScope<NavKey>.register(dispatcher)` block. When `config.dataSchema` is provided, `ReactiveDataStore`, `MutationExecutor`, `SchemaConditionEvaluator`, and `CollectionProvider` are created automatically. The `mutation:` action prefix is intercepted and routed to the executor.
+
+```kotlin
+// One base route (convenience):
+fun EntryProviderScope<NavKey>.renderedEntry(
     baseRoute: String,
     schemaStore: SchemaStore,
     actionHandler: ActionHandler,
@@ -133,6 +144,12 @@ fun NavGraphBuilder.renderedComposable(
     config: RenderedPageConfig = RenderedPageConfig(),
     onPageNotFound: @Composable (pageId: String) -> Unit = { /* minimal default */ },
 )
+
+// Multiple base routes in a single RenderedPageKey registration:
+fun EntryProviderScope<NavKey>.renderedEntries(block: RenderedRoutesBuilder.() -> Unit)
+
+// Navigate to a rendered page:
+fun NavigationDispatcher.navigateToRenderedPage(baseRoute: String, pageId: String, clearStack: Boolean = false)
 
 data class RenderedPageConfig(
     val registry: NodeRendererRegistry = NodeRendererRegistry.defaults(),
