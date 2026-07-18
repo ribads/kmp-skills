@@ -94,8 +94,11 @@ sealed interface ShareContent {
 
 /**
  * A media file to share. [location] is an absolute file path on both
- * platforms; on Android it may also be an existing content:// URI. Local
- * files are exposed to receiving apps through the module's own FileProvider —
+ * platforms; on Android it may also be an existing content:// URI. A publicly
+ * reachable http(s) URL is accepted too: it is downloaded into the module's
+ * share cache before hand-off (keyed by URL, so repeat shares reuse the
+ * file), and a failed download surfaces as MediaUnavailable. Local files are
+ * exposed to receiving apps through the module's own FileProvider —
  * no consumer setup required.
  */
 data class ShareMedia(
@@ -129,7 +132,7 @@ sealed interface ShareResult {
         /** The content itself is malformed (blank text, non-http(s) URL, empty image list). */
         data class InvalidContent(val reason: String) : Failure
 
-        /** A ShareMedia.location does not exist or could not be read. */
+        /** A ShareMedia.location does not exist, could not be read, or a remote URL could not be downloaded. */
         data class MediaUnavailable(val location: String) : Failure
 
         /** The platform launch itself failed (no resumed Activity / no view controller / scheme open rejected). */
@@ -150,6 +153,7 @@ enum class ShareCompletion {
 
 - **No exceptions, no auto-fallback** — `share()` always returns a `ShareResult`. Compose fallback at the call site, typically by retrying with `ShareTarget.SYSTEM_SHEET` (see Usage).
 - **Gate order** — `InvalidContent` → `UnsupportedContent` → `AppNotInstalled` → delivery result. Capability is checked before installation, so Facebook-on-iOS returns `UnsupportedContent` even when uninstalled — installing would not fix it.
+- **Remote media is materialized after the install gate** — http(s) media locations are downloaded into the share cache (URL-keyed, reused for ~24h) just before delivery, so nothing downloads for a share that cannot launch. The URL must be publicly fetchable: no auth headers or cookies are sent, and the host app's cleartext/ATS policy applies (prefer https). A failed download returns `MediaUnavailable(url)` and nothing launches.
 - **`Success(HANDED_OFF)` vs `Success(CONFIRMED)`** — Android intents and iOS URL-scheme/Stories launches only confirm the hand-off; the iOS share sheet and iOS SMS composer confirm user completion. `Cancelled` is reported only where the platform signals it.
 - **Captions and messages are best-effort** — Instagram and TikTok drop them; Facebook strips all prefilled text except a bare URL. That is documented target behavior, not a failure.
 - **`supports()` is pure** — it answers from a static per-platform matrix and never touches the platform; `isAvailable()` adds the installation check.
@@ -213,6 +217,17 @@ sharer.share(
 )
 ```
 
+### Remote image (downloaded for you)
+
+```kotlin
+// http(s) locations are fetched into the share cache before hand-off;
+// repeat shares of the same URL reuse the cached file.
+sharer.share(
+    ShareContent.Images(ShareMedia("https://cdn.example.com/products/42.jpg"), caption = "Look at this"),
+    ShareTarget.INSTAGRAM,
+)
+```
+
 ### Hiding unsupported buttons at compose time
 
 ```kotlin
@@ -254,7 +269,7 @@ The sharer is stateless and cheap to construct; a singleton is a convenience, no
 
 ## Platforms
 
-- **Android**: minSdk 24. Zero consumer setup — the module manifest ships the Android 11+ `<queries>` package-visibility block for all six apps and its own FileProvider (`${applicationId}.synapse.share.fileprovider`). Local paths outside app storage and foreign `content://` URIs are copied into a provider-served cache (cleaned after 24h) before sharing. Requires `core:context` (auto-initialized).
+- **Android**: minSdk 24. Zero consumer setup — the module manifest ships the Android 11+ `<queries>` package-visibility block for all six apps and its own FileProvider (`${applicationId}.synapse.share.fileprovider`). Local paths outside app storage and foreign `content://` URIs are copied into a provider-served cache (cleaned after 24h) before sharing; remote http(s) media downloads land in the same cache. Android 9+ blocks cleartext http downloads by default, and http-to-https redirects are not followed: use https URLs. Requires `core:context` (auto-initialized).
 - **iOS** (arm64, simulatorArm64): the host app must declare the query schemes in `Info.plist`, or `isAvailable`/direct shares report `AppNotInstalled`:
 
 ```xml
