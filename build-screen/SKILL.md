@@ -20,8 +20,10 @@ Orchestration recipe for turning a screen requirement into a working IRSE-MVI sc
 |---|---|
 | Component signatures, component catalog | `/ui-components` |
 | `Clause`, `Text`, `Image`, `Icon`, `Theme`, `asText()` | `/ui-element` |
-| `Interactor` / `Reducer` / `LifecycleViewModel` types | `/mvi` |
-| `NavigationCommand`, `NavigationDispatcher`, routes | `/navigation` |
+| Contract shape, Mapper/Interactor/Reducer rules | `/mvi` |
+| `NavigationCommand`, `NavigationDispatcher`, typed routes | `/navigation` |
+| Writing a composable Synapse doesn't ship | `/component-authoring` |
+| What may cross a layer; UseCase and error contracts | `/data-boundaries` |
 | The scaffolding script | `/create-screen` |
 
 ---
@@ -33,9 +35,20 @@ Orchestration recipe for turning a screen requirement into a working IRSE-MVI sc
 3. **Scaffold.** Run `/create-screen` with `--name`, `--package`, `--src|--dir`, and `--use-case-provider` if any UseCase is needed. That creates the 7 files with sensible defaults.
 4. **Fill `Contract`.** Add one `Intent.*` per user interaction, one `Result.*` per state change or nav, one `Effect.*` per one-shot (nav/toast). Declare `ViewState` with the component models picked in step 2. Build initial values in `ViewState.Default` inside the `companion object`.
 5. **Wire `Mapper` → `Interactor` → `Reducer`.** Use the interaction matrix. Processors (`on*Processor`) go **above** `process()`, take `Flow<Intent.SpecificType>` (plus `StateFlow<ViewState>` only if state is needed).
-6. **Compose `Screen.kt`.** `val viewState by viewModel.state` → `OnFirstComposition(Intent.LoadInitialData)` → `effects.CollectAsEffect` → `Scaffold` body renders Synapse composables that consume `viewState.<model>` fields and emit intents on events.
+6. **Compose `Screen.kt`.** Body order is the same on every screen:
 
-After wiring, the consumer still has to: register the `{Name}UiComponent` in the feature's `ViewModelComponent`, and register the route in the feature's `FeatureLauncher.navigationGraph()`. Call that out in the final summary to the user.
+   ```
+   val viewState by viewModel.state          // 1. state
+   val toaster = Toast.current               // 2. CompositionLocals, at composable scope
+   viewModel.OnFirstComposition(Intent.LoadInitialData)   // 3. bootstrap
+   viewModel.effects.CollectAsEffect { }     // 4. one-shot effects
+   viewState.dialog?.let { }                 // 5. nullable overlays
+   Scaffold { }                              // 6. body
+   ```
+
+   The Screen consumes `viewState.<model>` fields and emits intents on events. No model construction, no `stringResource`, no formatting, no branching on domain data.
+
+After wiring, the consumer still has to: register the `{Name}UiComponent` in the feature's `ViewModelComponent`, declare the `@Serializable` `NavKey` route, and register `entry<{Name}Route>` in the feature's `FeatureLauncher.register` plus its `serializers` module. Call that out in the final summary to the user.
 
 ---
 
@@ -81,6 +94,29 @@ For complex screen-specific compositions (feed cards, custom top-bars), wrap Syn
 | `Clause`, `Text.listOf`, `Graphics`, `Image` instances | `Mapper` or `ViewState.Default` | **Never** inside `@Composable` |
 | Click/select lambdas | Inline in `Screen.kt` | Can't live in state |
 | `ButtonState` (`Enabled` / `Disabled` / `Loading`) | `ViewState` field (separate from `ButtonModel`) | Passed as the `state =` param to the button composable |
+| Loading / empty / error for one content area | A **sealed section model** on `ViewState` | Collapses the Screen to one `when`; illegal combinations become unrepresentable |
+| Dialog, bottom sheet, picker that stays open | Nullable `ViewState` field + a dismiss `Intent` | It is on screen, so it must survive recomposition; an `Effect` is lost |
+| Navigation, toast, clipboard | `Effect` | One-shot; nothing remains on screen afterwards |
+| Money and dates | `Text.Money(minorUnits)` / `Text.Timestamp(millis)`, built in the `Mapper` | Formatted at render time with the right locale and time zone |
+
+Do not put `isLoading: Boolean` next to `items: List<T>` next to `error: String?`. That makes eight states representable when three are legal. Model the area instead:
+
+```kotlin
+internal sealed class FeedSection {
+    @Immutable data class Items(val items: List<FeedItem>) : FeedSection()
+    @Immutable data class Empty(val model: EmptyStateModel) : FeedSection()
+}
+
+@Immutable
+internal sealed class FeedItem {
+    data class Item(val id: String, val title: Clause) : FeedItem()
+    data class Placeholder(val id: String) : FeedItem()   // rendered with Modifier.shimmer()
+}
+```
+
+Seed `ViewState.Default` with `Placeholder`s so the first frame is a skeleton, not a blank screen. Synapse ships no loading-box or error-box component, so compose them from `Modifier.shimmer()` and `EmptyState`.
+
+**Pagination:** keep `nextPageToken: String?` on `ViewState`, emit a load-next-page intent when the list nears its end, and append in the Reducer (`state.copy(items = state.items + result.page)`) or in the Mapper. Synapse ships no pagination helper.
 
 ---
 
@@ -92,7 +128,7 @@ For each UI event, the changes you need across the 4 files.
 |---|---|---|---|---|
 | Text-field change | `Intent.OnXChanged(v: String)`, `Result.XUpdated(v)` | `.filterIsInstance<OnXChanged>().map { Result.XUpdated(it.v) }` | `state.copy(x = state.x.copy(value = result.v)).noEffects()` | `onValueChange = { viewModel.emit(Intent.OnXChanged(it)) }` |
 | Toggle / checkbox | `Intent.OnXToggled(b: Boolean)`, `Result.XToggled(b)` | `.map { Result.XToggled(it.b) }` | `state.copy(x = state.x.copy(checked = result.b)).noEffects()` | `onCheckedChange = { viewModel.emit(Intent.OnXToggled(it)) }` |
-| Click → navigate | `Intent.OnXClick`, `Result.OnNavigate(cmd)`, `Effect.Navigate(cmd)` | `.map { Result.OnNavigate(ScreenCommand("route")) }` | `state withEffect Effect.Navigate(result.command)` | `onClick = { viewModel.emit(Intent.OnXClick) }` |
+| Click → navigate | `Intent.OnXClick`, `Result.OnNavigate(cmd)`, `Effect.Navigate(cmd)` | `.map { Result.OnNavigate(ScreenCommand(DetailRoute(it.id))) }` | `state withEffect Effect.Navigate(result.command)` | `onClick = { viewModel.emit(Intent.OnXClick) }` |
 | Show toast | `Effect.ShowToast(toast: ToastModel)` | (emit from processor) | `state withEffect Effect.ShowToast(toast)` | `val toaster = Toast.current` (outside effect lambda); `is Effect.ShowToast -> toaster.show(effect.toast)` |
 | Click → async UseCase | `Intent.OnSubmit`, `Result.Loading` / `Success` / `Error` | `onSubmitProcessor(upstream, state)` using `flatMapLatest { flow { emit(useCase.execute(state.value.field)) }.map(mapper::toResult).onStart { emit(Result.Loading) } }` | `copy(submitState = ButtonState.Loading / Enabled, error = ...)` + `withEffect(Effect.Navigate(...))` on success | `onClick = { viewModel.emit(Intent.OnSubmit) }` |
 | Initial load | (already in scaffold) `Intent.LoadInitialData` | `onLoadInitialDataProcessor` calling UseCase via `.map(mapper::toResult)` | `copy(items = result.items).noEffects()` | `viewModel.OnFirstComposition(Intent.LoadInitialData)` |
@@ -104,7 +140,7 @@ For each UI event, the changes you need across the 4 files.
 
 ## Worked example — Login screen
 
-Goal: email field, password field, primary "Log in" button, calls `LoginUseCase`, navigates to `home/{userId}` on success, shows error otherwise.
+Goal: email field, password field, primary "Log in" button, calls `LoginUseCase`, navigates to `HomeRoute(userId)` on success, shows an error otherwise.
 
 Pick components: `LabelTextField` + `PasswordTextField` + `PrimaryButton`. All three Synapse primitives — no custom composables needed.
 
@@ -191,7 +227,7 @@ is Result.EmailUpdated    -> state.copy(email = state.email.copy(value = result.
 is Result.PasswordUpdated -> state.copy(password = state.password.copy(value = result.v), error = null).noEffects()
 is Result.Submitting      -> state.copy(submitState = ButtonState.Loading, error = null).noEffects()
 is Result.LoggedIn        -> state.copy(submitState = ButtonState.Enabled) withEffect
-    Effect.Navigate(NavigationCommand.ScreenCommand("home/${result.userId}"))
+    Effect.Navigate(NavigationCommand.ScreenCommand(HomeRoute(userId = result.userId)))
 is Result.LoginFailed     -> state.copy(submitState = ButtonState.Enabled, error = result.message).noEffects()
 ```
 
@@ -211,10 +247,43 @@ Before writing any new `@Composable`, in order:
 
 1. Check the component picker — is there a direct match?
 2. Can Synapse primitives be composed (e.g. `Card` + `Image` + `Text`)?
-3. Does the app's `compose-ui/` module already have a wrapper (e.g. `DiscoverCardItem`)?
+3. Does the app's `compose-ui/` module already have a wrapper?
 
-If still needed, write the new composable:
+If one is still needed, invoke `/component-authoring`. It covers where the file goes, parameter order, callback naming, model design, and inverted colours. The short version: put it in `compose-ui/` if a second screen could use it and in the feature's `section/` package otherwise, give it a model built in the Mapper, keep it stateless, and never inline a multi-element composable into `{Name}Screen.kt`.
 
-- **Where:** inside the app's `compose-ui/` module if it could be reused across screens; inside the feature's `ui/` module under a `section/` or `components/` subfolder if it's this-screen-only. Never inline a multi-element custom composable into `{Name}Screen.kt`.
-- **Shape:** takes a data model (built in Mapper/Contract), emits events via `on*` lambdas, stateless. Follows the same contract as Synapse components.
-- **Update `/ui-components` SKILL.md only** for components added to `ui:component` itself. App-level composables in `compose-ui/` are not Synapse API.
+---
+
+## Definition of done
+
+Before reporting the screen as built, check every line:
+
+**Contract**
+- [ ] Members in order: `Mapper`, `Intent`, `Result`, `Effect`, `ViewState`
+- [ ] `ViewState` is `@Immutable` with `companion object { val Default }`, and `Default` renders a real first frame
+- [ ] `ViewState` fields are component models, not primitives the composable must interpret
+- [ ] Loading/empty modelled as sealed section variants, not `Boolean` flags
+- [ ] Each `Result` carries only what its intent changes, with no `state.x` pass-through
+
+**Mapper**
+- [ ] Every `Clause`, `Image`, `ToastModel`, and `NavigationCommand` on the screen is built here
+- [ ] No UseCase, Repository, `suspend`, `Flow`, or `@Composable` in sight
+
+**Interactor**
+- [ ] Every intent type registered exactly once inside one `merge(...)`
+- [ ] Processors named `*Processor`, typed to the narrowest intent, declared above `process()`
+- [ ] `flatMapLatest` vs `flatMapConcat` chosen deliberately per the `/mvi` table
+- [ ] Loading states use `onStart` / `onCompletion`
+
+**Reducer**
+- [ ] Exhaustive `when` on the Result type with no `else`, `state.copy()` only
+- [ ] No branching on a Result's field values, no data derived in an arm
+
+**Screen**
+- [ ] Body order: state → CompositionLocals → `OnFirstComposition` → `CollectAsEffect` → overlays → `Scaffold`
+- [ ] No `stringResource`, no string templates, no model construction, no domain branching
+- [ ] Every colour, size, and type value comes from `Theme.*`
+
+**Wiring**
+- [ ] `{Name}UiComponent` registered in the feature's `ViewModelComponent`
+- [ ] `@Serializable` `NavKey` route declared, registered in `FeatureLauncher.register` and in its `serializers`
+- [ ] Builds on both platforms: `./gradlew :<module>:compileAndroidMain :<module>:compileKotlinIosSimulatorArm64`

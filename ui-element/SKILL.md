@@ -229,6 +229,20 @@ fun Modifier.shimmer(showShimmer: Boolean = true): Modifier
 
 1. **Data models must be constructed outside composables.** All `Clause`, `Text`, `Graphics`, `Image`, `TextFormat`, and other ui-element data models should be built in the UI contract (state), mapper, or reducer — never inline inside a `@Composable` function. Composables should only *render* pre-built models, not *create* them.
 
+2. **User-visible text is a `Clause`, never a `String`.** `Text` composables accept `Clause` only, by design. Use `Text.Localized(Res.string.foo)` for shipped copy and `"…".asText()` for prototypes and tests. A `String` field on a UI model is a bug waiting to happen: it cannot be localized, styled, or composed with an inline icon.
+
+3. **`Text.Money` and `Text.Timestamp` are declarations, not formatted strings.** Carry money as `Long` minor units and dates as `Long` epoch millis all the way to the model, then emit `Text.Money(amount, currency)` / `Text.Timestamp(date, pattern)` and let the renderer format at composition time with the right locale and time zone.
+
+   ```kotlin
+   Text.Money(amount = 249_900, currency = Currency.GBP)   // renders "£2,499.00"
+   ```
+
+   Pre-formatting into a `String` anywhere upstream (in a mapper, a use case, or worst of all a DTO) bakes in a locale and a currency symbol that the rendering context has not agreed to. Compose money and copy with `Text.listOf(...)`, `Text.whiteSpace`, and `Graphics(...)` rather than string templates.
+
+4. **Tokens, not raw values, in app and feature code.** Colours from `Theme.colors.*`, type from `Theme.typography.<token>` (`.copy(...)` to tweak, never a fresh `TextStyle`), layout from `Theme.spacing.*`, corners from `Theme.shape.*`. Component-intrinsic geometry that is not layout spacing (a thumb radius, an avatar size) belongs in a named file-level `private val Name = 24.dp` inside the component. See `/component-authoring`.
+
+5. **Never branch on `isSystemInDarkTheme()`.** Components take `invertedColors: Boolean = Theme.invertedColors`; the app seeds it once at the root when it calls `WithTheme`. Pass `invertedColors = true` explicitly only for surfaces that must render dark regardless of theme: controls over an image, camera overlays, video scrubbers. The caller owns inversion.
+
 ---
 
 ## Detailed Reference

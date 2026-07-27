@@ -168,9 +168,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import com.ribads.synapse.ui.component.scaffold.Scaffold
 import com.ribads.synapse.ui.compose.presentation.navigation.NavigationDispatcher
@@ -185,7 +183,7 @@ internal fun __NAME__Screen(
     viewModel: __NAME__ViewModel,
     navigationDispatcher: NavigationDispatcher,
 ) {
-    val viewState by remember { derivedStateOf { viewModel.state.value } }
+    val viewState by viewModel.state
 
     viewModel.OnFirstComposition(Intent.LoadInitialData)
 

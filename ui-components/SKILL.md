@@ -67,6 +67,34 @@ Depends on `ui:element`.
 
 ---
 
+## The component contract
+
+Every component in this catalog follows the same shape. Knowing it means you can call an unfamiliar component correctly without opening its reference file, and it is the contract your own composables must follow (see `/component-authoring`).
+
+**Signature order:** `model` → `modifier: Modifier = Modifier` → config with defaults → callbacks → `invertedColors: Boolean = Theme.invertedColors` → trailing `content`.
+
+```kotlin
+PrimaryButton(model: ButtonModel, modifier: Modifier = Modifier, state: ButtonState = ButtonState.Enabled,
+              onClick: (() -> Unit)?, invertedColors: Boolean = Theme.invertedColors)
+```
+
+Required callbacks deliberately sit *after* defaulted config parameters, so `invertedColors` stays last and callbacks are passed as named arguments. Containers (`Scaffold`, `Card`, `Tray`, `ToastHandler`) have no `model`, lead with `modifier`, and end with a trailing `content` slot. A few components predate the rule: `Divider` leads with `color`, and the text-field family buries `modifier` mid-list.
+
+**Everything else that holds across the catalog:**
+
+- **One `model` parameter, not a parameter list.** Models are `@Immutable` or `@Stable` data classes in `component.<family>.model`. Only atomic controls take primitives.
+- **All text is a `Clause`.** No component accepts a `String` for user-visible copy, and no model stores one. Images are `Image`, never a URL string.
+- **Build models outside composables**, in `ViewState.Default`, the Mapper, or the Reducer. Never inline in a `@Composable`.
+- **Components are stateless.** They render what you pass and report events upward; there are no stateful/stateless pairs and no public `rememberXState()` factories. Hoist state into `ViewState`.
+- **Components never accept domain models or use-case DTOs.** Translate in the Mapper first.
+- **`ButtonState` is a separate `ViewState` field**, not a field on `ButtonModel`. Pass it as the `state =` argument so loading and disabled states are driven by the reducer.
+- **Validation feedback goes in the model.** `TextInputModel.isError = true` recolours the indicator and footer automatically; put the message in `footerText`, not in a separate `Text` below the field.
+- **Callbacks are named for the slot, not the consequence**: `onClick` when there is one action, otherwise `onLeadingClick` / `onTrailingIconClick` / `onValueChange` / `onCheckedChange`, and `onDismissRequest` for every dismissal. Nullable click handlers use `OptionalClickCallback` from `ui:element`.
+
+**Not in this catalog:** there is no loading-box, error-box, or pagination helper. Build loading states from `Modifier.shimmer()` over `Placeholder` model variants, empty states from `EmptyState`, and drive pagination from `nextPageToken` on your `ViewState`.
+
+---
+
 ## Detailed Reference
 
 - [Buttons & Inputs](inputs-reference.md) — Buttons, text fields, phone, currency, selection, text area + models

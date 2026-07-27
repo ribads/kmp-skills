@@ -46,14 +46,11 @@ Generates a complete Kotlin Multiplatform project with the canonical Synapse mul
 │       │   │   └── AppConfigurationProviderFactory.kt
 │       │   └── ui/
 │       │       ├── MainContract.kt        # Main screen IRSE-MVI
-���       │       ├── MainInteractor.kt
+│       │       ├── MainInteractor.kt
 │       │       ├── MainReducer.kt
 │       │       ├── MainMapper.kt
 │       │       ├── MainViewModel.kt
-│       │       ├── di/MainUiComponent.kt
-│       │       └── navigation/
-│       │           ├── MainNavigatorHost.kt
-│       │           └── MainNavigationDispatcher.kt
+│       │       └── di/MainUiComponent.kt
 │       ├── androidMain/kotlin/<pkg>/app/
 │       │   └── AppContext.android.kt      # actual (Android Context)
 │       └── iosMain/kotlin/<pkg>/app/
@@ -111,7 +108,7 @@ Generates a complete Kotlin Multiplatform project with the canonical Synapse mul
 │   │   └── src/commonMain/kotlin/<pkg>/feature/<name>/usecase/
 │   │       ├── Fetch<Name>UseCase.kt
 │   │       └── di/
-���   │           ├── <Name>UseCaseModule.kt
+│   │           ├── <Name>UseCaseModule.kt
 │   │           └── <Name>UseCaseProvider.kt
 │   └── ui/                                # IRSE-MVI screens + navigation (androidMultiplatformLibrary)
 │       ├── build.gradle.kts
@@ -221,12 +218,16 @@ The script generates a compiling skeleton. Synapse artifacts resolve from Maven 
 5. **Set Xcode `TEAM_ID`** — open `iosApp/Configuration/Config.xcconfig` and fill in your Apple Developer team identifier; it feeds `DEVELOPMENT_TEAM` for code signing (leave blank for simulator-only builds).
 6. **Add app icon images** — drop 1024×1024 PNGs into `iosApp/iosApp/Assets.xcassets/AppIcon.appiconset/` and update its `Contents.json`.
 7. **Open in Android Studio / Fleet** — sync Gradle, then run on Android. For iOS, open `iosApp/iosApp.xcodeproj` in Xcode.
+8. **Add architecture tests.** The script does not scaffold them. Add a `konsist` JVM module enforcing the layer boundaries (feature UI must not import `domain.*` or any `*Repository`; `usecase` must not reach into the data layer; one `execute`/`observe*` per use case). The module graph blocks cross-module leaks on its own, but Konsist catches the rest and keeps them caught. `/data-boundaries` has the tests to copy.
 
 ## Related skills
 
 - `/create-screen` — Add a new IRSE-MVI screen to an existing feature
+- `/build-screen`: End-to-end screen build workflow
 - `/mvi` — IRSE-MVI APIs (Intent → Interactor → Result → Reducer → State/Effect)
-- `/navigation` — NavigatorHost, FeatureLauncher, NavigationCommand
+- `/data-boundaries`: Layer rules, UseCase and error contracts, Konsist enforcement
+- `/navigation`: FeatureLauncher, typed NavKey routes, NavigationCommand
 - `/di-scopes` — SingletonScope, kotlin-inject wiring
 - `/ui-element` — Theme, Colors, Typography, Shape
 - `/ui-components` — Scaffold, Card, Tray, inputs, buttons
+- `/component-authoring`: Building app-level composables in `compose-ui/`

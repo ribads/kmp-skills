@@ -98,115 +98,309 @@ fun <Effect> Flow<Effect>.CollectAsEffect(onEffect: suspend (Effect) -> Unit)
 ## Data Flow
 
 ```
-Intent ─► Interactor(intents, state) ─► Result ─► Reducer ─► Reduction(State, Effects)
-                                                               │
-                                                     ┌─────────┴─────────┐
-                                                     ▼                   ▼
-                                              State (StateFlow)    Effects (Flow)
+  Screen ──emit(Intent)──► Interactor ──► UseCase ──► domain result
+                               │                          │
+                               │                    Mapper.toResult
+                               │                          │
+                               ◄──────── Result ──────────┘
+                               │
+                               ▼
+                            Reducer ──► Reduction(ViewState, List<Effect>)
+                                             │
+                                   ┌─────────┴─────────┐
+                                   ▼                   ▼
+                        state: State<ViewState>   effects: Flow<Effect>
+                          (rendered by Screen)     (consumed once)
 ```
 
-- **State** is what the UI renders (durable; survives recomposition).
-- **Effects** are one-shot side effects: navigation, toasts, analytics pings, dialog-open events.
-- Interactor receives the current `StateFlow` so handlers can read the latest state without needing it in Intents.
+| Piece | Owns | Must never |
+|---|---|---|
+| **Screen** | Rendering `viewState`, emitting `Intent`s, consuming `Effect`s | Build models, format text, branch on domain data |
+| **Interactor** | Calling UseCases, orchestrating async, routing intents | Build UI models, hold state, mutate state |
+| **Mapper** | domain result → `Result`; `Intent` (+ state) → `Result`; all `Clause` / `Image` / `NavigationCommand` construction; validation | Call a UseCase or Repository, suspend, hold state |
+| **Reducer** | `(ViewState, Result) → Reduction` | Do I/O, derive or merge data, branch on a `Result`'s *field values* |
+
+- **State** is durable: it is exactly what is on screen, and it survives recomposition.
+- **Effects** are one-shot and fire-and-forget. See [Effect delivery](#effect-delivery) for what that costs you.
+- The Interactor receives the current `StateFlow` so processors read the latest state instead of smuggling it through Intents.
+
+`Mapper` is **not** a framework type; `ui:mvi` ships no `Mapper`. It is a per-screen interface declared inside the Contract and implemented in `{Name}Mapper.kt`. `/create-screen` generates both.
 
 ---
 
-## Implementation Pattern
+## The Contract
 
-### 1. Define the Contract
+One `internal object {Name}Contract` with five members, **in this order**. `/create-screen` generates exactly this shape. Keep the order, so every screen in the app reads the same way.
 
 ```kotlin
 internal object LoginContract {
-    sealed class Intent {
-        data class OnEmailChanged(val email: String) : Intent()
-        data class OnPasswordChanged(val password: String) : Intent()
-        data object OnSubmit : Intent()
-        data object OnBack : Intent()
+
+    interface Mapper {                                                              // 1
+        fun toResult(intent: Intent.LoadInitialData): Result.OnInitialDataLoaded
+        fun toResult(intent: Intent.Navigation): Result.NavigationRequested
+        fun toResult(intent: Intent.OnEmailChanged, state: ViewState): Result.OnEmailUpdated
+        fun toResult(result: LoginResult): Result
+        fun toInput(state: ViewState): LoginUseCaseInput
     }
 
-    sealed class Result {
-        data class EmailUpdated(val email: String) : Result()
-        data class PasswordUpdated(val password: String) : Result()
-        data object Loading : Result()
-        data class Success(val userId: String) : Result()
-        data class Error(val message: String) : Result()
-        data object NavigateBack : Result()
+    sealed class Intent {                                                           // 2
+        data object LoadInitialData : Intent()
+        sealed class Navigation : Intent() { data object Back : Navigation() }
+        data class OnEmailChanged(val value: String) : Intent()
+        data object OnSubmitClick : Intent()
     }
 
-    sealed class Effect {
-        data class NavigateToHome(val userId: String) : Effect()
-        data object NavigateBack : Effect()
-        data class ShowToast(val message: String) : Effect()
+    sealed class Result {                                                           // 3
+        data object OnInitialDataLoaded : Result()
+        data class NavigationRequested(val command: NavigationCommand) : Result()
+        data class OnEmailUpdated(val email: TextInputModel, val submitState: ButtonState) : Result()
+        data class OnSubmitStateUpdated(val submitState: ButtonState) : Result()
+        data class OnLoginFailed(val toast: ToastModel) : Result()
+    }
+
+    sealed class Effect {                                                           // 4
+        data class Navigate(val command: NavigationCommand) : Effect()
+        data class ShowToast(val model: ToastModel) : Effect()
     }
 
     @Immutable
-    data class ViewState(
-        val email: String = "",
-        val password: String = "",
-        val isLoading: Boolean = false,
-        val error: String? = null,
-    )
-}
-```
-
-### 2. Implement the Interactor
-
-```kotlin
-internal class LoginInteractor @Inject constructor(
-    private val authRepository: AuthRepository,
-) : Interactor<Intent, Result, ViewState> {
-
-    override fun process(
-        intents: Flow<Intent>,
-        state: StateFlow<ViewState>,
-    ): Flow<Result> = merge(
-        intents.filterIsInstance<Intent.OnEmailChanged>()
-            .map { Result.EmailUpdated(it.email) },
-        intents.filterIsInstance<Intent.OnPasswordChanged>()
-            .map { Result.PasswordUpdated(it.password) },
-        intents.filterIsInstance<Intent.OnSubmit>()
-            .let { submitProcessor(it, state) },
-        intents.filterIsInstance<Intent.OnBack>()
-            .map { Result.NavigateBack },
-    )
-
-    private fun submitProcessor(
-        upstream: Flow<Intent.OnSubmit>,
-        state: StateFlow<ViewState>,
-    ): Flow<Result> = upstream.flatMapLatest {
-        val current = state.value
-        flow { emit(authRepository.login(current.email, current.password)) }
-            .map { Result.Success(it.userId) }
-            .catch { emit(Result.Error(it.message ?: "Unknown error")) }
-            .onStart { emit(Result.Loading) }
+    data class ViewState(                                                           // 5
+        val email: TextInputModel,
+        val submit: ButtonModel,
+        val submitState: ButtonState,
+    ) {
+        companion object {
+            val Default = ViewState(
+                email = TextInputModel(
+                    label = "Email".asText(),
+                    value = "",
+                    placeholder = "you@example.com".asText(),
+                ),
+                submit = ButtonModel(title = "Log in".asText()),
+                submitState = ButtonState.Disabled,
+            )
+        }
     }
 }
 ```
 
-> Handlers that need state read `state.value` inside `flatMapLatest` — never rely on state smuggled through Intents.
+### Intent: one per user interaction
 
-### 3. Implement the Reducer
+Name for what the *user did*, not for what should happen: `OnSubmitClick`, not `PerformLogin`. Conventional prefixes: `On*` for interactions, `LoadInitialData` for bootstrap, and a nested sealed group (`Navigation`, `FormInput`, `BottomSheet`) when a family of intents shares one reducer arm.
+
+### Result: one focused delta
+
+- **Carry only the fields the triggering intent changes.** The reducer's `state.copy()` already preserves everything else.
+- **No god result** shared across unrelated intents, and **no `state.x` pass-through**. A field that only echoes current state back is dead weight and obscures which intent owns which field.
+- **A no-op returns `null` from the Mapper**, paired with `mapNotNull` in the Interactor. Never emit a Result that reduces to an equal state.
+- Name them `On<Thing>Updated` / `On<Thing>Loaded` / `On<Thing>Failed`.
+- Nest variants in a sealed sub-class only for a multi-field form with its own sub-reducer arm; otherwise declare them flat on `Result`.
+
+### Effect vs. a nullable `ViewState` field
+
+The distinction that trips people up:
+
+| The thing | Where it lives | Why |
+|---|---|---|
+| Navigate, toast, clipboard, share sheet | `Effect` | Fires once and leaves nothing on screen |
+| Dialog, bottom sheet, popup, picker that stays open | Nullable `ViewState` field + a dismiss `Intent` | It **is** on screen; it must survive recomposition and be re-rendered |
+
+```kotlin
+viewState.confirmDialog?.let {
+    ConfirmDialog(model = it, onDismiss = { viewModel.emit(Intent.OnDismissDialog) })
+}
+```
+
+Routing a dialog through `Effect` loses it on the next recomposition. Keep `Effect` small: `Navigate` and `ShowToast` cover almost everything; add a third only for a genuinely stateless platform action.
+
+### ViewState: models, not primitives
+
+- **Fields are component models** (`TextInputModel`, `ButtonModel`, `TopNavBarModel`, your own `@Immutable` app models), not raw `String` / `Boolean` the composable would have to interpret. Primitives appear only as flags and opaque identifiers (`selectedId: String?`, `nextPageToken: String?`).
+- **`@Immutable` and `companion object { val Default }` on every ViewState.**
+- **`Default` is a renderable first frame**, not zeroes: real labels, and `Placeholder` variants for content still loading, so the first composition shows a skeleton instead of an empty screen.
+- **Model loading and emptiness as sealed variants, not booleans:**
+
+```kotlin
+internal sealed class FeedSection {
+    @Immutable data class Items(val items: List<FeedItem>) : FeedSection()
+    @Immutable data class Empty(val model: EmptyStateModel) : FeedSection()
+}
+
+@Immutable
+internal sealed class FeedItem {
+    data class Item(val id: String, val title: Clause) : FeedItem()
+    data class Placeholder(val id: String) : FeedItem()   // rendered with Modifier.shimmer()
+}
+```
+
+`isLoading: Boolean` beside `items: List<T>` beside `error: String?` makes eight states representable when only three are legal. A sealed section makes the illegal ones unrepresentable and collapses the Screen to a single `when`.
+
+---
+
+## The Mapper
+
+A per-screen, pure translation layer. It is the only place domain types become UI types.
+
+```kotlin
+internal class LoginMapper @Inject constructor() : Mapper {
+
+    override fun toResult(intent: Intent.OnEmailChanged, state: ViewState): Result.OnEmailUpdated {
+        val email = state.email.copy(value = intent.value, isError = false, footerText = null)
+        return Result.OnEmailUpdated(email = email, submitState = email.value.toSubmitState())
+    }
+
+    override fun toResult(result: LoginResult): Result = when (result) {
+        is LoginResult.Success -> Result.NavigationRequested(ScreenCommand(HomeRoute(result.userId)))
+        is LoginResult.InvalidCredentials -> Result.OnLoginFailed(
+            toast = ToastModel(
+                message = Text.Localized(Res.string.login_invalid_credentials),
+                intent = ToastIntent.Error,
+            ),
+        )
+    }
+
+    override fun toInput(state: ViewState) = LoginUseCaseInput(email = state.email.value)
+
+    private fun String.toSubmitState() =
+        if (contains("@")) ButtonState.Enabled else ButtonState.Disabled
+}
+```
+
+**The Mapper owns:** domain result → `Result` (including turning a typed domain failure into user-facing copy); `Intent` (+ current `ViewState`) → `Result` for form and derived updates; `ViewState` → UseCase input; and every `Clause`, `Image`, `ToastModel`, `NavigationCommand`, and validation decision on the screen.
+
+**The Mapper must not** inject a UseCase or Repository, suspend, return `Flow`, hold mutable state, or be `@Composable`. Its only legal dependencies are formatters and other mappers. That is what makes it testable with real data classes and no mocks.
+
+Return `Result?` for an intent that legitimately changes nothing, and pair it with `mapNotNull` in the Interactor.
+
+---
+
+## The Interactor
+
+```kotlin
+@OptIn(ExperimentalCoroutinesApi::class)
+internal class LoginInteractor @Inject constructor(
+    private val loginUseCase: LoginUseCase,
+    private val mapper: Mapper,
+) : Interactor<Intent, Result, ViewState> {
+
+    private fun submitProcessor(
+        upstream: Flow<Intent.OnSubmitClick>,
+        state: StateFlow<ViewState>,
+    ): Flow<Result> = upstream.flatMapConcat {
+        flow { emit(loginUseCase.execute(mapper.toInput(state.value))) }
+            .map(mapper::toResult)
+            .onStart { emit(Result.OnSubmitStateUpdated(ButtonState.Loading)) }
+            .onCompletion { emit(Result.OnSubmitStateUpdated(ButtonState.Enabled)) }
+    }
+
+    override fun process(intents: Flow<Intent>, state: StateFlow<ViewState>): Flow<Result> = merge(
+        intents.filterIsInstance<Intent.LoadInitialData>().map(mapper::toResult),
+        intents.filterIsInstance<Intent.Navigation>().map(mapper::toResult),
+        intents.filterIsInstance<Intent.OnEmailChanged>().map { mapper.toResult(it, state.value) },
+        intents.filterIsInstance<Intent.OnSubmitClick>().let { submitProcessor(it, state) },
+    )
+}
+```
+
+### Processor convention
+
+Handlers are `private fun {verb}Processor(upstream: Flow<Intent.Specific>, state: StateFlow<ViewState>): Flow<Result>`:
+
+- named `*Processor`, and **declared above `process()`** so `process()` lands last and reads as the screen's table of contents
+- the parameter is named `upstream` and typed to the **narrowest** intent, never `Flow<Intent>`
+- take `state` only when current state is genuinely needed, and read `state.value` inside the operator
+- **never** smuggle state through an Intent so a processor can avoid the parameter
+
+### Registering intents
+
+`process()` is a single `merge(...)`. Four idioms, in increasing weight:
+
+```kotlin
+intents.filterIsInstance<Intent.Navigation>().map(mapper::toResult),                        // pure mapper
+intents.filterIsInstance<Intent.OnEmailChanged>().map { mapper.toResult(it, state.value) }, // mapper + state
+intents.filterIsInstance<Intent.OnDismissDialog>().map { Result.OnDialogUpdated(null) },    // inline trivial
+intents.filterIsInstance<Intent.OnSubmitClick>().let { submitProcessor(it, state) },        // processor
+```
+
+**Register each intent type exactly once.** A second `filterIsInstance<Intent.X>()` in the same `merge` creates a second observer, so one tap produces two Results and two Effects: a duplicated navigation or a double-charged request. When one intent must fan out, fan out *inside* its single registration:
+
+```kotlin
+intents.filterIsInstance<Intent.LoadInitialData>().let {
+    merge(loadProfileProcessor(it), loadFeedProcessor(it), it.map(mapper::toResult))
+},
+```
+
+Streams not driven by an intent (repository observers, connectivity) merge in bare, with no `filterIsInstance`:
+
+```kotlin
+favouriteChangesProcessor(state),
+```
+
+### Choosing the flattening operator
+
+| Operator | Use for | Because |
+|---|---|---|
+| `flatMapLatest` | loads, refreshes, search-as-you-type, retry | a newer trigger should cancel the in-flight one |
+| `flatMapConcat` | form submits, toggles, send-message, load-next-page | every trigger must complete; dropping one loses work |
+| `flatMapMerge` | independent parallel fetches off one trigger | they don't depend on each other, so run them concurrently |
+
+This is a correctness choice, not a style one. `flatMapLatest` on a submit button silently drops the first submission when the user double-taps; `flatMapConcat` on a search field queues every keystroke and renders stale results.
+
+### Loading states
+
+Always `onStart` / `onCompletion`, never an imperative set-then-clear:
+
+```kotlin
+.onStart { emit(Result.OnSubmitStateUpdated(ButtonState.Loading)) }
+.onCompletion { emit(Result.OnSubmitStateUpdated(ButtonState.Enabled)) }
+```
+
+`onCompletion` fires on success, failure, **and cancellation**. A terminal `.map` does not, so a cancelled request leaves the button spinning forever.
+
+### Staying declarative
+
+- **Bridge suspend → Flow with `flow { emit(useCase.execute(...)) }`.** Use observing UseCases directly.
+- **Never call `.collect { }` on the intent stream.** A manual collect inside a `flow { }` builder reintroduces exactly the cancellation bugs the operators handle for you.
+- **A mapper returning `List<Result>` flattens with `.asFlow()`**, not a hand-rolled loop:
+
+```kotlin
+.flatMapConcat { mapper.toResults(it).asFlow() }   // not: flow { mapper.toResults(it).forEach { emit(it) } }
+```
+
+- **Complex branching goes in a `private suspend fun` returning `List<Result>`**, bridged back with `.asFlow()`. The processor stays a readable pipeline and the imperative part becomes an ordinary testable function.
+
+---
+
+## The Reducer
 
 ```kotlin
 internal class LoginReducer @Inject constructor() : Reducer<ViewState, Result, Effect> {
-    override fun reduce(
-        state: ViewState,
-        result: Result,
-    ): Reduction<ViewState, Effect> = when (result) {
-        is Result.EmailUpdated -> state.copy(email = result.email).noEffects()
-        is Result.PasswordUpdated -> state.copy(password = result.password).noEffects()
-        is Result.Loading -> state.copy(isLoading = true, error = null).noEffects()
-        is Result.Success -> state.copy(isLoading = false) withEffect Effect.NavigateToHome(result.userId)
-        is Result.Error -> state.copy(isLoading = false, error = result.message)
-            .withEffects(Effect.ShowToast(result.message))
-        is Result.NavigateBack -> state withEffect Effect.NavigateBack
-    }
+    override fun reduce(state: ViewState, result: Result): Reduction<ViewState, Effect> =
+        when (result) {
+            is Result.OnInitialDataLoaded -> state.noEffects()
+            is Result.OnEmailUpdated -> state.copy(
+                email = result.email,
+                submitState = result.submitState,
+            ).noEffects()
+            is Result.OnSubmitStateUpdated -> state.copy(submitState = result.submitState).noEffects()
+            is Result.OnLoginFailed -> state withEffect Effect.ShowToast(result.toast)
+            is Result.NavigationRequested -> state withEffect Effect.Navigate(result.command)
+        }
 }
 ```
 
+- **Exhaustive `when (result)`, no `else`.** A newly added Result must break the build until it is handled.
+- **`state.copy(...)` only.** No mutation, no I/O, no suspend, no injected collaborators. The constructor stays empty.
+- **Dispatch on the result's *type*, never on its *field values*.** No `when (result.status)`, no `if (result.items.isEmpty())`, no `result.x ?: state.x`. Each of those is data shaping, and shaping belongs in the Mapper where it is pure and testable on its own.
+- **A nested `when` is fine only for a nested sealed `Result` sub-class**, which is still type dispatch.
+- One arm may both change state and emit an effect: `state.copy(...) withEffect Effect.Navigate(...)`.
+- Merging in an arm is the one grey area. Append-pagination (`state.copy(items = state.items + result.page)`) is acceptable when the merge is a genuine operator on the UI model. Anything conditional is not.
+
 > Reducers stay pure. Side effects (navigate, toast, analytics) leave via the Effect channel, never via state mutation.
 
-### 4. Create the ViewModel
+---
+
+## The ViewModel
 
 ```kotlin
 internal class LoginViewModel @Inject constructor(
@@ -222,44 +416,61 @@ internal class LoginViewModel @Inject constructor(
 )
 ```
 
-### 5. Connect to Compose UI
+---
+
+## The Screen
 
 ```kotlin
 @Composable
-fun LoginScreen(
+internal fun LoginScreen(
     viewModel: LoginViewModel,
     navigationDispatcher: NavigationDispatcher,
 ) {
     val viewState by viewModel.state
+    val toaster = Toast.current
+
+    viewModel.OnFirstComposition(Intent.LoadInitialData)
 
     viewModel.effects.CollectAsEffect { effect ->
         when (effect) {
-            is Effect.NavigateToHome -> navigationDispatcher.navigateTo(
-                NavigationCommand.ScreenCommand(route = "home/${effect.userId}"),
-            )
-            is Effect.NavigateBack -> navigationDispatcher.navigateTo(NavigationCommand.BackCommand())
-            is Effect.ShowToast -> snackbarHostState.showSnackbar(effect.message)
+            is Effect.Navigate -> navigationDispatcher.navigateTo(effect.command)
+            is Effect.ShowToast -> toaster.show(effect.model)
         }
     }
 
-    Column {
-        TextField(
-            value = viewState.email,
-            onValueChange = { viewModel.emit(Intent.OnEmailChanged(it)) },
-        )
-        TextField(
-            value = viewState.password,
-            onValueChange = { viewModel.emit(Intent.OnPasswordChanged(it)) },
-        )
-        Button(
-            onClick = { viewModel.emit(Intent.OnSubmit) },
-            enabled = !viewState.isLoading,
+    Scaffold(backgroundColor = Theme.colors.surface.primaryLight) { padding ->
+        Column(
+            modifier = Modifier.padding(padding).padding(horizontal = Theme.spacing.x6),
+            verticalArrangement = Arrangement.spacedBy(Theme.spacing.x4),
         ) {
-            Text(if (viewState.isLoading) "Loading..." else "Login")
+            LabelTextField(
+                model = viewState.email,
+                modifier = Modifier.fillMaxWidth(),
+                onValueChange = { viewModel.emit(Intent.OnEmailChanged(it)) },
+            )
+            PrimaryButton(
+                model = viewState.submit,
+                modifier = Modifier.fillMaxWidth(),
+                state = viewState.submitState,
+                onClick = { viewModel.emit(Intent.OnSubmitClick) },
+            )
         }
     }
 }
 ```
+
+**Body order, identical on every screen:**
+
+1. `val viewState by viewModel.state`
+2. CompositionLocals (`Toast.current`): read at composable scope, never inside the effect lambda
+3. `viewModel.OnFirstComposition(Intent.LoadInitialData)`
+4. `viewModel.effects.CollectAsEffect { }`
+5. nullable overlays: `viewState.dialog?.let { }`
+6. `Scaffold { }`
+
+**The Screen renders and emits, nothing else.** No `Clause` construction, no `stringResource`, no string templates, no money or date formatting, no branching on domain data. If a composable has to decide something, that decision belonged in the Mapper. The only logic that earns its place here is a `when` over a sealed UI model, and even that usually delegates to a section composable.
+
+`viewModel.state` is a Compose `State<ViewState>`, so `by viewModel.state` is all you need. Wrapping it in `remember { derivedStateOf { viewModel.state.value } }` adds a layer that buys nothing.
 
 ### Emitting an initial intent
 
@@ -272,6 +483,17 @@ fun MyScreen(viewModel: MyViewModel) {
 ```
 
 This replaces the old `if (viewModel.isFirstIntent) viewModel.emit(...)` pattern. `OnFirstComposition` emits the intents **exactly once per ViewModel lifetime** — the guard lives on the `LifecycleViewModel`, not the composition, so navigating away and returning (ViewModel retained by the nav back stack) will **not** re-emit. A fresh ViewModel instance (e.g. after `onCleared`) emits again.
+
+---
+
+## Effect delivery
+
+`effects` is a `MutableSharedFlow(extraBufferCapacity = 64)` with **`replay = 0`**, emitted with `tryEmit`. Two consequences worth designing around:
+
+- **An effect emitted while nothing is collecting is dropped.** `CollectAsEffect` subscribes on first composition and intents only flow from the Screen, so this is safe for user-driven effects. It is *not* safe for an effect emitted from a stream that starts at construction time.
+- **`tryEmit` returns `false` when the 64-slot buffer is full, and the return value is ignored.** Emitting effects in a tight loop can silently lose some.
+
+Both are further reasons that anything which must stay visible belongs in `ViewState`, not in an `Effect`.
 
 ---
 
@@ -294,11 +516,38 @@ A `CoroutineExceptionHandler` tied to the same callback catches any escaped coro
 
 ## Rules
 
-- **Contract pattern**: Keep `Intent`, `Result`, `Effect`, `ViewState` in one `object`.
-- **Reducers are pure**: No side effects, no async — emit `Effect`s instead.
-- **Effects are one-shot**: Navigation, snackbars, analytics pings — never drive UI from effects.
-- **State is durable**: Survives recomposition, represents what is rendered on screen.
-- **Interactor reads state via `state.value`**: Never pass state through Intents.
-- **`filterIsInstance` + `merge`**: Clean intent routing in Interactor.
-- **Handlers named `*Processor`**: Take `Flow<SpecificIntent>` (plus `StateFlow` when needed). Place above `process()`.
-- Works with kotlin-inject (`@Inject constructor`).
+**Contract**
+- Keep `Mapper`, `Intent`, `Result`, `Effect`, `ViewState` in one `internal object`, in that order.
+- `ViewState` is `@Immutable` with a `companion object { val Default }`; `Default` renders a real first frame.
+- `ViewState` fields are component models, not primitives the composable has to interpret.
+- Loading and emptiness are sealed variants of a section model, not `Boolean` flags beside a list.
+
+**Result**
+- One focused delta per Result: only the fields its intent changes. No god result, no `state.x` pass-through.
+- A no-op returns `null` from the Mapper and is filtered with `mapNotNull`.
+
+**Effect**
+- One-shot only: navigate, toast, clipboard. Anything that stays on screen is a nullable `ViewState` field plus a dismiss intent.
+- Effects can be dropped if nothing is collecting, so never make them load-bearing for what is rendered.
+
+**Mapper**
+- Owns every domain → UI translation, all `Clause` / `Image` / `NavigationCommand` construction, and all validation.
+- Pure: no UseCase, no Repository, no suspend, no `Flow`, no state, never `@Composable`.
+
+**Interactor**
+- `process()` is one `merge(...)`, declared last; processors sit above it.
+- Processors are `*Processor(upstream: Flow<Intent.Specific>, state: StateFlow<ViewState>)` and read `state.value`. Never accept state through an Intent.
+- Register each intent type exactly once; fan out inside that single registration.
+- `flatMapLatest` cancels, `flatMapConcat` queues, `flatMapMerge` parallelises. Choose deliberately.
+- Loading states use `onStart` / `onCompletion` so cancellation still clears them.
+- Never `.collect { }` an intent stream; flatten `List<Result>` with `.asFlow()`.
+
+**Reducer**
+- Pure `(State, Result) → Reduction`. Exhaustive `when` on the Result *type*, `state.copy()`, no `else`.
+- Never branch on a Result's field values, and never derive or merge data in an arm.
+
+**Screen**
+- Renders `viewState` and emits `Intent`s. No model construction, no formatting, no domain branching.
+- Read `viewModel.state` directly with `by`; it is already a Compose `State`.
+
+Works with kotlin-inject (`@Inject constructor`) throughout. See `/build-screen` for the end-to-end workflow, `/data-boundaries` for what may cross each layer, and `/component-authoring` for building the models these rules assume.

@@ -62,17 +62,33 @@ python3 .claude/skills/create-screen/scripts/create_screen.py \
 
 Invoke this skill whenever a user asks to create, add, or scaffold a new screen in a KMP project that uses Synapse. Prefer running the script over hand-writing the 7 files — that's the whole point.
 
+## Conventions the scaffold already bakes in
+
+Do not undo these while filling the scaffold in. They are the house style, documented in `/mvi`:
+
+- `internal object {Name}Contract` with members in the order `Mapper` → `Intent` → `Result` → `Effect` → `ViewState`
+- `@Immutable` `ViewState` with `companion object { val Default }`
+- A `Mapper` interface in the Contract plus a pure `{Name}Mapper` implementation
+- `process()` as a single `merge(...)` of `filterIsInstance` registrations, declared last in the Interactor
+- A `Reducer` returning `Reduction` via `noEffects()` / `withEffect`
+- A ViewModel with no body; it only wires `FlowViewModelArgs`
+- The `.bind()` binding pattern in `{Name}UiComponent`, with `provideDefaultViewState()`
+- A Screen that reads `val viewState by viewModel.state`, calls `OnFirstComposition`, and consumes `effects.CollectAsEffect`
+
 ## After running the script
 
-The script prints a short checklist. The files it generates are a minimal compiling scaffold; the user still needs to:
+The generated files are a minimal compiling scaffold. The user still needs to:
 
 1. Add `{Name}UiComponent` to the feature's `ViewModelComponent` so the screen gets constructed.
-2. Register the screen's route in the feature's `NavigatorHost` (`FeatureLauncher.navigationGraph()`).
-3. Extend `{Name}Contract.Intent` / `Result` / `ViewState` with the feature-specific fields.
+2. Declare `@Serializable data object {Name}Route : NavKey`, register `entry<{Name}Route>` in the feature's `FeatureLauncher.register`, and add the route to that feature's `serializers` module.
+3. Extend `{Name}Contract.Intent` / `Result` / `Effect` / `ViewState` with the feature-specific fields, using component models on `ViewState`, not primitives.
 4. Wire any UseCases through the `Mapper` + `Interactor`.
 
 When helping the user wire these up, reach for:
-- `/mvi` — IRSE-MVI APIs (Intent → Interactor → Result → Reducer → State/Effect)
-- `/navigation` — `NavigatorHost`, `FeatureLauncher`, `NavigationCommand`
+- `/build-screen`: the end-to-end workflow, component picker, and definition-of-done checklist
+- `/mvi`: Contract shape, Mapper/Interactor/Reducer rules, Effect vs. state
+- `/navigation`: `FeatureLauncher`, typed `NavKey` routes, `NavigationCommand`
+- `/data-boundaries`: what the screen may import, and what a UseCase returns
 - `/di-scopes` — `@SingletonScope`, kotlin-inject wiring
 - `/ui-components` / `/ui-element` — Scaffold, ButtonModel, TextInputModel, Theme, Clause
+- `/component-authoring`: writing a composable Synapse doesn't ship
