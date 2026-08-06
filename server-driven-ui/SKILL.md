@@ -145,6 +145,82 @@ fun RendererStateHolder.watchRevision(onChange: (Long) -> Unit): WatchHandle
 
 The callback fires with the current value before it returns, so one call both seeds and subscribes.
 
+### Bridged surface (Swift Export and other non-Kotlin hosts)
+
+A Swift Export host crashes when the bridge converts a map of arbitrary values across the
+boundary, so payloads and collection records stay Kotlin references and are read lane by lane.
+Kotlin engines keep using the raw maps; these types exist for the bridge.
+
+```kotlin
+// action/ — payloads arriving in a host's handler
+class ActionPayload internal constructor(/* wraps Map<String, Any?> */) {
+    val keys: Set<String>
+    fun getString(key: String): String?
+    fun getLong(key: String): Long?          // absorbs Int
+    fun getDouble(key: String): Double?      // absorbs Float
+    fun getBoolean(key: String): Boolean?
+    fun getStringList(key: String): List<String>?
+    fun isNull(key: String): Boolean         // present but null
+}
+fun bridgedActionHandler(onAction: (actionId: String, payload: ActionPayload) -> Unit): ActionHandler
+
+// engine/ — collection rows and the lazy-binding pipeline
+class DataRecordView internal constructor(/* wraps DataRecord */) {
+    val keys: Set<String>
+    fun getString(key: String): String?      // + getLong/getDouble/getBoolean/isNull as above
+    fun describe(key: String): String?       // toString of whatever lane holds the value
+}
+class BoundRecords internal constructor(/* narrowed rows */) {
+    val size: Int
+    fun view(index: Int): DataRecordView     // record + 1-based "_index"
+    fun stableId(index: Int): String         // record id, or position when absent
+    fun groups(groupBy: String): BoundRecordGroups
+}
+class BoundRecordGroups internal constructor(/* first-encounter order */) {
+    val size: Int
+    fun key(index: Int): String
+    fun records(index: Int): BoundRecords
+    fun headerView(index: Int): DataRecordView   // "group.key" and "group.count"
+}
+
+/** Search-then-filter narrowing, the collection-bound lazy-node pipeline. */
+fun narrowRecords(
+    records: List<DataRecord>, searchText: String, searchFields: List<String>,
+    filter: DataCondition?, fieldReader: (String) -> Any?,
+): List<DataRecord>
+
+/** String-first state reads for record filters (templates read long, double, string). */
+fun RendererStateHolder.recordFieldReader(): (String) -> Any?
+
+fun boundRecords(
+    collectionProvider: CollectionProvider, stateHolder: RendererStateHolder, dataSource: String,
+    filter: DataCondition? = null, searchKey: String? = null, searchFields: List<String> = emptyList(),
+): BoundRecords
+
+/** Fires synchronously with the current records, then on collection or search-text changes. */
+fun watchBoundRecords(
+    collectionProvider: CollectionProvider, stateHolder: RendererStateHolder, dataSource: String,
+    filter: DataCondition? = null, searchKey: String? = null, searchFields: List<String> = emptyList(),
+    onChange: (BoundRecords) -> Unit,
+): WatchHandle
+
+/** Dispatch with the record attached under "_itemContext", the Card-in-a-collection payload. */
+fun ActionDispatcher.dispatchWithRecord(
+    actionId: String, record: DataRecordView?, payload: Map<String, Any?> = emptyMap(),
+)
+
+// TemplateEngine members for record-held item context
+fun resolveWithRecord(
+    content: String, stateHolder: RendererStateHolder, record: DataRecordView?,
+    collectionSize: ((String) -> Int)? = null,
+): String
+fun resolveNumericWithRecord(value: String, stateHolder: RendererStateHolder, record: DataRecordView?): Float
+
+// Conditional text formats resolve Kotlin-side (the format map cannot cross the bridge)
+fun effectiveTextFormat(node: UINode.TextNode, evaluator: ConditionEvaluator): UITextFormat?
+fun hasConditionalFormat(node: UINode.TextNode): Boolean
+```
+
 ---
 
 ## Parsing without exceptions
@@ -207,6 +283,23 @@ fun UINode.children(): List<UINode>
 
 Implementations must not throw. `onNodeRenderError` only fires for non-composable work in the
 Compose engine, because a composable call cannot be wrapped in `try`.
+
+Hosts that cannot implement a Kotlin interface (Swift, notably: the bridge generates SAM
+adapters only for single-method interfaces) build one from callbacks; errors arrive as messages:
+
+```kotlin
+fun callbackRenderDiagnostics(
+    onUnknownNode: (nodeType: String, nodeId: String?, path: String) -> Unit = { _, _, _ -> },
+    onUnregisteredNode: (nodeType: String, nodeId: String?, path: String) -> Unit = { _, _, _ -> },
+    onNodeRenderError: (nodeType: String, nodeId: String?, path: String, message: String) -> Unit = { _, _, _, _ -> },
+    onActionDispatched: (actionId: String, payloadKeys: Set<String>) -> Unit = { _, _ -> },
+    onActionError: (actionId: String, message: String) -> Unit = { _, _ -> },
+    onRenderPass: (summary: RenderPassSummary) -> Unit = { },
+): RenderDiagnostics
+
+/** onNodeRenderError for engines that hold the failure as text. */
+fun RenderDiagnostics.reportNodeRenderError(nodeType: String, nodeId: String?, path: String, message: String)
+```
 
 ---
 

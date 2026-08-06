@@ -695,7 +695,7 @@ internal fun RootScreen(
                     .fillMaxWidth()
                     .padding(paddingValues = paddingValues),
                 pageTransition = viewState.pageTransition,
-                onKeyChanged = { changed ->
+                onDestinationChanged = { changed, _ ->
                     viewModel.emit(intent = MainContract.Intent.RouteChanged(key = changed))
                 },
             )
