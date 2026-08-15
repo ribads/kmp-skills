@@ -82,7 +82,7 @@ sealed interface NavigationCommand {
 - `CloseFlow`: pop the nearest enclosing flow of the current destination (its contiguous run of entries, including any of its sub-flows'), delivering `result` to the revealed destination. The revealed destination may belong to any flow: a flow launched from another feature returns its result to the launching screen. No-op when the run spans the whole stack; throws `IllegalStateException` if no flow owns the current destination's key class.
 - `CloseFeature`: same, but for the current destination's entire feature (the root ancestor flow's run).
 - `FlowCompletionCommand`: replace the nearest enclosing flow's run with `key` (flow handoff); arguments travel as `key`'s constructor properties. When the run spans the whole stack, `key` becomes the only entry.
-- `FeatureCommand`: switch to a registered flow by name; the host resolves `featureName` to that flow's `startKey`, so callers stay decoupled from other features' route types. Both top-level features and named sub-flows resolve. An unknown name throws `IllegalArgumentException` (wiring bug, not a runtime condition). With `clearStack`, reset the back stack to that destination. Per-call arguments need a typed key via `ScreenCommand` instead.
+- `FeatureCommand`: switch to a registered flow by name; the host resolves `featureName` to that flow's `startKey`, so callers stay decoupled from other features' route types. Both top-level features and named sub-flows resolve. If that start key is already on the stack, everything above its last occurrence is trimmed instead of a second copy being pushed. An unknown name throws `IllegalArgumentException` (wiring bug, not a runtime condition). With `clearStack`, reset the back stack to that destination. Per-call arguments need a typed key via `ScreenCommand` instead.
 - `ExternalUriCommand`: open `uri` outside the app.
 
 ## NavigationDispatcher
@@ -188,6 +188,8 @@ Rules the host enforces at startup: flow names are unique across the tree; a `Na
 
 Owns the back stack and renders it. Returns the single `NavigationDispatcher` for routing app-level effects. System back and sheet dismissal dispatch through the same dispatcher (as `BackCommand`), so back behaves identically on every path.
 
+Destinations render one at a time unless their metadata says otherwise: `dialog()` and `bottomSheet()` present as overlays, and a `listPane()`/`detailPane()` pair shares the window once it is wide enough for two. Overlays resolve first, so a sheet or dialog floats above whatever is beneath it, including a two-pane scene.
+
 ```kotlin
 @Composable
 fun NavContainer(
@@ -209,7 +211,7 @@ class FlowPath {                                     // flow ancestry of a desti
 }
 ```
 
-`onDestinationChanged` fires with the top destination and its flow ancestry on every change; `flowPath.feature` drives bottom-bar selection and visibility without string routes.
+`onDestinationChanged` fires with the top destination and its flow ancestry on every change; `flowPath.feature` drives bottom-bar selection and visibility without string routes. In a two-pane scene the top destination is the detail, not the list beside it.
 
 ```kotlin
 @Composable
@@ -225,19 +227,49 @@ fun App(features: Collection<FeatureLauncher>) {
 
 ## Scenes
 
+Entry metadata decides how a destination is presented. Pass it as `entry<X>(metadata = …) { ... }`; a destination with no metadata is a full screen.
+
 ```kotlin
 fun dialog(properties: DialogProperties = DialogProperties()): Map<String, Any>
 fun bottomSheet(): Map<String, Any>
+fun bottomSheet(properties: ModalBottomSheetProperties): Map<String, Any>
+fun listPane(sceneKey: Any = Unit, detailPlaceholder: @Composable () -> Unit = {}): Map<String, Any>
+fun detailPane(sceneKey: Any = Unit): Map<String, Any>
+
+@Composable fun isMultiPaneWindow(): Boolean
 ```
 
-Pass as `entry<X>(metadata = …) { ... }` to present a destination as an overlay rather than a full screen:
+### Overlays
 
 ```kotlin
 entry<ConfirmRoute>(metadata = dialog()) { ConfirmDialog() }
 entry<FilterRoute>(metadata = bottomSheet()) { FilterScreen() }
 ```
 
-`bottomSheet()` renders the destination as a Material 3 modal bottom sheet; dismissing it (scrim tap, drag-down, or back) pops the back stack. Both overlays host their content with a sheet/dialog-scoped lifecycle, so entry-scoped `viewModel { }` works inside them.
+`bottomSheet()` renders the destination as a Material 3 modal bottom sheet; dismissing it (scrim tap, drag-down, or back) pops the back stack. The parameterless overload keeps callers clear of the `ExperimentalMaterial3Api` opt-in; take the `ModalBottomSheetProperties` overload only when you need to change them. Both overlays host their content with a sheet/dialog-scoped lifecycle, so entry-scoped `viewModel { }` works inside them.
+
+### List-detail
+
+Mark the two halves of a list-detail pair and they share the window once it is wide enough for two panes:
+
+```kotlin
+private const val MAIL_PANES = "mail"
+
+entry<InboxRoute>(metadata = listPane(MAIL_PANES) { NoMessageSelected() }) {
+    InboxScreen(onMessage = { dispatcher.navigateTo(ScreenCommand(MessageRoute(it))) })
+}
+entry<MessageRoute>(metadata = detailPane(MAIL_PANES)) { key -> MessageScreen(id = key.id) }
+```
+
+Nothing about navigation changes: the detail is an ordinary destination pushed with `ScreenCommand`, with its own ViewModel store, saved state, and results. Only the layout adapts.
+
+- **When two panes appear**: from the medium width class (~600dp) upwards, which covers tablets, unfolded foldables, desktop-size windows, and most phones in landscape. Narrower than that, the pair falls through to the single-pane strategy and navigates one screen at a time with the usual transitions.
+- **Pairing**: the panes combine only while the `listPane` destination carrying the same `sceneKey` sits beneath the detail on the back stack. A detail reached any other way (pushed by another feature, deep-linked, stacked under a different pair) is a full screen. Give each pair its own `sceneKey`; the `Unit` default is a single app-wide pair.
+- **Placeholder**: `detailPlaceholder` fills the detail pane while no detail destination is on the stack. It is not a destination, so it has no ViewModel store, no saved state, and cannot receive results. Keep it to empty-state content.
+- **Back**: the two panes are one scene, so system back leaves the pair as a unit. From `[Home, Inbox, Message]` on a wide window it pops both `Message` and `Inbox` and reveals `Home`, and stacked details collapse together rather than stepping back through each other. When the pair is the whole back stack there is nothing to reveal, so the container does not handle back at all and the press falls through to the platform: give a detail that can be the root pair its own close affordance. Explicit `BackCommand` is unaffected on every window size, so a detail that closes itself with a result behaves the same everywhere.
+- **Chrome**: `isMultiPaneWindow()` reports whether the current window would show two panes and recomposes across a fold, an unfold, and a rotation. Use it for shell chrome that has to differ between the two layouts; it reflects the window only, not what is on the back stack.
+
+The adaptive dependency ships inside the module: consumers add nothing to their build and need no `ExperimentalMaterial3AdaptiveApi` opt-in.
 
 ## Back-stack results
 
