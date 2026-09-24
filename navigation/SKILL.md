@@ -255,6 +255,7 @@ entry<FilterRoute>(metadata = bottomSheet()) { FilterScreen() }
 data class BottomSheetOptions(                        // per destination, via bottomSheet(options)
     val skipPartiallyExpanded: Boolean = false,
     val isSwipeDismissible: Boolean = true,
+    val showDragHandle: Boolean = true,                // false hides BottomSheetAppearance.dragHandle for this destination
     val properties: ModalBottomSheetProperties = ModalBottomSheetProperties(),
 )
 
@@ -267,6 +268,14 @@ data class BottomSheetAppearance(                     // app-wide, via NavContai
 ```
 
 `bottomSheet()` renders the destination as a Material 3 modal bottom sheet; dismissing it (scrim tap, drag-down, or back) pops the back stack. `contentColor` defaults to Material's pairing for the container (on Android it also decides the sheet's status bar icon colour), and `contentDecoration` wraps every sheet's content, e.g. to provide the app's raised-surface theme context. The parameterless overload keeps callers clear of the `ExperimentalMaterial3Api` opt-in; take the `ModalBottomSheetProperties` overload only when you need to change them. Both overlays host their content with a sheet/dialog-scoped lifecycle, so entry-scoped `viewModel { }` works inside them.
+
+**The destination already is the sheet.** Root a `bottomSheet()` screen in `TraySurface` (or `ScrollableTraySurface` for scrolling content, with `BottomSheetOptions(skipPartiallyExpanded = true, isSwipeDismissible = false, showDragHandle = false)`) from `/ui-components`. Never root it in `Tray` or `ScrollableTray`: those draw their own sheet, so the user gets a second sheet behind the first.
+
+**One look for every sheet.** `NavContainer` also publishes `bottomSheetAppearance` as `LocalBottomSheetAppearance`, and Synapse's in-screen sheets (`Tray`, `ScrollableTray`, `DatePickerBottomSheet`) read it. Set the drag handle, colours and `contentDecoration` once on `NavContainer` and both kinds of sheet match. Outside any `NavContainer` the local holds `BottomSheetAppearance()`.
+
+```kotlin
+val LocalBottomSheetAppearance: ProvidableCompositionLocal<BottomSheetAppearance>
+```
 
 ### List-detail
 

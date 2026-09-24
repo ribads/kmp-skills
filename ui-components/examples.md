@@ -146,6 +146,12 @@ ScrollableTray(onDismissRequest = { viewModel.emit(Intent.DismissSheet) }) {
         LazyColumn { items(rows) { RowItem(it) } }
     }
 }
+
+// A screen that is itself a bottomSheet() destination: navigation draws the sheet
+// entry<PriceRoute>(metadata = bottomSheet()) { PriceScreen(...) }
+TraySurface {
+    Column { /* header, options */ }
+}
 ```
 
 ## Checkbox

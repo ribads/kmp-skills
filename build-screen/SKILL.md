@@ -75,6 +75,7 @@ Use this table to go from need → Synapse composable + model. For composable si
 | Timer | `Timer` | `TimerModel` |
 | Top / bottom nav | `TopNavBar` / `BottomNavigationBar` (`LiquidGlassBottomNavigationBar`) | `TopNavBarModel` / `BottomNavigationBarModel` |
 | Container | `Scaffold` / `Card` / `Divider` / `Tray` / `ScrollableTray` | — |
+| Root of a `bottomSheet()` screen | `TraySurface` / `ScrollableTraySurface` (never `Tray`, which would open a second sheet) | — |
 | Empty / dialog | `EmptyState` / `ConfirmDialog` | `EmptyStateModel` / `ConfirmDialogModel` |
 | Charts | `BarChart` / `LineChart` / `PieChart` | `*ChartModel` |
 | Chat | `ChatTextArea` / `MessageBubble` | `ChatTextAreaModel` / `MessageBubbleModel` |

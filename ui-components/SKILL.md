@@ -43,6 +43,7 @@ Depends on `ui:element`.
 | Liquid-glass bottom navigation bar | `LiquidGlassBottomNavigationBar` | `BottomNavigationBarModel` | [layout](layout-reference.md) |
 | Tray | `Tray` | — | [layout](layout-reference.md) |
 | Scrollable tray | `ScrollableTray` | — | [layout](layout-reference.md) |
+| Tray as a `bottomSheet()` screen | `TraySurface` / `ScrollableTraySurface` | — | [layout](layout-reference.md) |
 | Checkbox | `LabelCheckbox` | `CheckboxModel` | [controls](controls-reference.md) |
 | Progress bar | `ProgressBar` | `ProgressBarModel` | [controls](controls-reference.md) |
 | Circular progress | `CircularProgress` | `CircularProgressModel` | [controls](controls-reference.md) |
