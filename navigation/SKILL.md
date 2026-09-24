@@ -261,10 +261,12 @@ data class BottomSheetOptions(                        // per destination, via bo
 data class BottomSheetAppearance(                     // app-wide, via NavContainer(bottomSheetAppearance = ...)
     val containerColor: @Composable () -> Color = { BottomSheetDefaults.ContainerColor },
     val dragHandle: @Composable () -> Unit = { BottomSheetDefaults.DragHandle() },
+    val contentColor: @Composable () -> Color = { contentColorFor(containerColor()) },
+    val contentDecoration: @Composable (content: @Composable () -> Unit) -> Unit = { content -> content() },
 )
 ```
 
-`bottomSheet()` renders the destination as a Material 3 modal bottom sheet; dismissing it (scrim tap, drag-down, or back) pops the back stack. The parameterless overload keeps callers clear of the `ExperimentalMaterial3Api` opt-in; take the `ModalBottomSheetProperties` overload only when you need to change them. Both overlays host their content with a sheet/dialog-scoped lifecycle, so entry-scoped `viewModel { }` works inside them.
+`bottomSheet()` renders the destination as a Material 3 modal bottom sheet; dismissing it (scrim tap, drag-down, or back) pops the back stack. `contentColor` defaults to Material's pairing for the container (on Android it also decides the sheet's status bar icon colour), and `contentDecoration` wraps every sheet's content, e.g. to provide the app's raised-surface theme context. The parameterless overload keeps callers clear of the `ExperimentalMaterial3Api` opt-in; take the `ModalBottomSheetProperties` overload only when you need to change them. Both overlays host their content with a sheet/dialog-scoped lifecycle, so entry-scoped `viewModel { }` works inside them.
 
 ### List-detail
 
