@@ -694,7 +694,6 @@ internal fun RootScreen(
                     .fillMaxHeight()
                     .fillMaxWidth()
                     .padding(paddingValues = paddingValues),
-                pageTransition = viewState.pageTransition,
                 onDestinationChanged = { changed, _ ->
                     viewModel.emit(intent = MainContract.Intent.RouteChanged(key = changed))
                 },
@@ -733,7 +732,6 @@ MAIN_CONTRACT = '''package __APP_PACKAGE__.ui
 import androidx.compose.runtime.Immutable
 import com.ribads.synapse.ui.compose.presentation.navigation.NavKey
 import com.ribads.synapse.ui.compose.presentation.navigation.NavigationCommand
-import com.ribads.synapse.ui.compose.presentation.navigation.compose.PageTransition
 
 internal interface MainContract {
 
@@ -755,7 +753,6 @@ internal interface MainContract {
 
         data class RouteChanged(
             val key: NavKey,
-            val pageTransition: PageTransition,
         ) : Result()
     }
 
@@ -767,7 +764,6 @@ internal interface MainContract {
     data class ViewState(
         val startFeatureName: String? = null,
         val currentKey: NavKey? = null,
-        val pageTransition: PageTransition = PageTransition.Hierarchical,
     ) {
         companion object {
             val Default = ViewState()
@@ -818,10 +814,7 @@ internal class MainReducer constructor() : Reducer<ViewState, Result, Effect> {
     override fun reduce(state: ViewState, result: Result): Reduction<ViewState, Effect> {
         return when (result) {
             is Result.Initial -> state.copy(startFeatureName = result.startFeatureName).noEffects()
-            is Result.RouteChanged -> state.copy(
-                currentKey = result.key,
-                pageTransition = result.pageTransition,
-            ).noEffects()
+            is Result.RouteChanged -> state.copy(currentKey = result.key).noEffects()
         }
     }
 }
@@ -832,7 +825,6 @@ MAIN_MAPPER = '''package __APP_PACKAGE__.ui
 import __APP_PACKAGE__.ui.MainContract.Intent
 import __APP_PACKAGE__.ui.MainContract.Mapper
 import __APP_PACKAGE__.ui.MainContract.Result
-import com.ribads.synapse.ui.compose.presentation.navigation.compose.PageTransition
 import me.tatarka.inject.annotations.Inject
 
 internal class MainMapper @Inject constructor() : Mapper {
@@ -841,10 +833,7 @@ internal class MainMapper @Inject constructor() : Mapper {
         return Result.Initial(startFeatureName = "__FIRST_FEATURE__")
     }
 
-    override fun toResult(intent: Intent.RouteChanged) = Result.RouteChanged(
-        key = intent.key,
-        pageTransition = PageTransition.Hierarchical,
-    )
+    override fun toResult(intent: Intent.RouteChanged) = Result.RouteChanged(key = intent.key)
 }
 '''
 

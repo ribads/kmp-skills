@@ -197,11 +197,10 @@ fun NavContainer(
     features: Collection<FeatureLauncher>,
     modifier: Modifier = Modifier,
     uriHandler: UriHandler = LocalUriHandler.current,
-    pageTransition: PageTransition = PageTransition.Hierarchical,
+    pageTransition: PageTransition = PageTransition.Platform,
     onDestinationChanged: (key: NavKey, flowPath: FlowPath) -> Unit = { _, _ -> },
+    bottomSheetAppearance: BottomSheetAppearance = BottomSheetAppearance(),
 ): NavigationDispatcher
-
-enum class PageTransition { TopLevel, Hierarchical }
 
 @Immutable
 class FlowPath {                                     // flow ancestry of a destination, root feature first
@@ -212,6 +211,8 @@ class FlowPath {                                     // flow ancestry of a desti
 ```
 
 `onDestinationChanged` fires with the top destination and its flow ancestry on every change; `flowPath.feature` drives bottom-bar selection and visibility without string routes. In a two-pane scene the top destination is the detail, not the list beside it.
+
+`pageTransition` is the motion for destinations that do not choose their own (see [Transitions](#transitions)); `bottomSheetAppearance` styles every `bottomSheet()` destination. Destinations are clipped to the container's bounds, so give it an opaque background: a Synapse `Scaffold` around it provides one.
 
 ```kotlin
 @Composable
@@ -232,18 +233,35 @@ Entry metadata decides how a destination is presented. Pass it as `entry<X>(meta
 ```kotlin
 fun dialog(properties: DialogProperties = DialogProperties()): Map<String, Any>
 fun bottomSheet(): Map<String, Any>
+fun bottomSheet(options: BottomSheetOptions): Map<String, Any>
 fun bottomSheet(properties: ModalBottomSheetProperties): Map<String, Any>
 fun listPane(sceneKey: Any = Unit, detailPlaceholder: @Composable () -> Unit = {}): Map<String, Any>
 fun detailPane(sceneKey: Any = Unit): Map<String, Any>
+fun pageTransition(transition: PageTransition): Map<String, Any>   // see Transitions
 
 @Composable fun isMultiPaneWindow(): Boolean
 ```
+
+Metadata maps combine with `+`, e.g. `listPane(MAIL_PANES) + pageTransition(PageTransition.None)`.
 
 ### Overlays
 
 ```kotlin
 entry<ConfirmRoute>(metadata = dialog()) { ConfirmDialog() }
 entry<FilterRoute>(metadata = bottomSheet()) { FilterScreen() }
+```
+
+```kotlin
+data class BottomSheetOptions(                        // per destination, via bottomSheet(options)
+    val skipPartiallyExpanded: Boolean = false,
+    val isSwipeDismissible: Boolean = true,
+    val properties: ModalBottomSheetProperties = ModalBottomSheetProperties(),
+)
+
+data class BottomSheetAppearance(                     // app-wide, via NavContainer(bottomSheetAppearance = ...)
+    val containerColor: @Composable () -> Color = { BottomSheetDefaults.ContainerColor },
+    val dragHandle: @Composable () -> Unit = { BottomSheetDefaults.DragHandle() },
+)
 ```
 
 `bottomSheet()` renders the destination as a Material 3 modal bottom sheet; dismissing it (scrim tap, drag-down, or back) pops the back stack. The parameterless overload keeps callers clear of the `ExperimentalMaterial3Api` opt-in; take the `ModalBottomSheetProperties` overload only when you need to change them. Both overlays host their content with a sheet/dialog-scoped lifecycle, so entry-scoped `viewModel { }` works inside them.
@@ -270,6 +288,49 @@ Nothing about navigation changes: the detail is an ordinary destination pushed w
 - **Chrome**: `isMultiPaneWindow()` reports whether the current window would show two panes and recomposes across a fold, an unfold, and a rotation. Use it for shell chrome that has to differ between the two layouts; it reflects the window only, not what is on the back stack.
 
 The adaptive dependency ships inside the module: consumers add nothing to their build and need no `ExperimentalMaterial3AdaptiveApi` opt-in.
+
+## Transitions
+
+Every destination animates with a `PageTransition` as it is pushed and popped, back gesture included. `NavContainer(pageTransition = …)` sets the default, `PageTransition.Platform`; a destination overrides it with `pageTransition(…)` metadata.
+
+```kotlin
+@Immutable
+class PageTransition {                                // opaque: presets only
+    companion object {
+        val Platform: PageTransition                  // default
+        val None: PageTransition
+        val Fade: PageTransition
+        val Modal: PageTransition
+        @Deprecated val Hierarchical: PageTransition  // same instance as Platform
+        @Deprecated val TopLevel: PageTransition      // same instance as None
+    }
+}
+
+fun pageTransition(transition: PageTransition): Map<String, Any>
+```
+
+| Preset | iOS | Android |
+|---|---|---|
+| `Platform` | UIKit push: the new page slides in full width over 500ms while the old one shifts a quarter and dims; the edge swipe tracks the finger | Navigation 3's default: a 700ms crossfade; the back gesture shrinks the page while the previous one fades in |
+| `None` | Instant | Instant |
+| `Fade` | Material fade-through: the old page fades out (90ms), then the new one fades and scales in (220ms) | Same |
+| `Modal` | Slides up (400ms) and back down (200ms); the back gesture shrinks it away | Same |
+
+```kotlin
+override fun EntryProviderScope<NavKey>.register(dispatcher: NavigationDispatcher) {
+    entry<HomeTab>(metadata = pageTransition(PageTransition.None)) { HomeScreen() }        // tab root
+    entry<ComposeRoute>(metadata = pageTransition(PageTransition.Modal)) { ComposeScreen() }
+    entry<WelcomeRoute>(metadata = pageTransition(PageTransition.Fade)) { WelcomeScreen() }  // reached by replacing the stack
+}
+```
+
+- **Who decides**: a pushed destination's transition runs as it is pushed; a popped destination's runs as it is popped, back gesture included. Replacing the stack (`clearStack`, `FlowCompletionCommand`) counts as a push. Mark tab roots with `None` and tab switches are instant in both directions, while the screens they push keep the platform motion.
+- **Choose per destination, never from state**: do not pick the transition in `onDestinationChanged` or a ViewModel and feed it back into `NavContainer`. That callback fires after the transition has started, so every choice lands on the next navigation instead.
+- **Two panes**: a `listPane`/`detailPane` pair sharing the window animates with the list's transition as the pair enters or leaves; details swap inside the pane without a page transition.
+- **Overlays**: `bottomSheet()` and `dialog()` destinations ignore it and animate as sheets and dialogs.
+- **Host**: destinations are clipped to the container's bounds, and crossfades (`Platform` on Android, `Fade`) show whatever is behind the container mid-transition. Give it an opaque background.
+- **Custom motion**: Navigation 3's own metadata (`NavDisplay.transitionSpec { }`, `NavDisplay.popTransitionSpec { }`, `NavDisplay.predictivePopTransitionSpec { }`) takes precedence over `pageTransition(…)`. It is Compose-only.
+- **Known limitations**: `Platform` on iOS slides in fixed screen directions, so right-to-left layouts push from the right while the swipe-back comes from the right edge. An iOS edge swipe also dismisses a `Modal` destination, which a native full-screen cover would not allow.
 
 ## Back-stack results
 
