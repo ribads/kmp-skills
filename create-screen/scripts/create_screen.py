@@ -193,9 +193,7 @@ internal fun __NAME__Screen(
         }
     }
 
-    Scaffold(
-        backgroundColor = Theme.colors.surface.primaryLight,
-    ) { paddingValues ->
+    Scaffold { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()

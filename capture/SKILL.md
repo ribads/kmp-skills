@@ -411,6 +411,14 @@ Opinionated full-screen capture surface. No slots — it composes the building b
 
 - `onCaptured` fires for photo captures, user-initiated stop-recording, and engine-initiated auto-stops (duration / file-size).
 - `onError` fires for capture failures and OS-initiated recording interruptions.
+- Renders in a dark `WithAppearance` region, so it needs a Synapse theme (`WithAppTheme` or `WithTheme`) above it. It does not touch the system bars, because only the host knows whether it sits behind them. A host that shows it edge to edge keeps the bar icons light with a claim (see `/ui-element`):
+
+  ```kotlin
+  WithAppearance(Appearance.Dark) {
+      ThemedSystemBars()
+      CaptureScreen(controller = controller, modifier = Modifier.fillMaxSize())
+  }
+  ```
 
 When you need a custom layout, a recording-timer overlay, or branded chrome — drop `CaptureScreen` and assemble from the parts yourself (see [Headless](#headless--custom-chrome-no-capturescreen) below).
 

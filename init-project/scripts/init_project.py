@@ -22,7 +22,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 
-SYNAPSE_VERSION_FALLBACK = "0.0.28-alpha1"
+SYNAPSE_VERSION_FALLBACK = "0.2.0-alpha7"
 SYNAPSE_METADATA_URL = (
     "https://repo1.maven.org/maven2/com/ribads/synapse/ui-element/maven-metadata.xml"
 )
@@ -252,7 +252,7 @@ DerivedData/
 
 GRADLE_WRAPPER_PROPERTIES = '''distributionBase=GRADLE_USER_HOME
 distributionPath=wrapper/dists
-distributionUrl=https\\://services.gradle.org/distributions/gradle-9.4.1-bin.zip
+distributionUrl=https\\://services.gradle.org/distributions/gradle-9.5.0-bin.zip
 networkTimeout=10000
 validateDistributionUrl=true
 zipStoreBase=GRADLE_USER_HOME
@@ -260,21 +260,21 @@ zipStorePath=wrapper/dists
 '''
 
 LIBS_VERSIONS_TOML = '''[versions]
-agp = "9.2.1"
+agp = "9.3.1"
 android-compileSdk = "37"
 android-minSdk = "24"
 android-targetSdk = "37"
 androidx-activity = "1.13.0"
 androidx-appcompat = "1.7.1"
 androidx-core = "1.19.0"
-androidx-lifecycle = "2.10.0"
-composeMultiplatform = "1.11.1"
-kotlin = "2.4.0"
+androidx-lifecycle = "2.11.0"
+composeMultiplatform = "1.12.0-beta03"
+kotlin = "2.4.10"
 synapse = "__SYNAPSE_VERSION__"
 kotlinInject = "0.9.0"
-ksp = "2.3.4"
-ktor = "3.5.0"
-coilCompose = "3.4.0"
+ksp = "2.3.6"
+ktor = "3.5.2"
+coilCompose = "3.5.0"
 coroutines = "1.11.0"
 kermitLogger = "2.1.0"
 
@@ -402,10 +402,24 @@ ANDROID_STRINGS_XML = '''<resources>
 
 ANDROID_THEMES_XML = '''<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.__PROJECT_NAME__" parent="Theme.AppCompat.Light.NoActionBar">
+    <style name="Theme.__PROJECT_NAME__" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
+</resources>
+'''
+
+# Matches surface.primary in APP_THEME's light and dark schemes, so the window behind the first frame agrees.
+ANDROID_COLORS_XML = '''<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="window_background">#FAFAFA</color>
+</resources>
+'''
+
+ANDROID_COLORS_NIGHT_XML = '''<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="window_background">#121212</color>
 </resources>
 '''
 
@@ -668,6 +682,7 @@ import androidx.compose.ui.Modifier
 import __APP_PACKAGE__.ui.MainContract
 import __APP_PACKAGE__.ui.MainViewModel
 import com.ribads.synapse.ui.component.scaffold.Scaffold
+import com.ribads.synapse.ui.component.tray.ThemedBottomSheetAppearance
 import com.ribads.synapse.ui.compose.presentation.feature.FeatureLauncher
 import com.ribads.synapse.ui.compose.presentation.navigation.compose.NavContainer
 import com.ribads.synapse.ui.mvi.CollectAsEffect
@@ -697,6 +712,7 @@ internal fun RootScreen(
                 onDestinationChanged = { changed, _ ->
                     viewModel.emit(intent = MainContract.Intent.RouteChanged(key = changed))
                 },
+                bottomSheetAppearance = ThemedBottomSheetAppearance,
             )
 
             viewModel.effects.CollectAsEffect { effect ->
@@ -1051,7 +1067,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.ribads.synapse.ui.element.theme.Appearance
 import com.ribads.synapse.ui.element.theme.Border
+import com.ribads.synapse.ui.element.theme.ColorSchemes
 import com.ribads.synapse.ui.element.theme.Colors
 import com.ribads.synapse.ui.element.theme.Element
 import com.ribads.synapse.ui.element.theme.ElementInteractive
@@ -1062,190 +1080,121 @@ import com.ribads.synapse.ui.element.theme.Shape
 import com.ribads.synapse.ui.element.theme.Surface
 import com.ribads.synapse.ui.element.theme.SurfaceInteractive
 import com.ribads.synapse.ui.element.theme.Typography
-import com.ribads.synapse.ui.element.theme.WithTheme
+import com.ribads.synapse.ui.element.theme.WithAppTheme
 
 @Composable
 fun __PROJECT_NAME__Theme(
+    appearance: Appearance = Appearance.System,
     content: @Composable () -> Unit,
 ) {
-    val colors = Colors(
-        surface = Surface(
-            primaryLight = Color(0xFFFAFAFA),
-            secondaryLight = Color(0xFFF5F5F5),
-            subtleLight = Color(0xFFE0E0E0),
-            primaryDark = Color(0xFF121212),
-            secondaryDark = Color(0xFF1E1E1E),
-            subtleDark = Color(0xFF2C2C2C),
-        ),
-        surfaceInteractive = SurfaceInteractive(
-            enabledOnLight = Color(0xFF6366F1),
-            disabledOnLight = Color(0xFF6366F1).copy(alpha = 0.2f),
-            hoverTapOnLight = Color(0xFF818CF8),
-            enabledOnDark = Color(0xFF6366F1),
-            hoverTapOnDark = Color(0xFF4F46E5),
-            disabledOnDark = Color(0xFF374151),
-        ),
-        border = Border(
-            primaryOnLight = Color(0xFFE0E0E0),
-            secondaryOnLight = Color(0xFF9CA3AF),
-            emphasisOnLight = Color(0xFF6366F1),
-            primaryOnDark = Color(0xFF374151),
-            secondaryOnDark = Color(0xFF4B5563),
-            emphasisOnDark = Color(0xFFFFFFFF),
-        ),
-        element = Element(
-            primaryOnLight = Color(0xFF111827),
-            secondaryOnLight = Color(0xFF6B7280),
-            primaryOnDark = Color(0xFFFFFFFF),
-            secondaryOnDark = Color(0xFF9CA3AF),
-        ),
-        elementInteractive = ElementInteractive(
-            enabledOnLight = Color(0xFFFFFFFF),
-            disabledOnLight = Color(0xFFFFFFFF),
-            hoverTapOnLight = Color(0xFF6366F1),
-            enabledOnDark = Color(0xFF111827),
-            hoverTapOnDark = Color(0xFF9CA3AF),
-            disabledOnDark = Color(0xFF374151),
-        ),
-        shadow = Shadow(
-            spotOnDark = Color(0x33000000),
-            spotOnLight = Color(0x1A000000),
-        ),
-        intents = Intents(
-            accent = IntentPalette(
-                contentOnLight = Color(0xFF6366F1),
-                contentOnDark = Color(0xFF818CF8),
-                surfaceOnLight = Color(0xFFEEF2FF),
-                surfaceOnDark = Color(0xFF312E81),
-                borderOnLight = Color(0xFF6366F1),
-                borderOnDark = Color(0xFF818CF8),
-            ),
-            success = IntentPalette(
-                contentOnLight = Color(0xFF059669),
-                contentOnDark = Color(0xFF34D399),
-                surfaceOnLight = Color(0xFFECFDF5),
-                surfaceOnDark = Color(0xFF064E3B),
-                borderOnLight = Color(0xFF059669),
-                borderOnDark = Color(0xFF34D399),
-            ),
-            error = IntentPalette(
-                contentOnLight = Color(0xFFDC2626),
-                contentOnDark = Color(0xFFFCA5A5),
-                surfaceOnLight = Color(0xFFFEF2F2),
-                surfaceOnDark = Color(0xFF7F1D1D),
-                borderOnLight = Color(0xFFDC2626),
-                borderOnDark = Color(0xFFFCA5A5),
-            ),
-            warning = IntentPalette(
-                contentOnLight = Color(0xFFD97706),
-                contentOnDark = Color(0xFFFCD34D),
-                surfaceOnLight = Color(0xFFFFFBEB),
-                surfaceOnDark = Color(0xFF78350F),
-                borderOnLight = Color(0xFFD97706),
-                borderOnDark = Color(0xFFFCD34D),
-            ),
-        ),
-    )
-
-    val typography = Typography(
-        h1 = TextStyle(
-            fontFamily = FontFamily.Default,
-            fontWeight = FontWeight.Bold,
-            fontSize = 40.sp,
-            color = colors.element.primaryOnLight,
-        ),
-        h2 = TextStyle(
-            fontFamily = FontFamily.Default,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 32.sp,
-            color = colors.element.primaryOnLight,
-        ),
-        h3 = TextStyle(
-            fontFamily = FontFamily.Default,
-            fontWeight = FontWeight.Medium,
-            fontSize = 24.sp,
-            color = colors.element.primaryOnLight,
-        ),
-        h4 = TextStyle(
-            fontFamily = FontFamily.Default,
-            fontWeight = FontWeight.Medium,
-            fontSize = 18.sp,
-            color = colors.element.primaryOnLight,
-        ),
-        headingS = TextStyle(
-            fontFamily = FontFamily.Default,
-            fontWeight = FontWeight.Normal,
-            fontSize = 14.sp,
-            color = colors.element.primaryOnLight,
-        ),
-        headingM = TextStyle(
-            fontFamily = FontFamily.Default,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 16.sp,
-            color = colors.element.primaryOnLight,
-        ),
-        body = TextStyle(
-            fontFamily = FontFamily.Default,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 16.sp,
-            color = colors.element.secondaryOnLight,
-        ),
-        bodyM = TextStyle(
-            fontFamily = FontFamily.Default,
-            fontWeight = FontWeight.Medium,
-            fontSize = 16.sp,
-            color = colors.element.secondaryOnLight,
-        ),
-        bodyS = TextStyle(
-            fontFamily = FontFamily.Default,
-            fontWeight = FontWeight.Normal,
-            fontSize = 14.sp,
-            lineHeight = 20.sp,
-            color = colors.element.secondaryOnLight,
-        ),
-        bodyXs = TextStyle(
-            fontFamily = FontFamily.Default,
-            fontWeight = FontWeight.Normal,
-            fontSize = 12.sp,
-            color = colors.element.secondaryOnLight,
-        ),
-        labelS = TextStyle(
-            fontFamily = FontFamily.Default,
-            fontWeight = FontWeight.Normal,
-            fontSize = 12.sp,
-            color = colors.element.secondaryOnLight,
-        ),
-        labelXs = TextStyle(
-            fontFamily = FontFamily.Default,
-            fontWeight = FontWeight.Normal,
-            fontSize = 10.sp,
-            color = colors.element.secondaryOnLight,
-        ),
-        button = TextStyle(
-            fontFamily = FontFamily.Default,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 16.sp,
-            color = colors.elementInteractive.enabledOnLight,
-        ),
-    )
-
-    val shape = Shape(
-        buttonShape = RoundedCornerShape(percent = 50),
-        circleShape = RoundedCornerShape(50),
-        roundShape = RoundedCornerShape(16.dp),
-        imageShape = CircleShape,
-        card = RoundedCornerShape(8.dp),
-        textShape = RoundedCornerShape(4.dp),
-        chipShape = RoundedCornerShape(8.dp),
-    )
-
-    WithTheme(
-        colors = colors,
-        typography = typography,
+    WithAppTheme(
+        appearance = appearance,
+        colorSchemes = AppColorSchemes,
+        typography = AppTypography,
+        shape = AppShape,
         content = content,
-        shape = shape,
     )
 }
+
+private val LightColors = Colors(
+    surface = Surface(
+        primary = Color(0xFFFAFAFA),
+        secondary = Color(0xFFF5F5F5),
+        subtle = Color(0xFFE0E0E0),
+        raised = Color(0xFFFFFFFF),
+        skeleton = Color(0xFFE0E0E0),
+    ),
+    surfaceInteractive = SurfaceInteractive(
+        enabled = Color(0xFF6366F1),
+        hoverTap = Color(0xFF818CF8),
+        disabled = Color(0xFF6366F1).copy(alpha = 0.2f),
+    ),
+    border = Border(
+        primary = Color(0xFFE0E0E0),
+        secondary = Color(0xFF9CA3AF),
+        emphasis = Color(0xFF6366F1),
+    ),
+    element = Element(
+        primary = Color(0xFF111827),
+        secondary = Color(0xFF6B7280),
+    ),
+    elementInteractive = ElementInteractive(
+        enabled = Color(0xFFFFFFFF),
+        hoverTap = Color(0xFF6366F1),
+        disabled = Color(0xFFFFFFFF),
+    ),
+    shadow = Shadow(spot = Color(0x1A000000)),
+    intents = Intents(
+        accent = IntentPalette(content = Color(0xFF6366F1), surface = Color(0xFFEEF2FF), border = Color(0xFF6366F1)),
+        success = IntentPalette(content = Color(0xFF059669), surface = Color(0xFFECFDF5), border = Color(0xFF059669)),
+        error = IntentPalette(content = Color(0xFFDC2626), surface = Color(0xFFFEF2F2), border = Color(0xFFDC2626)),
+        warning = IntentPalette(content = Color(0xFFD97706), surface = Color(0xFFFFFBEB), border = Color(0xFFD97706)),
+    ),
+)
+
+private val DarkColors = Colors(
+    surface = Surface(
+        primary = Color(0xFF121212),
+        secondary = Color(0xFF1E1E1E),
+        subtle = Color(0xFF2C2C2C),
+        raised = Color(0xFF1E1E1E),
+        skeleton = Color(0xFF2C2C2C),
+    ),
+    surfaceInteractive = SurfaceInteractive(
+        enabled = Color(0xFF6366F1),
+        hoverTap = Color(0xFF4F46E5),
+        disabled = Color(0xFF374151),
+    ),
+    border = Border(
+        primary = Color(0xFF374151),
+        secondary = Color(0xFF4B5563),
+        emphasis = Color(0xFFFFFFFF),
+    ),
+    element = Element(
+        primary = Color(0xFFFFFFFF),
+        secondary = Color(0xFF9CA3AF),
+    ),
+    elementInteractive = ElementInteractive(
+        enabled = Color(0xFF111827),
+        hoverTap = Color(0xFF9CA3AF),
+        disabled = Color(0xFF374151),
+    ),
+    shadow = Shadow(spot = Color(0x33000000)),
+    intents = Intents(
+        accent = IntentPalette(content = Color(0xFF818CF8), surface = Color(0xFF312E81), border = Color(0xFF818CF8)),
+        success = IntentPalette(content = Color(0xFF34D399), surface = Color(0xFF064E3B), border = Color(0xFF34D399)),
+        error = IntentPalette(content = Color(0xFFFCA5A5), surface = Color(0xFF7F1D1D), border = Color(0xFFFCA5A5)),
+        warning = IntentPalette(content = Color(0xFFFCD34D), surface = Color(0xFF78350F), border = Color(0xFFFCD34D)),
+    ),
+)
+
+private val AppColorSchemes = ColorSchemes(light = LightColors, dark = DarkColors)
+
+private val AppTypography = Typography(
+    h1 = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.Bold, fontSize = 40.sp),
+    h2 = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.SemiBold, fontSize = 32.sp),
+    h3 = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.Medium, fontSize = 24.sp),
+    h4 = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.Medium, fontSize = 18.sp),
+    headingS = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.Normal, fontSize = 14.sp),
+    headingM = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.SemiBold, fontSize = 16.sp),
+    body = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.SemiBold, fontSize = 16.sp),
+    bodyM = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.Medium, fontSize = 16.sp),
+    bodyS = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.Normal, fontSize = 14.sp, lineHeight = 20.sp),
+    bodyXs = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.Normal, fontSize = 12.sp),
+    labelS = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.Normal, fontSize = 12.sp),
+    labelXs = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.Normal, fontSize = 10.sp),
+    button = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.SemiBold, fontSize = 16.sp),
+)
+
+private val AppShape = Shape(
+    buttonShape = RoundedCornerShape(percent = 50),
+    circleShape = RoundedCornerShape(50),
+    roundShape = RoundedCornerShape(16.dp),
+    imageShape = CircleShape,
+    card = RoundedCornerShape(8.dp),
+    textShape = RoundedCornerShape(4.dp),
+    chipShape = RoundedCornerShape(8.dp),
+)
 '''
 
 # ─── core modules ─────────────────────────────────────────────────────────────
@@ -2150,9 +2099,7 @@ internal fun LandingScreen(
         }
     }
 
-    Scaffold(
-        backgroundColor = Theme.colors.surface.primaryLight,
-    ) { paddingValues ->
+    Scaffold { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -2292,6 +2239,8 @@ def main() -> None:
     write_file(android_app / "src" / "main" / "AndroidManifest.xml", render(ANDROID_MANIFEST, ctx), force)
     write_file(android_app / "src" / "main" / "res" / "values" / "strings.xml", render(ANDROID_STRINGS_XML, ctx), force)
     write_file(android_app / "src" / "main" / "res" / "values" / "themes.xml", render(ANDROID_THEMES_XML, ctx), force)
+    write_file(android_app / "src" / "main" / "res" / "values" / "colors.xml", ANDROID_COLORS_XML, force)
+    write_file(android_app / "src" / "main" / "res" / "values-night" / "colors.xml", ANDROID_COLORS_NIGHT_XML, force)
     write_file(android_app_src / "MainActivity.kt", render(MAIN_ACTIVITY, ctx), force)
 
     # ── composeApp ──

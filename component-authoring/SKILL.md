@@ -1,6 +1,6 @@
 ---
 name: component-authoring
-description: Use when writing a new @Composable that Synapse does not already provide: an app-level component in compose-ui/, or a screen-local section composable in a feature's ui/ module. Covers the escape-hatch gate, file and package layout, parameter ordering, callback naming, model design (Clause over String, sealed variants, Placeholder), inverted-colour handling, and size constants. Trigger when reaching for a custom composable, reviewing one, or deciding whether to promote a component to a shared module.
+description: Use when writing a new @Composable that Synapse does not already provide: an app-level component in compose-ui/, or a screen-local section composable in a feature's ui/ module. Covers the escape-hatch gate, file and package layout, parameter ordering, callback naming, model design (Clause over String, sealed variants, Placeholder), colour roles and fixed-appearance regions, and size constants. Trigger when reaching for a custom composable, reviewing one, or deciding whether to promote a component to a shared module.
 user-invocable: true
 ---
 
@@ -64,11 +64,10 @@ fun ProductCard(
     style: CardStyle = CardStyle.Regular,             // 3. config with defaults
     onClick: OptionalClickCallback,                   // 4. callbacks
     onFavouriteClick: (id: String) -> Unit,
-    invertedColors: Boolean = Theme.invertedColors,   // 5. inverted colours, last
 )
 ```
 
-Note that **required callbacks sit after defaulted config parameters.** That is a deliberate departure from the stock Compose convention of trailing lambdas: it keeps `invertedColors` reliably last and forces callers to pass callbacks as named arguments, which reads better at four callbacks than a pile of trailing braces.
+Note that **required callbacks sit after defaulted config parameters.** That is a deliberate departure from the stock Compose convention of trailing lambdas: it forces callers to pass callbacks as named arguments, which reads better at four callbacks than a pile of trailing braces.
 
 **Containers are the exception.** A component whose job is to wrap content has no model, leads with `modifier`, and ends with a trailing `content` slot:
 
@@ -76,14 +75,13 @@ Note that **required callbacks sit after defaulted config parameters.** That is 
 @Composable
 fun Panel(
     modifier: Modifier = Modifier,
-    invertedColors: Boolean = Theme.invertedColors,
     content: @Composable ColumnScope.() -> Unit,
 )
 ```
 
-So the full rule is: `model → modifier → config → callbacks → invertedColors → content`, dropping whichever do not apply.
+So the full rule is: `model`, `modifier`, config, callbacks, `content`, dropping whichever do not apply. There is no appearance or colour-inversion parameter: see [Colours](#colours).
 
-Synapse's own module holds this at roughly 80%. The known deviations are `Divider` (leads with `color`), the `field/` family (buries `modifier`), and `Waveform` (`invertedColors` mid-list). Match the rule above for new components rather than the nearest existing file.
+Synapse's own module holds this at roughly 80%. The known deviations are `Divider` (leads with `color`) and the `field/` family (buries `modifier`). Match the rule above for new components rather than the nearest existing file.
 
 ### Callback naming
 
@@ -205,7 +203,7 @@ Give models the constructors their call sites actually want:
 ```kotlin
 @Immutable
 data class ErrorCardModel(
-    val image: Image = Image.Drawable(Res.drawable.ic_error),
+    val image: Image = Image.Glyph(Res.drawable.ic_error),
     val title: Clause = Text.Localized(Res.string.error_title),
     val subtitle: Clause,
     val action: ButtonModel = ButtonModel(title = Text.Localized(Res.string.retry)),
@@ -220,9 +218,9 @@ A caller that only knows the error message should only have to pass the error me
 
 ---
 
-## Colours and inverted surfaces
+## Colours
 
-Every colour comes from `Theme.colors.*`. Resolve once at the top of the component and hand the result down through a CompositionLocal rather than threading colours into every sub-composable:
+Every colour comes from a role in `Theme.colors.*`. The theme resolved the appearance before the component runs, so a role read is correct in light and dark without branching. Resolve once at the top of the component and hand the result down through a CompositionLocal rather than threading colours into every sub-composable:
 
 ```kotlin
 // internal/ProductCardColors.kt
@@ -239,25 +237,24 @@ internal fun ProvideProductCardColors(colors: ProductCardColors, content: @Compo
     CompositionLocalProvider(LocalProductCardColorsProvider provides colors, content = content)
 
 @Composable
-internal fun componentColors(invertedColors: Boolean) = when (invertedColors) {
-    true -> ProductCardColors(
-        titleColor = Theme.colors.element.primaryOnDark,
-        backgroundColor = Theme.colors.surface.primaryDark,
-    )
-    false -> ProductCardColors(
-        titleColor = Theme.colors.element.primaryOnLight,
-        backgroundColor = Theme.colors.surface.primaryLight,
-    )
-}
+internal fun componentColors() = ProductCardColors(
+    titleColor = Theme.colors.element.primary,
+    backgroundColor = Theme.colors.surface.secondary,
+)
 ```
 
 ```kotlin
-ProvideProductCardColors(colors = componentColors(invertedColors)) {
+ProvideProductCardColors(colors = componentColors()) {
     when (model) { … }
 }
 ```
 
-**Never branch on `isSystemInDarkTheme()` in component or feature code.** `invertedColors` defaults to `Theme.invertedColors`, which the app seeds once at the root. Pass it explicitly only for surfaces that must render dark regardless of theme: controls over an image, a camera overlay, a video scrubber. The caller owns inversion; the component just obeys.
+- **Pick the role for its meaning, not its current value.** Text and icons on the canvas are `element.*`; a layered card is `surface.secondary`; outlines are `border.*`; an enabled or pressed control background is `surfaceInteractive.*` with `elementInteractive.*` on it; anything carrying an intent reads `intents.<intent>.*`. A role picked because it happens to look right in one appearance will be wrong in the other.
+- **Sheets, dialogs and menus** paint `surface.raised` and wrap their content in `WithRaisedSurface`, so children that paint `surface.primary` match the container.
+- **A container that paints a background provides `LocalContentColor`** for its content, so text and glyphs without explicit colours stay readable on it.
+- **Icons take an `Image` and draw it with `Icon(image, tint = ...)`.** A `Glyph` follows the tint (pass the per-state colour); an `Artwork` is drawn as authored. Do not add a "tint this icon" flag: the image type is that decision.
+- **Never branch on the appearance to pick a colour** (`isSystemInDarkTheme()`, `Theme.isDark`), and never take an `invertedColors`-style parameter. A caller that needs a region in a fixed appearance (controls over a photo, a camera overlay, a video scrubber) wraps it in `WithAppearance(Appearance.Dark)`, and the component inside just reads roles. `Theme.isDark` is only for choosing a dark asset variant or configuring UI that does not read Synapse roles.
+- **No colour literals** outside the app's theme definition. The exception is a categorical data palette (chart series), which needs a variant per appearance.
 
 ---
 
@@ -293,13 +290,13 @@ Promoting into `ui:component` means it is Synapse public API: update `/ui-compon
 
 - **Check `/ui-components` first.** Compose primitives before writing anything new.
 - **One public composable per file**, private sub-composables beside it, models in `model/`, internals in `internal/`.
-- **`model → modifier → config → callbacks → invertedColors → content`.** Containers drop `model` and lead with `modifier`.
+- **`model`, `modifier`, config, callbacks, `content`.** Containers drop `model` and lead with `modifier`.
 - **Name callbacks for the slot, not the consequence.** `onDismissRequest` for every dismissal.
 - **Slots for containers only.** Leaf components take a model.
 - **Stateless.** No stateful/stateless pairs, no `rememberSaveable`, no public `rememberXState()`.
 - **Never accept a domain model or use-case DTO.**
 - **`Clause` for text, `Image` for images**, never a raw `String`.
 - **Sealed for structural variants, enum for visual states**, `Placeholder` as a real variant.
-- **Colours through `Theme.colors` and a per-component CompositionLocal.** Never branch on `isSystemInDarkTheme()`; take `invertedColors`.
+- **Colours through `Theme.colors` roles and a per-component CompositionLocal.** Never branch on the appearance; fixed-appearance regions are the caller's `WithAppearance`.
 - **Named file-level constants for intrinsic geometry**, `Theme.spacing` for layout.
 - **Promote on the second consumer**, and update `/ui-components` when a component lands in `ui:component`.

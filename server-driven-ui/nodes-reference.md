@@ -33,7 +33,7 @@
 | `Text` | `content`, `style` (UITypographyToken), `textFormat` (UITextFormat), `conditionalTextFormat` (Map\<String, UITextFormat\>), `actionId`, `maxLines` |
 | `MoneyText` | `amount` (Long, minor units), `currency` (ISO 4217), `style`, `textFormat` (UITextFormat), `stateKey` |
 | `Image` | `url`, `contentDescription`, `actionId` |
-| `Icon` | `url`, `adaptive` (Boolean), `actionId` |
+| `Icon` | `url`, `adaptive` (Boolean: tint the icon with the surrounding content colour, `element.primary` by default), `actionId` |
 | `RichText` | `content`, `style` (UITypographyToken) |
 
 ---

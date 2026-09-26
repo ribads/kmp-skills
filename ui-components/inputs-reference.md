@@ -3,13 +3,13 @@
 ## Buttons
 
 ```kotlin
-@Composable fun PrimaryButton(model: ButtonModel, modifier: Modifier = Modifier, state: ButtonState = ButtonState.Enabled, onClick: (() -> Unit)?, invertedColors: Boolean = Theme.invertedColors)
-@Composable fun SmallButton(model: ButtonModel, modifier: Modifier = Modifier, state: ButtonState = ButtonState.Enabled, onClick: OptionalClickCallback, invertedColors: Boolean = Theme.invertedColors)
-@Composable fun OutlineButton(model: ButtonModel, modifier: Modifier = Modifier, state: ButtonState = ButtonState.Enabled, style: ButtonStyle = ButtonStyle.Regular, onClick: OptionalClickCallback, invertedColors: Boolean = Theme.invertedColors)
-@Composable fun SmallOutlineButton(model: ButtonModel, modifier: Modifier = Modifier, state: ButtonState = ButtonState.Enabled, onClick: OptionalClickCallback, invertedColors: Boolean = Theme.invertedColors)
+@Composable fun PrimaryButton(model: ButtonModel, modifier: Modifier = Modifier, state: ButtonState = ButtonState.Enabled, onClick: (() -> Unit)?)
+@Composable fun SmallButton(model: ButtonModel, modifier: Modifier = Modifier, state: ButtonState = ButtonState.Enabled, onClick: OptionalClickCallback)
+@Composable fun OutlineButton(model: ButtonModel, modifier: Modifier = Modifier, state: ButtonState = ButtonState.Enabled, style: ButtonStyle = ButtonStyle.Regular, onClick: OptionalClickCallback)
+@Composable fun SmallOutlineButton(model: ButtonModel, modifier: Modifier = Modifier, state: ButtonState = ButtonState.Enabled, onClick: OptionalClickCallback)
 
 // Lower-level button used by PrimaryButton/SmallButton. Reads its colors from the
-// surrounding ProvideBaseButtonColors composition; no invertedColors parameter.
+// surrounding ProvideBaseButtonColors composition.
 @Composable fun BaseButton(model: ButtonModel, modifier: Modifier = Modifier, style: ButtonStyle, state: ButtonState, onClick: OptionalClickCallback)
 
 @Immutable
@@ -36,7 +36,6 @@ fun Clause.asButton() = ButtonModel(leadingImage = null, trailingImage = null, t
     onValueChange: (String) -> Unit,
     leadingContent: @Composable (RowScope.() -> Unit)? = null,
     trailingContent: @Composable (() -> Unit)? = null,
-    invertedColors: Boolean = Theme.invertedColors
 )
 
 @Composable fun PasswordTextField(
@@ -46,14 +45,12 @@ fun Clause.asButton() = ButtonModel(leadingImage = null, trailingImage = null, t
     modifier: Modifier = Modifier,
     onValueChange: (String) -> Unit,
     onPasswordToggleChange: ((Boolean) -> Unit)? = null,
-    invertedColors: Boolean = Theme.invertedColors
 )
 
 @Composable fun PhoneTextField(
     model: PhoneInputModel, modifier: Modifier = Modifier,
     onPhoneNumberChanged: (String) -> Unit,
     onCountryCodePickClick: OptionalClickCallback,
-    invertedColors: Boolean = Theme.invertedColors
 )
 
 @Composable fun CurrencyTextField(
@@ -61,22 +58,20 @@ fun Clause.asButton() = ButtonModel(leadingImage = null, trailingImage = null, t
     onClick: OptionalClickCallback = null,
     onAmountChanged: (Long?) -> Unit,
     dropDownContent: @Composable ((Dp) -> Unit)? = null,
-    invertedColors: Boolean = Theme.invertedColors
 )
 
 @Composable fun SelectionTextField(
     model: TextInputModel, modifier: Modifier = Modifier,
-    trailingIcon: Image = Image.Drawable(Res.drawable.sc_icon_chevron_down),
+    trailingIcon: Image = Image.Glyph(Res.drawable.sc_icon_chevron_down),
     onClick: OptionalClickCallback,
-    invertedColors: Boolean = Theme.invertedColors
 )
 
 @Composable fun DropdownSelectionField(
     model: SelectionFieldModel,
     modifier: Modifier = Modifier,
     onOptionSelected: (SelectionOption) -> Unit,
-    invertedColors: Boolean = Theme.invertedColors,
 )
+// The menu paints surface.raised; its items render inside WithRaisedSurface.
 
 @Composable fun TextArea(
     model: TextInputModel, minLines: Int = 4, maxLines: Int = 4,
@@ -84,7 +79,6 @@ fun Clause.asButton() = ButtonModel(leadingImage = null, trailingImage = null, t
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     keyboardActions: KeyboardActions = KeyboardActions(),
     onValueChange: (value: String) -> Unit,
-    invertedColors: Boolean = Theme.invertedColors
 )
 ```
 

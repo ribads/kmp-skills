@@ -250,7 +250,7 @@ Before writing any new `@Composable`, in order:
 2. Can Synapse primitives be composed (e.g. `Card` + `Image` + `Text`)?
 3. Does the app's `compose-ui/` module already have a wrapper?
 
-If one is still needed, invoke `/component-authoring`. It covers where the file goes, parameter order, callback naming, model design, and inverted colours. The short version: put it in `compose-ui/` if a second screen could use it and in the feature's `section/` package otherwise, give it a model built in the Mapper, keep it stateless, and never inline a multi-element composable into `{Name}Screen.kt`.
+If one is still needed, invoke `/component-authoring`. It covers where the file goes, parameter order, callback naming, model design, and colour roles. The short version: put it in `compose-ui/` if a second screen could use it and in the feature's `section/` package otherwise, give it a model built in the Mapper, keep it stateless, and never inline a multi-element composable into `{Name}Screen.kt`.
 
 ---
 

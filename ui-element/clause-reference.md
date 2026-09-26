@@ -51,12 +51,13 @@ data class Graphics(
     val intent: TextIntent? = null,
     val actionId: String? = null,
     val size: Int? = null,         // Size in sp (default 20sp)
-    val blend: Boolean = false,    // Blend with text color
     val contentDescription: String? = null,  // Screen-reader label; null = decorative
 ) : Clause()
 
 data class CompositeClause(val items: List<Clause>) : Clause()
 ```
+
+A `Graphics` clause with an `Image.Glyph` is tinted with its `intent`'s colour, or with the surrounding text colour when `intent` is null. Any other image type is drawn as authored.
 
 ---
 
@@ -122,6 +123,8 @@ fun WithTextIntentPalette(palette: TextIntentPalette, content: @Composable () ->
 val LocalTextIntentPalette: ProvidableCompositionLocal<TextIntentPalette?>   // default null
 ```
 
+Without a `WithTextIntentPalette`, each intent reads the theme's `Intents` for the current appearance: `Caution` uses `intents.warning`, `Emphasis` uses `intents.accent`, `Success` uses `intents.success`, and `Error` uses `intents.error`. `toColor()` returns the palette's `content` and `toBackgroundColor()` its `surface`. `textIntentPalette(...)` fills every argument left `null` from the same roles.
+
 ---
 
 ## Currency
@@ -170,9 +173,10 @@ fun TextLink(
     textDecoration: TextDecoration = TextDecoration.Underline,
     style: TextStyle = Theme.typography.body.copy(fontWeight = FontWeight.SemiBold),
     enabled: Boolean = true,
-    invertedColors: Boolean = Theme.invertedColors,
     onClick: () -> Unit,
 )
+// Colour: the clause's intent colour, else style.color, else LocalContentColor.
+// Disabled links use Theme.colors.elementInteractive.disabled.
 
 @Composable
 fun WithTextClickHandler(

@@ -271,7 +271,7 @@ data class BottomSheetAppearance(                     // app-wide, via NavContai
 
 **The destination already is the sheet.** Root a `bottomSheet()` screen in `TraySurface` (or `ScrollableTraySurface` for scrolling content, with `BottomSheetOptions(skipPartiallyExpanded = true, isSwipeDismissible = false, showDragHandle = false)`) from `/ui-components`. Never root it in `Tray` or `ScrollableTray`: those draw their own sheet, so the user gets a second sheet behind the first.
 
-**One look for every sheet.** `NavContainer` also publishes `bottomSheetAppearance` as `LocalBottomSheetAppearance`, and Synapse's in-screen sheets (`Tray`, `ScrollableTray`, `DatePickerBottomSheet`) read it. Set the drag handle, colours and `contentDecoration` once on `NavContainer` and both kinds of sheet match. Outside any `NavContainer` the local holds `BottomSheetAppearance()`.
+**One look for every sheet.** `NavContainer` also publishes `bottomSheetAppearance` as `LocalBottomSheetAppearance`, and Synapse's in-screen sheets (`Tray`, `ScrollableTray`, `DatePickerBottomSheet`) read it. Set the drag handle, colours and `contentDecoration` once on `NavContainer` and both kinds of sheet match. Apps on the Synapse theme pass `ThemedBottomSheetAppearance` from `/ui-components`, which paints `surface.raised`, tints the handle with `border.primary` and wraps the content in `WithRaisedSurface`. Outside any `NavContainer` the local holds `BottomSheetAppearance()`.
 
 ```kotlin
 val LocalBottomSheetAppearance: ProvidableCompositionLocal<BottomSheetAppearance>

@@ -45,6 +45,15 @@ data class UIThemeColors(
 
 **UIThemeIntentPalette**: `contentOnLight`, `contentOnDark`, `surfaceOnLight`, `surfaceOnDark`, `borderOnLight`, `borderOnDark` (all `String?` hex)
 
+### How payload colours apply
+
+The host app's theme has a light and a dark scheme of single-valued roles (see `/ui-element`). The payload keeps light/dark field pairs, and each field sets one role in one scheme: a `...Light` or `...OnLight` field sets the light scheme, a `...Dark` or `...OnDark` field sets the dark scheme, with the suffix dropped (`element.primaryOnDark` sets the dark scheme's `element.primary`).
+
+- **Unset fields keep the host's value** for that role and appearance, so a partial theme changes only what it names. A payload that sets only `...OnLight` fields leaves dark mode entirely to the host.
+- **Roles with no payload field** (`surface.raised`, `surface.skeleton`, `overlay`) always come from the host.
+- **The appearance is the host's.** The payload never chooses light or dark. Compose renders the scheme for the host's `WithAppTheme` appearance; SwiftUI renders the one for the view's `\.colorScheme`.
+- In Compose, a schema with no `theme` renders with the host theme unchanged. The SwiftUI engine has no host Synapse theme, so it uses iOS system colours for anything the payload leaves unset.
+
 ---
 
 ## UIThemeTypography

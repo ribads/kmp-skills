@@ -438,7 +438,7 @@ internal fun LoginScreen(
         }
     }
 
-    Scaffold(backgroundColor = Theme.colors.surface.primaryLight) { padding ->
+    Scaffold { padding ->
         Column(
             modifier = Modifier.padding(padding).padding(horizontal = Theme.spacing.x6),
             verticalArrangement = Arrangement.spacedBy(Theme.spacing.x4),

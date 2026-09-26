@@ -44,6 +44,7 @@ Depends on `ui:element`.
 | Tray | `Tray` | — | [layout](layout-reference.md) |
 | Scrollable tray | `ScrollableTray` | — | [layout](layout-reference.md) |
 | Tray as a `bottomSheet()` screen | `TraySurface` / `ScrollableTraySurface` | — | [layout](layout-reference.md) |
+| Sheet look for `NavContainer` | `ThemedBottomSheetAppearance` | `BottomSheetAppearance` | [layout](layout-reference.md) |
 | Checkbox | `LabelCheckbox` | `CheckboxModel` | [controls](controls-reference.md) |
 | Progress bar | `ProgressBar` | `ProgressBarModel` | [controls](controls-reference.md) |
 | Circular progress | `CircularProgress` | `CircularProgressModel` | [controls](controls-reference.md) |
@@ -72,14 +73,14 @@ Depends on `ui:element`.
 
 Every component in this catalog follows the same shape. Knowing it means you can call an unfamiliar component correctly without opening its reference file, and it is the contract your own composables must follow (see `/component-authoring`).
 
-**Signature order:** `model` → `modifier: Modifier = Modifier` → config with defaults → callbacks → `invertedColors: Boolean = Theme.invertedColors` → trailing `content`.
+**Signature order:** `model`, then `modifier: Modifier = Modifier`, then config with defaults, then callbacks, then a trailing `content`.
 
 ```kotlin
 PrimaryButton(model: ButtonModel, modifier: Modifier = Modifier, state: ButtonState = ButtonState.Enabled,
-              onClick: (() -> Unit)?, invertedColors: Boolean = Theme.invertedColors)
+              onClick: (() -> Unit)?)
 ```
 
-Required callbacks deliberately sit *after* defaulted config parameters, so `invertedColors` stays last and callbacks are passed as named arguments. Containers (`Scaffold`, `Card`, `Tray`, `ToastHandler`) have no `model`, lead with `modifier`, and end with a trailing `content` slot. A few components predate the rule: `Divider` leads with `color`, and the text-field family buries `modifier` mid-list.
+Required callbacks deliberately sit *after* defaulted config parameters, so callbacks are passed as named arguments. Containers (`Scaffold`, `Card`, `Tray`, `ToastHandler`) have no `model`, lead with `modifier`, and end with a trailing `content` slot. A few components predate the rule: `Divider` leads with `color`, and the text-field family buries `modifier` mid-list.
 
 **Everything else that holds across the catalog:**
 
@@ -89,6 +90,7 @@ Required callbacks deliberately sit *after* defaulted config parameters, so `inv
 - **Components are stateless.** They render what you pass and report events upward; there are no stateful/stateless pairs and no public `rememberXState()` factories. Hoist state into `ViewState`.
 - **Components never accept domain models or use-case DTOs.** Translate in the Mapper first.
 - **`ButtonState` is a separate `ViewState` field**, not a field on `ButtonModel`. Pass it as the `state =` argument so loading and disabled states are driven by the reducer.
+- **Components read theme roles and never branch on the appearance.** They are correct in light and dark with no arguments; a region that must stay dark (a camera, controls over a photo) is wrapped in `WithAppearance(Appearance.Dark)` by the caller (see `/ui-element`).
 - **Validation feedback goes in the model.** `TextInputModel.isError = true` recolours the indicator and footer automatically; put the message in `footerText`, not in a separate `Text` below the field.
 - **Callbacks are named for the slot, not the consequence**: `onClick` when there is one action, otherwise `onLeadingClick` / `onTrailingIconClick` / `onValueChange` / `onCheckedChange`, and `onDismissRequest` for every dismissal. Nullable click handlers use `OptionalClickCallback` from `ui:element`.
 

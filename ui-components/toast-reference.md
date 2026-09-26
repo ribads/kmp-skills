@@ -79,7 +79,6 @@ object Toast {
     modifier: Modifier = Modifier,
     position: ToastPosition = ToastPosition.Top,
     style: ToastStyle = ToastDefaults.style(),
-    invertedColors: Boolean = Theme.invertedColors,
     content: @Composable () -> Unit,
 )
 ```
@@ -116,9 +115,9 @@ data class ToastStyle(
 
 @Immutable
 data class ToastIntentStyle(
-    val backgroundLight: Color, val backgroundDark: Color,
-    val contentLight: Color,    val contentDark: Color,
-    val borderLight: Color,     val borderDark: Color,
+    val background: Color,
+    val content: Color,     // message text and a Glyph icon
+    val border: Color,
 )
 
 object ToastDefaults {
@@ -138,7 +137,7 @@ object ToastDefaults {
 }
 ```
 
-Defaults resolve every color from `Theme.colors.intents.{accent,success,warning,error}`. Override one intent by constructing a `ToastIntentStyle` yourself and passing just that param to `ToastDefaults.style(...)`.
+Defaults map each intent's palette from `Theme.colors.intents.{accent,success,warning,error}` for the current appearance: `background = surface`, `content = content`, `border = border`. Override one intent by constructing a `ToastIntentStyle` yourself and passing just that param to `ToastDefaults.style(...)`. `style()` is composable, so build the override from roles and it stays correct in both appearances.
 
 ## Behaviour
 
@@ -150,7 +149,7 @@ Defaults resolve every color from `Theme.colors.intents.{accent,success,warning,
 | Swipe-to-dismiss | Horizontal drag, threshold 40% of width. Snaps back with spring if below threshold. |
 | Tap-to-dismiss | Off. |
 | Queue / cap | None — caller discipline. |
-| Icon tinting | `ColorFilter.tint(contentColor)` — the leading icon inherits the intent's content color. |
+| Icon tinting | A `Glyph` leading icon is tinted with the intent style's `content`; an `Artwork` is drawn as authored. |
 
 ## Usage
 
@@ -201,12 +200,9 @@ ToastHandler(
     style = ToastDefaults.style(
         shape = RoundedCornerShape(24.dp),
         error = ToastIntentStyle(
-            backgroundLight = Color(0xFFB00020),
-            backgroundDark  = Color(0xFF8B0015),
-            contentLight    = Color.White,
-            contentDark     = Color.White,
-            borderLight     = Color.Transparent,
-            borderDark      = Color.Transparent,
+            background = Theme.colors.intents.error.content,
+            content = Theme.colors.surface.primary,
+            border = Color.Transparent,
         ),
     ),
 ) { ... }

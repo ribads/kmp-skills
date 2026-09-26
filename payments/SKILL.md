@@ -198,6 +198,7 @@ class PaystackPaymentSheetState {
 fun PaystackPaymentSheet(
     state: PaystackPaymentSheetState,
     onResult: (PaymentSheetResult) -> Unit,
+    darkTheme: Boolean = isSystemInDarkTheme(),
 )
 
 // --- Low-level composable (embed in your own container) ---
@@ -207,6 +208,7 @@ fun PaymentSheetContent(
     accessCode: String,
     onResult: (PaymentSheetResult) -> Unit,
     modifier: Modifier = Modifier,
+    darkTheme: Boolean = isSystemInDarkTheme(),
 )
 
 // --- Result types ---
@@ -257,6 +259,8 @@ PaystackPaymentSheet(
 ```
 
 **Screens**: Card payments (number/expiry/CVV, PIN, OTP, phone, address, DOB, 3DS), M-Pesa (online/offline)
+
+**Appearance**: the flow has its own light and dark Paystack palettes and never reads the host's Synapse theme. `darkTheme` picks one and defaults to the platform's appearance. Inside a Synapse app, pass `darkTheme = Theme.isDark` so the sheet follows an appearance the app sets itself (an in-app light/dark switch). The platform entry points follow the platform: `PaymentSheet` runs its own activity with a DayNight window, which follows the app's night mode on Android 12+ (set by `WithAppTheme`) and the device below that, and `PaymentSheetViewController` follows the presenting window's `overrideUserInterfaceStyle`.
 
 ---
 

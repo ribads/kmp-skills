@@ -48,24 +48,24 @@ Scaffold(
                 items = listOf(
                     BottomNavigationItem(
                         id = "home",
-                        icon = Image.Drawable(Res.drawable.ic_home),
+                        icon = Image.Glyph(Res.drawable.ic_home),
                         label = "Home".asText(),
                     ),
                     BottomNavigationItem(
                         id = "search",
-                        icon = Image.Drawable(Res.drawable.ic_search),
+                        icon = Image.Glyph(Res.drawable.ic_search),
                         label = "Search".asText(),
                     ),
                     BottomNavigationItem(
                         id = "inbox",
-                        icon = Image.Drawable(Res.drawable.ic_inbox),
-                        selectedIcon = Image.Drawable(Res.drawable.ic_inbox_filled),
+                        icon = Image.Glyph(Res.drawable.ic_inbox),
+                        selectedIcon = Image.Glyph(Res.drawable.ic_inbox_filled),
                         label = "Inbox".asText(),
                         badge = BottomNavigationBadge.Count(3),
                     ),
                     BottomNavigationItem(
                         id = "profile",
-                        icon = Image.Drawable(Res.drawable.ic_profile),
+                        icon = Image.Glyph(Res.drawable.ic_profile),
                         label = "Profile".asText(),
                         badge = BottomNavigationBadge.Dot,
                     ),
@@ -91,18 +91,18 @@ Scaffold(
                 items = listOf(
                     BottomNavigationItem(
                         id = "home",
-                        icon = Image.Drawable(Res.drawable.ic_home),
+                        icon = Image.Glyph(Res.drawable.ic_home),
                         label = "Home".asText(),
                     ),
                     BottomNavigationItem(
                         id = "discover",
-                        icon = Image.Drawable(Res.drawable.ic_compass),
+                        icon = Image.Glyph(Res.drawable.ic_compass),
                         label = "Discover".asText(),
                     ),
                     BottomNavigationItem(
                         id = "library",
-                        icon = Image.Drawable(Res.drawable.ic_library),
-                        selectedIcon = Image.Drawable(Res.drawable.ic_library_filled),
+                        icon = Image.Glyph(Res.drawable.ic_library),
+                        selectedIcon = Image.Glyph(Res.drawable.ic_library_filled),
                         label = "Library".asText(),
                         badge = BottomNavigationBadge.Count(12),
                     ),
@@ -320,7 +320,7 @@ ConfirmDialog(
 ```kotlin
 EmptyState(
     model = EmptyStateModel(
-        icon = Image.Drawable(Res.drawable.ic_empty),
+        icon = Image.Glyph(Res.drawable.ic_empty),
         title = "No items yet".asText(),
         subtitle = "Add your first item to get started".asText(),
         actionLabel = "Add Item".asText(),
@@ -342,8 +342,8 @@ ChatTextArea(
         value = inputText,
         placeholder = "Message".asText(),
         actions = listOf(
-            ChatInputAction(id = "camera", image = Image.Drawable(Res.drawable.ic_camera)),
-            ChatInputAction(id = "mic", image = Image.Drawable(Res.drawable.ic_mic)),
+            ChatInputAction(id = "camera", image = Image.Glyph(Res.drawable.ic_camera)),
+            ChatInputAction(id = "mic", image = Image.Glyph(Res.drawable.ic_mic)),
         ),
     ),
     onValueChange = { inputText = it },
@@ -366,7 +366,7 @@ ChatTextArea(
             ChatAttachment.Audio(id = "2", durationMs = 15_000),
         ),
         actions = listOf(
-            ChatInputAction(id = "camera", image = Image.Drawable(Res.drawable.ic_camera)),
+            ChatInputAction(id = "camera", image = Image.Glyph(Res.drawable.ic_camera)),
         ),
     ),
     onValueChange = { inputText = it },

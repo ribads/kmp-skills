@@ -15,7 +15,6 @@ Actions are data-driven via `ChatInputAction` on the model, making the toolbar f
     onSend: () -> Unit,
     onRemoveAttachment: ((ChatAttachment) -> Unit)? = null,
     onActionClick: ((actionId: String) -> Unit)? = null,
-    invertedColors: Boolean = Theme.invertedColors,
 )
 
 @Stable
@@ -65,7 +64,7 @@ sealed interface ChatAttachment {
 - `animateContentSize` with spring for smooth height transitions
 - Attachment strip: horizontal scrollable row of 56dp image thumbnails and audio chips, each with an 18dp circle remove button
 - Send button: 34dp circle with Canvas arrow icon, spring bounce scale animation (appears when input has content)
-- Action icons: 22dp, tinted with theme secondary color; disabled actions render at 35% alpha
+- Action icons: 22dp; a `Glyph` is tinted with `element.secondary`, an `Artwork` is drawn as authored; disabled actions render at 35% alpha
 
 ---
 
@@ -83,7 +82,6 @@ The caller is responsible for horizontal alignment (start for incoming, end for 
     modifier: Modifier = Modifier,
     onImageClick: ((index: Int) -> Unit)? = null,
     onPlayPause: (() -> Unit)? = null,
-    invertedColors: Boolean = Theme.invertedColors,
 )
 
 @Stable

@@ -5,7 +5,7 @@
 ```kotlin
 @Composable fun BarChart(
     model: BarChartModel, modifier: Modifier = Modifier,
-    height: Dp = 240.dp, invertedColors: Boolean = Theme.invertedColors,
+    height: Dp = 240.dp,
 )
 ```
 
@@ -14,7 +14,7 @@
 ```kotlin
 @Composable fun LineChart(
     model: LineChartModel, modifier: Modifier = Modifier,
-    height: Dp = 240.dp, invertedColors: Boolean = Theme.invertedColors,
+    height: Dp = 240.dp,
 )
 ```
 
@@ -23,9 +23,10 @@
 ```kotlin
 @Composable fun PieChart(
     model: PieChartModel, modifier: Modifier = Modifier,
-    invertedColors: Boolean = Theme.invertedColors,
 )
 ```
+
+Entries and series without a `color` take the next colour from a built-in colourblind-safe categorical palette, with lighter variants when the theme is dark. Axes, grid lines and labels use theme roles.
 
 ---
 

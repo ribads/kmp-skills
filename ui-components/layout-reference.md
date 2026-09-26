@@ -8,14 +8,12 @@
     onDateSelected: (Long) -> Unit,
     onResetClick: (() -> Unit)? = null,
     onDoneClick: () -> Unit,
-    invertedColors: Boolean = Theme.invertedColors,
 )
 
 @Composable fun DatePickerBottomSheet(
     isVisible: Boolean, model: DatePickerModel,
     onDateSelected: (Long) -> Unit,
     onDismissRequest: OptionalClickCallback,
-    invertedColors: Boolean = Theme.invertedColors,
 )
 
 @Immutable
@@ -27,13 +25,15 @@ data class DatePickerModel(val selectedDate: Long?, val minDate: Long?, val maxD
 ## Card
 
 ```kotlin
-@Composable fun Card(modifier: Modifier = Modifier, invertedColors: Boolean = Theme.invertedColors, content: @Composable () -> Unit)
+@Composable fun Card(modifier: Modifier = Modifier, content: @Composable () -> Unit)
 ```
+
+Paints `surface.secondary` in `Theme.shape.card` and provides `LocalContentColor = element.primary` to its content.
 
 ## Divider
 
 ```kotlin
-@Composable fun Divider(color: Color? = null, modifier: Modifier = Modifier.fillMaxWidth(), thickness: Dp = 1.dp, invertedColors: Boolean = Theme.invertedColors)
+@Composable fun Divider(color: Color? = null, modifier: Modifier = Modifier.fillMaxWidth(), thickness: Dp = 1.dp)
 ```
 
 ## Scaffold
@@ -41,12 +41,14 @@ data class DatePickerModel(val selectedDate: Long?, val minDate: Long?, val maxD
 ```kotlin
 @Composable fun Scaffold(
     modifier: Modifier = Modifier, contentWindowInsets: WindowInsets = WindowInsets(0),
-    backgroundColor: Color? = null, invertedColors: Boolean = Theme.invertedColors,
+    backgroundColor: Color? = null,
     topBar: @Composable () -> Unit = {}, bottomBar: @Composable () -> Unit = {},
     floatingActionBar: @Composable () -> Unit = {},
     content: @Composable (PaddingValues) -> Unit,
 )
 ```
+
+Paints `backgroundColor ?: surface.primary` and provides `LocalContentColor = element.primary`, so a screen needs no colour arguments to be correct in both appearances.
 
 ---
 
@@ -61,7 +63,6 @@ Top navigation bar with an optional leading icon, optional title, and optional t
     onLeadingClick: (() -> Unit)? = null,
     onTrailingTitleClick: (() -> Unit)? = null,
     onTrailingIconClick: ((id: String) -> Unit)? = null,
-    invertedColors: Boolean = Theme.invertedColors,
 )
 ```
 
@@ -74,9 +75,9 @@ data class TopNavBarModel(
     val trailing: TopNavBarTrailingContentModel? = null,
 ) {
     companion object {
-        val BackIcon: Image    // Image.Drawable(Res.drawable.sc_icon_chevron_left)
-        val CloseIcon: Image   // Image.Drawable(Res.drawable.sc_icon_close)
-        val MenuIcon: Image    // Image.Drawable(Res.drawable.sc_icon_menu)
+        val BackIcon: Image    // Image.Glyph(Res.drawable.sc_icon_chevron_left)
+        val CloseIcon: Image   // Image.Glyph(Res.drawable.sc_icon_close)
+        val MenuIcon: Image    // Image.Glyph(Res.drawable.sc_icon_menu)
 
         fun withTitle(
             title: Clause,
@@ -114,21 +115,20 @@ sealed class TopNavBarTrailingContentModel {
 - `TopNavBarTrailingContentModel.Icons` renders one 48dp icon button per `TrailingIconModel`; each tap invokes `onTrailingIconClick(id)`.
 
 **Colors** (via `Theme.colors`):
-- Container: `surface.primaryLight` / `primaryDark`
-- Content: `element.primaryOnLight` / `primaryOnDark`
+- Container: `surface.primary`
+- Content: `element.primary`
 
 ---
 
 ## BottomNavigationBar
 
-Fixed-height row of icon/label items along the bottom of a screen, intended for top-level destination switching in a `Scaffold.bottomBar` slot. Each item is a `Modifier.selectable(role = Role.Tab)` inside a `selectableGroup()`, spring-free `animateColorAsState` drives icon tint and label color between selected/unselected, and disabled items are rendered at `38%` alpha with ignored clicks. A 1dp hairline divider sits above the bar using `border.secondaryOnLight/Dark`. Label is optional per item (pass `null` for an icon-only bar). When `items` is empty the composable renders nothing. Selection is tracked by `String` id so callers can map directly to routes.
+Fixed-height row of icon/label items along the bottom of a screen, intended for top-level destination switching in a `Scaffold.bottomBar` slot. Each item is a `Modifier.selectable(role = Role.Tab)` inside a `selectableGroup()`, spring-free `animateColorAsState` drives icon tint and label color between selected/unselected, and disabled items are rendered at `38%` alpha with ignored clicks. A 1dp hairline divider sits above the bar using `border.secondary`. Label is optional per item (pass `null` for an icon-only bar). When `items` is empty the composable renders nothing. Selection is tracked by `String` id so callers can map directly to routes.
 
 ```kotlin
 @Composable fun BottomNavigationBar(
     model: BottomNavigationBarModel,
     modifier: Modifier = Modifier,
     onItemSelected: (id: String) -> Unit,
-    invertedColors: Boolean = Theme.invertedColors,
 )
 
 @Immutable
@@ -157,17 +157,17 @@ sealed class BottomNavigationBadge {
 **Dimensions**: bar height `64dp`, icon size `24dp`, dot badge `8dp`, count badge min `16dp` (widens for `99+`).
 
 **Colors** (via `Theme.colors`):
-- Container: `surface.primaryLight` / `primaryDark`
-- Divider: `border.secondaryOnLight` / `secondaryOnDark`
-- Active icon/label: `surfaceInteractive.enabledOnLight` / `enabledOnDark`
-- Inactive icon/label: `element.secondaryOnLight` / `secondaryOnDark`
-- Disabled: `elementInteractive.disabledOnLight` / `disabledOnDark` @ `0.38` alpha
-- Badge fill: `intents.error.surfaceOnLight` / `surfaceOnDark`
-- Badge text: `intents.error.contentOnLight` / `contentOnDark`
+- Container: `surface.primary`
+- Divider: `border.secondary`
+- Active icon/label: `surfaceInteractive.enabled`
+- Inactive icon/label: `element.secondary`
+- Disabled: `elementInteractive.disabled` @ `0.38` alpha
+- Badge fill: `intents.error.surface`
+- Badge text: `intents.error.content`
 
 **Behavior**:
 - Selected label uses `Theme.typography.labelXs` at `FontWeight.SemiBold`; unselected at `FontWeight.Normal`.
-- Icon tinting: if only `icon` is provided, it is tinted with the active/inactive color via `ColorFilter.tint` (template image). If `selectedIcon` is also provided, **neither** icon is tinted — the caller owns the visuals for both states (original image). Use the former for monochrome glyph sets, the latter for outline/filled icon pairs that ship their own colors.
+- Icon tinting: the image type decides. An `Image.Glyph` is tinted with the item's state colour (active, inactive or disabled), whether it is the `icon` or the `selectedIcon`, so an outline/filled glyph pair still follows the theme. An `Image.Artwork` is drawn as authored in every state; use it for icons that ship their own colours.
 - `BottomNavigationBadge.Count` clamps display to `"99+"` when `value > 99`.
 
 ---
@@ -181,20 +181,19 @@ Drop-in replacement for `BottomNavigationBar` with a pill-shaped track and a flo
     model: BottomNavigationBarModel,
     modifier: Modifier = Modifier,
     onItemSelected: (id: String) -> Unit,
-    invertedColors: Boolean = Theme.invertedColors,
 )
 ```
 
 Shares `BottomNavigationBarModel`, `BottomNavigationItem`, and `BottomNavigationBadge` with `BottomNavigationBar` — see above.
 
 **Colors** (via `Theme.colors`):
-- Track: `surface.subtleLight` / `subtleDark`
-- Pill fill: `surface.primaryLight` / `primaryDark`
-- Pill hairline: `border.secondaryOnLight` / `secondaryOnDark`
-- Active icon/label: `element.primaryOnLight` / `primaryOnDark` @ `FontWeight.SemiBold`
-- Inactive icon/label: `element.secondaryOnLight` / `secondaryOnDark` @ `FontWeight.Normal`
-- Disabled: `elementInteractive.disabledOnLight` / `disabledOnDark` @ `0.38` alpha
-- Badge fill / text: `intents.error.surfaceOnLight` / `contentOnLight` (and Dark equivalents)
+- Track: `surface.subtle`
+- Pill fill: `surface.primary`
+- Pill hairline: `border.secondary`
+- Active icon/label: `element.primary` @ `FontWeight.SemiBold`
+- Inactive icon/label: `element.secondary` @ `FontWeight.Normal`
+- Disabled: `elementInteractive.disabled` @ `0.38` alpha
+- Badge fill / text: `intents.error.surface` / `intents.error.content`
 
 **Animation**: `animateDpAsState` with `spring(DampingRatioLowBouncy, StiffnessMediumLow)` drives the pill's x-offset; item tint animates via `animateColorAsState` inside the shared item renderer.
 
@@ -233,7 +232,7 @@ Standalone bottom sheet shown from inside a screen, designed for modals whose **
 - **Locked in place** — no drag or swipe can move the sheet. Scroll/fling overflow is consumed by a custom `NestedScrollConnection` so it never reaches the sheet's drag handler.
 - **No drag handle** is rendered.
 - **Expands to fill** available space below the status bar (`statusBarsPadding`), leaving a portion of the screen behind it visible.
-- Container colour, content colour and content decoration come from the `NavContainer`'s `BottomSheetAppearance`; `invertedColors` picks the baseline Synapse text colours. Applies `navigationBarsPadding` and `imePadding`.
+- Container colour, content colour and content decoration come from the `NavContainer`'s `BottomSheetAppearance`. Applies `navigationBarsPadding` and `imePadding`.
 - **Callers are responsible for providing their own close button** inside `content` — there is no swipe-to-dismiss and no drag handle, so the only way the user can dismiss is via an explicit control you render.
 
 As with `Tray`, never use it as the root of a `bottomSheet()` destination; use `ScrollableTraySurface`.
@@ -241,7 +240,6 @@ As with `Tray`, never use it as the root of a `bottomSheet()` destination; use `
 ```kotlin
 @Composable fun ScrollableTray(
     onDismissRequest: OptionalClickCallback,
-    invertedColors: Boolean = Theme.invertedColors,
     content: @Composable BoxScope.() -> Unit,
 )
 ```
@@ -299,17 +297,26 @@ There is one sheet look, and the app sets it once: the `BottomSheetAppearance` p
 NavContainer(
     startKey = startKey,
     features = features,
-    bottomSheetAppearance = BottomSheetAppearance(
-        containerColor = { Theme.colors.surface.primaryLight },
-        contentColor = { Theme.colors.element.primaryOnLight },
-        dragHandle = { AppDragHandle() },
-    ),
+    bottomSheetAppearance = ThemedBottomSheetAppearance,
 )
 ```
 
+`ThemedBottomSheetAppearance` is the Synapse look, and the one to start from:
+
+```kotlin
+val ThemedBottomSheetAppearance: BottomSheetAppearance = BottomSheetAppearance(
+    containerColor = { Theme.colors.surface.raised },
+    dragHandle = { BottomSheetDefaults.DragHandle(color = Theme.colors.border.primary) },
+    contentColor = { Theme.colors.element.primary },
+    contentDecoration = { content -> WithRaisedSurface(content) },
+)
+```
+
+The sheet paints `surface.raised`, and `WithRaisedSurface` makes `surface.primary` resolve to it inside, so a field or button that paints "the canvas it sits on" matches the sheet in both appearances. To change one slot, copy it: `ThemedBottomSheetAppearance.copy(dragHandle = { AppDragHandle() })`.
+
 - `ScrollableTray` never shows the handle; a destination hides it with `BottomSheetOptions(showDragHandle = false)`.
-- Inside a tray, Synapse `LocalContentColor` / `LocalSecondaryContentColor` default to the theme's element colours for `invertedColors`, so `Text` whose style has no colour stays readable. `contentDecoration` wraps the content inside that, so the app can override them. In a `bottomSheet()` destination only `contentDecoration` applies.
-- A tray composed outside any `NavContainer` (a preview, an app without Synapse navigation) gets `BottomSheetAppearance()`, i.e. Material 3's defaults.
+- Inside a tray, Synapse `LocalContentColor` defaults to `element.primary`, so `Text` whose style has no colour stays readable. `contentDecoration` wraps the content inside that, so the app can override it. In a `bottomSheet()` destination only `contentDecoration` applies.
+- A tray composed outside any `NavContainer` (a preview, an app without Synapse navigation) gets `BottomSheetAppearance()`, i.e. Material 3's defaults. Provide `LocalBottomSheetAppearance provides ThemedBottomSheetAppearance` there to match the app.
 
 **When to use which:**
 

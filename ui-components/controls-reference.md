@@ -9,7 +9,6 @@ Animated checkbox with optional label. Custom Canvas-drawn checkmark — no Mate
     model: CheckboxModel,
     modifier: Modifier = Modifier,
     onCheckedChange: (Boolean) -> Unit,
-    invertedColors: Boolean = Theme.invertedColors,
 )
 
 @Stable
@@ -34,7 +33,6 @@ Animated horizontal progress bar. Custom Canvas track with rounded corners.
     modifier: Modifier = Modifier,
     animate: Boolean = true,
     overrideColor: Color? = null,
-    invertedColors: Boolean = Theme.invertedColors,
 )
 
 @Stable
@@ -59,7 +57,6 @@ Animated circular arc with percentage text in center. Custom Canvas-drawn — no
     modifier: Modifier = Modifier,
     animate: Boolean = true,
     overrideColor: Color? = null,
-    invertedColors: Boolean = Theme.invertedColors,
 )
 
 @Stable
@@ -86,7 +83,6 @@ Bar-style audio waveform visualizer. Pure visualizer — no audio engine couplin
     samples: List<Float>,                                  // amplitudes 0.0..1.0, oldest -> newest
     modifier: Modifier = Modifier,
     progress: Float = 1f,                                  // 0.0..1.0; default = entire waveform tinted as "played"
-    invertedColors: Boolean = Theme.invertedColors,
     barColor: Color? = null,                               // unplayed bars; defaults to Theme.colors.border.secondary
     progressColor: Color? = null,                          // played bars; defaults to Theme.colors.intents.accent.content
     barWidth: Dp = 2.5.dp,
@@ -133,7 +129,6 @@ Star-based rating input. Custom Canvas-drawn filled/empty stars.
     modifier: Modifier = Modifier,
     starSize: Dp = 28.dp,
     onRatingChange: (Int) -> Unit,
-    invertedColors: Boolean = Theme.invertedColors,
 )
 
 @Stable
@@ -155,7 +150,6 @@ Multi/single-select chip group using `FlowRow` layout.
     model: ChipGroupModel,
     modifier: Modifier = Modifier,
     onSelectionChange: (Set<String>) -> Unit,
-    invertedColors: Boolean = Theme.invertedColors,
 )
 
 @Stable
@@ -183,7 +177,6 @@ Underline-style tab bar: row of labels with a sliding 2dp indicator beneath the 
     model: TabLayoutModel,
     modifier: Modifier = Modifier,
     onTabSelected: (Int) -> Unit,
-    invertedColors: Boolean = Theme.invertedColors,
     content: @Composable (selectedIndex: Int) -> Unit,
 )
 
@@ -200,10 +193,10 @@ data class TabItem(
 ```
 
 Colors (via `Theme.colors`):
-- Active indicator: `surfaceInteractive.enabledOnLight` / `enabledOnDark`
-- Track (inactive indicator baseline): `border.secondaryOnLight` / `secondaryOnDark`
-- Active label: `element.primaryOnLight` / `primaryOnDark`
-- Inactive label: `element.secondaryOnLight` / `secondaryOnDark`
+- Active indicator: `surfaceInteractive.enabled`
+- Track (inactive indicator baseline): `border.secondary`
+- Active label: `element.primary`
+- Inactive label: `element.secondary`
 
 ---
 
@@ -216,17 +209,16 @@ Pill-shaped tab bar with a floating capsule that springs between tabs. Solid (no
     model: TabLayoutModel,
     modifier: Modifier = Modifier,
     onTabSelected: (Int) -> Unit,
-    invertedColors: Boolean = Theme.invertedColors,
     content: @Composable (selectedIndex: Int) -> Unit,
 )
 ```
 
 Colors (via `Theme.colors`):
-- Track: `surface.subtleLight` / `subtleDark`
-- Pill fill: `surface.primaryLight` / `primaryDark`
-- Pill hairline: `border.secondaryOnLight` / `secondaryOnDark`
-- Selected label: `element.primaryOnLight` / `primaryOnDark` @ `FontWeight.SemiBold`
-- Unselected label: `element.secondaryOnLight` / `secondaryOnDark` @ `FontWeight.Normal`
+- Track: `surface.subtle`
+- Pill fill: `surface.primary`
+- Pill hairline: `border.secondary`
+- Selected label: `element.primary` @ `FontWeight.SemiBold`
+- Unselected label: `element.secondary` @ `FontWeight.Normal`
 
 Pick `TabLayout` for a standard underline indicator inline in content; pick `LiquidGlassTabLayout` for a free-standing segmented selector (e.g., a toolbar control, top-of-sheet filter, or view-mode switch).
 
@@ -242,7 +234,6 @@ Custom Canvas-drawn radio buttons with inner dot. Supports vertical and horizont
     modifier: Modifier = Modifier,
     horizontal: Boolean = false,
     onSelectionChange: (String) -> Unit,
-    invertedColors: Boolean = Theme.invertedColors,
 )
 
 @Stable
@@ -269,7 +260,6 @@ Custom Canvas track + thumb with pointer input for tap/drag and step snapping.
     model: SliderModel,
     modifier: Modifier = Modifier,
     onValueChange: (Float) -> Unit,
-    invertedColors: Boolean = Theme.invertedColors,
 )
 
 @Stable
@@ -295,7 +285,6 @@ Increment/decrement control with circular bordered `+`/`-` buttons and min/max c
     model: StepperModel,
     modifier: Modifier = Modifier,
     onValueChange: (Int) -> Unit,
-    invertedColors: Boolean = Theme.invertedColors,
 )
 
 @Stable
@@ -321,7 +310,6 @@ Label + formatted time display (`HH:MM:SS`) with Start/Stop and Reset buttons.
     modifier: Modifier = Modifier,
     onStartStop: () -> Unit,
     onReset: () -> Unit,
-    invertedColors: Boolean = Theme.invertedColors,
 )
 
 @Stable
@@ -343,7 +331,6 @@ Hour/minute spinners with up/down arrows. Supports 12h (AM/PM toggle) and 24h mo
     model: TimePickerModel,
     modifier: Modifier = Modifier,
     onTimeChange: (hour: Int, minute: Int) -> Unit,
-    invertedColors: Boolean = Theme.invertedColors,
 )
 
 @Stable
@@ -367,7 +354,6 @@ Modal dialog with scrim overlay, surface card, title/message, and confirm/cancel
     modifier: Modifier = Modifier,
     onConfirm: () -> Unit,
     onCancel: () -> Unit,
-    invertedColors: Boolean = Theme.invertedColors,
 )
 
 @Stable
@@ -378,6 +364,9 @@ data class ConfirmDialogModel(
     val cancelLabel: Clause,
 )
 ```
+
+- Scrim: `overlay.scrim`
+- Card: `surface.raised`, with its content inside `WithRaisedSurface`, so the buttons read the card as their canvas
 
 ---
 
@@ -390,7 +379,6 @@ Centered placeholder for empty screens — optional icon, title, subtitle, and a
     model: EmptyStateModel,
     modifier: Modifier = Modifier,
     onActionClick: (() -> Unit)? = null,
-    invertedColors: Boolean = Theme.invertedColors,
 )
 
 @Stable

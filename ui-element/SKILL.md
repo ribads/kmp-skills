@@ -20,37 +20,84 @@ commonMain.dependencies {
 ## Theme System
 
 ```kotlin
+/** Which ColorSchemes entry the theme applies: a fixed one, or whichever the device is using. */
+enum class Appearance { Light, Dark, System }
+
+/**
+ * The app root's theme, used once. Applies [appearance] to Synapse and to what the platform draws
+ * around the app (window, system bars, dialogs, keyboard), then provides the tokens through WithTheme.
+ */
 @Composable
-fun WithTheme(
-    colors: Colors,
+fun WithAppTheme(
+    appearance: Appearance,
+    colorSchemes: ColorSchemes,
     typography: Typography,
     shape: Shape,
-    invertedColors: Boolean = LocalInvertedColors.current,
-    spacing: Spacing? = null,                       // null keeps the built-in default spacing scale
-    contentColor: Color = Color.Unspecified,        // ignored when Unspecified
-    secondaryContentColor: Color = Color.Unspecified,
+    spacing: Spacing? = null,          // null keeps the built-in default spacing scale
     content: @Composable () -> Unit,
 )
 
+/**
+ * Provides the tokens to [content] in the enclosing appearance, or the device's when nothing above
+ * resolved one. Nestable: a nested call swaps the tokens for a region and keeps the appearance.
+ */
+@Composable
+fun WithTheme(
+    colorSchemes: ColorSchemes,
+    typography: Typography,
+    shape: Shape,
+    spacing: Spacing? = null,          // null keeps the enclosing scale (the built-in default at the root)
+    content: @Composable () -> Unit,
+)
+
+/** Renders [content] in a fixed appearance, whatever the app's. */
+@Composable
+fun WithAppearance(appearance: Appearance, content: @Composable () -> Unit)
+
+/** Makes surface.primary resolve to surface.raised for [content]. Applying it twice changes nothing. */
+@Composable
+fun WithRaisedSurface(content: @Composable () -> Unit)
+
+/**
+ * Styles the system bar icons for the enclosing theme while composed. The most recently composed call
+ * wins; leaving the composition hands the bars back to the previous one. No-op on iOS and wasm.
+ */
+@Composable
+expect fun ThemedSystemBars()
+
 object Theme {
-    val invertedColors: Boolean         @Composable get()
-    val colors: Colors                  @Composable get()
+    val colors: Colors                  @Composable get()   // the scheme for the enclosing appearance
+    val colorSchemes: ColorSchemes      @Composable get()   // both schemes, as the theme received them
+    val isDark: Boolean                 @Composable get()   // for assets and third-party UI, not colour picks
     val typography: Typography          @Composable get()
     val spacing: Spacing                @Composable get()
     val shape: Shape                    @Composable get()
-    val contentColor: Color             @Composable get()
-    val secondaryContentColor: Color    @Composable get()
+    val contentColor: Color             @Composable get()   // LocalContentColor.current
 }
 
-// Public CompositionLocals — read directly when you need the raw provided value
-val LocalInvertedColors: ProvidableCompositionLocal<Boolean>          // default false
-val LocalContentColor: ProvidableCompositionLocal<Color>             // default Color.Unspecified
-val LocalSecondaryContentColor: ProvidableCompositionLocal<Color>    // default Color.Unspecified
+/** The colour of text and icons that don't set their own, for the surface they sit on. */
+val LocalContentColor: ProvidableCompositionLocal<Color>
 ```
+
+Besides the tokens, `WithTheme` (and so `WithAppTheme`) provides these for the resolved scheme. `WithAppearance` and `WithRaisedSurface` re-provide them for their region.
+
+| Local | Value |
+|---|---|
+| `LocalContentColor` | `colors.element.primary` |
+| Material 3 `LocalContentColor` | `colors.element.primary`, so Material components inside match |
+| `LocalTextSelectionColors` | handle `border.emphasis`, background `border.emphasis` at 40% alpha |
+| `LocalIndication` | Material 3 `ripple()`, coloured by the pressed component's content colour |
+
+Reading `Theme.colors`, `Theme.colorSchemes`, `Theme.isDark`, `Theme.shape` or `LocalContentColor` with no theme above throws, so a missing theme fails on first composition instead of rendering `Color.Unspecified`. `Theme.typography` and `Theme.spacing` fall back to `TextStyle.Default` and the default scale.
 
 ### Colors
 
+Roles name what a colour is for, not what it looks like. An app authors one `Colors` per appearance, and every role resolves to a single value wherever it is read.
+
 ```kotlin
+@Immutable
+data class ColorSchemes(val light: Colors, val dark: Colors)
+
 @Immutable
 data class Colors(
     val surface: Surface,
@@ -60,51 +107,59 @@ data class Colors(
     val element: Element,
     val elementInteractive: ElementInteractive,
     val intents: Intents,
+    val overlay: Overlay = Overlay.Default,
 )
 
 @Immutable
 data class Surface(
-    val primaryLight: Color, val secondaryLight: Color, val subtleLight: Color,
-    val primaryDark: Color, val secondaryDark: Color, val subtleDark: Color,
+    val primary: Color,     // the canvas of the enclosing container: the screen, or the sheet/dialog/menu inside WithRaisedSurface
+    val secondary: Color,   // a layered surface on the canvas: a card, an incoming chat bubble
+    val subtle: Color,      // a quiet fill for tracks and disabled containers
+    val raised: Color,      // sheets, dialogs and menus; dark appearances show elevation through it
+    val skeleton: Color,    // loading placeholders drawn by Modifier.shimmer
 )
 
 @Immutable
-data class SurfaceInteractive(
-    val enabledOnLight: Color, val hoverTapOnLight: Color, val disabledOnLight: Color,
-    val enabledOnDark: Color, val hoverTapOnDark: Color, val disabledOnDark: Color,
-)
+data class SurfaceInteractive(val enabled: Color, val hoverTap: Color, val disabled: Color)   // backgrounds of buttons, list items
 
 @Immutable
 data class Border(
-    val primaryOnLight: Color, val secondaryOnLight: Color, val emphasisOnLight: Color,
-    val primaryOnDark: Color, val secondaryOnDark: Color, val emphasisOnDark: Color,
+    val primary: Color,     // the outline of a text field
+    val secondary: Color,   // a list separator
+    val emphasis: Color,    // an outlined button's border, a focused field
 )
 
 @Immutable
-data class Shadow(val spotOnLight: Color, val spotOnDark: Color)
+data class Shadow(val spot: Color)
 
 @Immutable
-data class Element(
-    val primaryOnLight: Color, val secondaryOnLight: Color,
-    val primaryOnDark: Color, val secondaryOnDark: Color,
-)
+data class Element(val primary: Color, val secondary: Color)   // text and icons on Surface colours
 
 @Immutable
-data class ElementInteractive(
-    val enabledOnLight: Color, val hoverTapOnLight: Color, val disabledOnLight: Color,
-    val enabledOnDark: Color, val hoverTapOnDark: Color, val disabledOnDark: Color,
-)
+data class ElementInteractive(val enabled: Color, val hoverTap: Color, val disabled: Color)   // text and icons on SurfaceInteractive colours
 
 @Immutable
 data class Intents(val accent: IntentPalette, val success: IntentPalette, val error: IntentPalette, val warning: IntentPalette)
 
 @Immutable
 data class IntentPalette(
-    val contentOnLight: Color, val contentOnDark: Color,
-    val surfaceOnLight: Color, val surfaceOnDark: Color,
-    val borderOnLight: Color, val borderOnDark: Color,
+    val content: Color,     // text, icons and indicators in the intent, drawn on the page or on surface
+    val surface: Color,     // the intent's background, such as a toast or a highlighted mention
+    val border: Color,      // the intent's outline
 )
+
+@Immutable
+data class Overlay(
+    val scrim: Color,       // dims the content beneath a dialog, or a photo under text
+    val content: Color,     // text and icons drawn on a scrim or a photo
+) {
+    companion object {
+        val Default: Overlay   // 40% black scrim, white content: reads over any content in both appearances
+    }
+}
 ```
+
+`IntentPalette.content` must read on the page canvas: components draw it directly on `surface.primary` (a selected radio, a slider track, `TextFormat.Emphasis`, a progress indicator), not only on `IntentPalette.surface`.
 
 ### Typography
 
@@ -140,7 +195,7 @@ data class Shape(
 )
 ```
 
-All theme values (colors, typography styles, spacing sizes, shapes) are **defined by the consuming app**, not by this library. The library provides the data structures and the `WithTheme` composable to wire them into the composition; apps create their own theme composable that calls `WithTheme`. There are no preset/ready-made theme composables in this module. `spacing` is optional: when omitted, `WithTheme` keeps a built-in default spacing scale (`x1 = 4.dp` … `x32 = 128.dp`).
+All theme values (colour schemes, typography styles, spacing sizes, shapes) are **defined by the consuming app**, not by this library. The library provides the data structures and the composables that wire them into the composition. Apps create their own theme composable that calls `WithAppTheme` at the root. There are no preset or ready-made themes in this module. `spacing` is optional: when omitted, the theme keeps a built-in default spacing scale (`x1 = 4.dp` to `x32 = 128.dp`). Typography carries no colours: `Text` draws in the style's colour if it sets one, and in `LocalContentColor` otherwise.
 
 ---
 
@@ -149,18 +204,25 @@ All theme values (colors, typography styles, spacing sizes, shapes) are **define
 ```kotlin
 @Immutable
 sealed class Image(open val contentDescription: String? = null) {
-    @Immutable data class Drawable(
+    /** A single-colour drawable used as a mask: always drawn in a tint, so it follows the theme. */
+    @Immutable data class Glyph(
         val resId: DrawableResource,
+        override val contentDescription: String? = null,
+    ) : Image()
+    /** A drawable drawn as authored (an illustration, a brand mark), with an optional dark variant. */
+    @Immutable data class Artwork(
+        val resId: DrawableResource,
+        val darkResId: DrawableResource? = null,     // used when the enclosing theme is dark
         override val contentDescription: String? = null,
     ) : Image()
     @Immutable data class Bitmap(
         val filePath: String,
-        val placeholder: Drawable? = null,
+        val placeholder: Artwork? = null,
         override val contentDescription: String? = null,
     ) : Image()
     @Immutable data class LocalIdentifier(
         val localIdentifier: String,
-        val placeholder: Drawable? = null,
+        val placeholder: Artwork? = null,
         override val contentDescription: String? = null,
     ) : Image()
 
@@ -175,6 +237,7 @@ fun Image.withContentDescription(description: String): Image
 typealias OptionalClickCallback = (() -> Unit)?
 fun OptionalClickCallback.isEnabled(): Boolean = this != null
 
+/** A Glyph is tinted with LocalContentColor unless [colorFilter] is set; [colorFilter] applies to any other image as given. */
 @Composable
 fun Image(
     image: Image, modifier: Modifier = Modifier,
@@ -182,13 +245,14 @@ fun Image(
     alpha: Float = DefaultAlpha, colorFilter: ColorFilter? = null,
 )
 
+/** A Glyph is drawn in [tint]; any other image is drawn as authored. */
 @Composable
 fun Icon(
     image: Image, modifier: Modifier = Modifier,
-    contentDescription: String? = null, adaptive: Boolean = false,
+    contentDescription: String? = null,
+    tint: Color = Theme.contentColor,
     contentScale: ContentScale = ContentScale.Fit, alpha: Float = DefaultAlpha,
-    colorFilter: ColorFilter? = null, onClick: OptionalClickCallback = null,
-    isDarkTheme: Boolean = Theme.invertedColors,
+    onClick: OptionalClickCallback = null,
 )
 
 typealias AsyncImagePainterFactory =
@@ -212,6 +276,12 @@ object ImagePainterFactory {
 expect fun ImageLoader.Builder.installSynapseImageComponents(): ImageLoader.Builder
 ```
 
+The image type decides how a drawable is coloured. Pick it when you build the model:
+
+- **`Glyph`** for single-colour icons (a chevron, a tab icon, a monochrome brand mark). It is always tinted: `Icon` uses `tint`, `Image` uses `LocalContentColor`, and components pass their per-state colour, so a selected and an unselected glyph each take their state's colour.
+- **`Artwork`** for anything with more than one colour (illustrations, full-colour logos, flags). It is never tinted. Give it a `darkResId` when the light asset does not read on dark surfaces.
+- An explicit `Image(colorFilter = ...)` overrides both rules. It is the escape hatch for tinting a `Bitmap`.
+
 `contentDescription` is an optional accessibility label carried by the `Image` model and the `Graphics` clause. `null` (the default) marks the image as decorative, so screen readers skip it. When set, the `Icon` / `Image` composables and inline `Graphics` rendering announce it. An explicit `contentDescription` argument on a composable, or on a `Graphics` clause, overrides the model value; resolution is `argument ?: image.contentDescription`.
 
 ---
@@ -220,8 +290,72 @@ expect fun ImageLoader.Builder.installSynapseImageComponents(): ImageLoader.Buil
 
 ```kotlin
 @Composable
-fun Modifier.shimmer(showShimmer: Boolean = true): Modifier
+fun Modifier.shimmer(showShimmer: Boolean = true): Modifier   // sweeps surface.skeleton
 ```
+
+---
+
+## Dark mode
+
+Components read roles and never branch on the appearance, so supporting dark mode is authoring the dark `Colors` and choosing where the appearance comes from.
+
+**At the root.** Call `WithAppTheme` once, with the user's choice or `Appearance.System`:
+
+```kotlin
+@Composable
+fun AppTheme(appearance: Appearance = Appearance.System, content: @Composable () -> Unit) {
+    WithAppTheme(
+        appearance = appearance,
+        colorSchemes = ColorSchemes(light = LightColors, dark = DarkColors),
+        typography = AppTypography,     // no colours in the styles
+        shape = AppShape,
+        content = content,
+    )
+}
+```
+
+If users can pick the appearance, persist it with `/storage` and read it synchronously before the first frame, so the app does not start in one appearance and switch.
+
+**Platform sync.** `WithAppTheme` aligns what the platform draws with the chosen appearance:
+
+- **Android 12+ (API 31):** sets the app's night mode through `UiModeManager.setApplicationNightMode`. The system persists it, so the next cold start's splash screen and window already match. It also outlives the call: an app version that stops using `WithAppTheme` keeps the last mode it set until it sets another or is reinstalled. Give the host activity a DayNight window theme (`values/` and `values-night/`) with a window background that matches `surface.primary`. An activity without `android:configChanges="uiMode"` is recreated when the appearance changes in-app.
+- **Android below 12:** there is no per-app night mode without AppCompat, so only the Compose UI follows `Appearance.Light` or `Appearance.Dark`. `Appearance.System` is correct everywhere.
+- **iOS:** sets `overrideUserInterfaceStyle` on the app's windows, so UIKit sheets, alerts and the keyboard match.
+- **wasm:** Compose only.
+
+**System bars.** The root claims the bar icons for the app's appearance. A full-screen region with a different appearance adds its own claim, which wins while it is composed. Make the claim in the screen that lays out what sits behind the bars, never inside a reusable component: a component cannot know whether it will be placed under a light top bar or edge to edge.
+
+```kotlin
+WithAppearance(Appearance.Dark) {
+    ThemedSystemBars()
+    CameraViewfinder()
+}
+```
+
+**Fixed regions.** `WithAppearance(Appearance.Dark)` for regions that must stay dark (a camera, a video player, a photo viewer); `WithAppearance(Appearance.Light)` for ones that must stay light (a QR code, a receipt). Everything inside, components included, resolves roles from that scheme.
+
+**Raised surfaces.** Sheets, dialogs and menus paint `surface.raised` and wrap their content in `WithRaisedSurface`, so a component that paints "the canvas it sits on" (`surface.primary`) matches the container. Synapse's dialogs and dropdowns already do; for trays and navigation sheets pass `ThemedBottomSheetAppearance` from `/ui-components`.
+
+**Assets and third-party UI.** Use `Image.Artwork(resId, darkResId)` for assets that need a dark variant. Read `Theme.isDark` only to hand the appearance to UI that does not read Synapse roles, such as `PaystackPaymentSheet(darkTheme = Theme.isDark)`.
+
+### Migrating from 0.2.0-alpha6
+
+| alpha6 | alpha7 |
+|---|---|
+| `WithTheme(colors, typography, shape, invertedColors, spacing, contentColor, secondaryContentColor)` at the root | `WithAppTheme(appearance, colorSchemes, typography, shape, spacing)` |
+| A nested `WithTheme(colors, ...)` | `WithTheme(colorSchemes, typography, shape, spacing)` |
+| One `Colors` with `primaryLight`/`primaryDark` and `...OnLight`/`...OnDark` pairs | `ColorSchemes(light = Colors(...), dark = Colors(...))` with one value per role; add `surface.raised` and `surface.skeleton` |
+| `Shadow(spotOnLight, spotOnDark)` | `Shadow(spot)` in each scheme |
+| Colours baked into `Typography` styles (`color = colors.element.primaryOnLight`) | Remove them. A style colour overrides the content colour in both appearances; `Text` without one draws in `LocalContentColor`, which each surface provides |
+| `Theme.colors.element.primaryOnLight`, or `if (invertedColors) ...OnDark else ...OnLight` | `Theme.colors.element.primary` |
+| `invertedColors = true` on components | Wrap the region in `WithAppearance(Appearance.Dark)` |
+| `Theme.invertedColors`, `LocalInvertedColors` | `Theme.isDark` (read-only) |
+| `Theme.secondaryContentColor`, `LocalSecondaryContentColor` | `Theme.colors.element.secondary` |
+| `isSystemInDarkTheme()` in app code | `Appearance.System` at the root, `Theme.isDark` below it |
+| `Image.Drawable(res)` | `Image.Glyph(res)` for single-colour icons, `Image.Artwork(res, darkResId)` otherwise |
+| `Icon(adaptive, isDarkTheme, colorFilter)` | `Icon(image, tint = ...)`; tint applies to a `Glyph` only |
+| `Graphics(image, blend = true)` | `Graphics(image = Image.Glyph(res))`, tinted with the intent or text colour |
+| `TextLink(invertedColors = ...)` | `TextLink(...)`, coloured by the style or `LocalContentColor` |
 
 ---
 
@@ -241,7 +375,7 @@ fun Modifier.shimmer(showShimmer: Boolean = true): Modifier
 
 4. **Tokens, not raw values, in app and feature code.** Colours from `Theme.colors.*`, type from `Theme.typography.<token>` (`.copy(...)` to tweak, never a fresh `TextStyle`), layout from `Theme.spacing.*`, corners from `Theme.shape.*`. Component-intrinsic geometry that is not layout spacing (a thumb radius, an avatar size) belongs in a named file-level `private val Name = 24.dp` inside the component. See `/component-authoring`.
 
-5. **Never branch on `isSystemInDarkTheme()`.** Components take `invertedColors: Boolean = Theme.invertedColors`; the app seeds it once at the root when it calls `WithTheme`. Pass `invertedColors = true` explicitly only for surfaces that must render dark regardless of theme: controls over an image, camera overlays, video scrubbers. The caller owns inversion.
+5. **Never branch on the appearance to pick a colour.** Read the role (`Theme.colors.element.primary`), not `isSystemInDarkTheme()` or `Theme.isDark`. The appearance is resolved once, by `WithAppTheme` at the root. A region that must render in a fixed appearance (camera overlays, video scrubbers, controls over a photo) is wrapped in `WithAppearance`, which the caller owns. `Theme.isDark` exists only for dark asset variants and for UI that does not read Synapse roles.
 
 ---
 

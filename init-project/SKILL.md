@@ -28,9 +28,13 @@ Generates a complete Kotlin Multiplatform project with the canonical Synapse mul
 │       ├── AndroidManifest.xml
 │       ├── java/<pkg>/app/
 │       │   └── MainActivity.kt
-│       └── res/values/
-│           ├── strings.xml
-│           └── themes.xml
+│       └── res/
+│           ├── values/
+│           │   ├── strings.xml
+│           │   ├── themes.xml             # DayNight window theme
+│           │   └── colors.xml             # window_background = light surface.primary
+│           └── values-night/
+│               └── colors.xml             # window_background = dark surface.primary
 │
 ├── composeApp/                             # KMP library — DI wiring + shared app logic
 │   ├── build.gradle.kts                   # androidMultiplatformLibrary plugin
@@ -38,7 +42,7 @@ Generates a complete Kotlin Multiplatform project with the canonical Synapse mul
 │       ├── commonMain/kotlin/<pkg>/app/
 │       │   ├── AppContext.kt              # expect class
 │       │   ├── CoreComposeApp.kt          # Coil, WithImagePainter, Theme, RootScreen
-│       │   ├── RootScreen.kt             # Scaffold + NavContainer
+│       │   ├── RootScreen.kt             # Scaffold + NavContainer (ThemedBottomSheetAppearance)
 │       │   ├── di/
 │       │   │   ├── RootAppBuilder.kt      # Assembles entire DI graph
 │       │   │   ├── ComposeAppComponent.kt # Merges all feature modules
@@ -60,7 +64,7 @@ Generates a complete Kotlin Multiplatform project with the canonical Synapse mul
 ├── compose-ui/                            # Theme layer
 │   ├── build.gradle.kts
 │   └── src/commonMain/kotlin/<pkg>/compose/ui/theme/
-│       └── <Name>Theme.kt              # WithTheme wrapper (colors, typography, shapes)
+│       └── <Name>Theme.kt              # WithAppTheme root (light/dark ColorSchemes, typography, shapes)
 │
 ├── core/
 │   ├── network/                           # HTTP client (Ktor)
@@ -185,7 +189,7 @@ Omit `--synapse-version` to use the latest published release. Pass it explicitly
 
 ## Gradle conventions
 
-The generated project targets **Gradle 9.4.1** with **Kotlin 2.4.0** and **KSP 2.3.4**.
+The generated project targets **Gradle 9.5.0** with **Kotlin 2.4.10**, **KSP 2.3.6**, **AGP 9.3.1** and **Compose Multiplatform 1.12.0-beta03**, matching the toolchain Synapse is built with.
 
 Key conventions:
 - **`androidApp`** is a separate module using `com.android.application` plugin — it contains `MainActivity`, `AndroidManifest.xml`, and Android resources
@@ -211,7 +215,7 @@ Always run the script rather than hand-writing the scaffold — that's the whole
 
 The script generates a compiling skeleton. Synapse artifacts resolve from Maven Central (already configured in `settings.gradle.kts`), so no extra credentials are needed for a default build. The user still needs to:
 
-1. **Customize the theme** — edit `compose-ui/.../<Name>Theme.kt` with brand colors, fonts, shapes.
+1. **Customize the theme.** Edit `compose-ui/.../<Name>Theme.kt` with brand colours for both the light and dark schemes, fonts and shapes. The app follows the device appearance (`Appearance.System`); pass another `Appearance` to `<Name>Theme` to fix it or to drive it from a user setting. Keep `window_background` in `androidApp/src/main/res/values{,-night}/colors.xml` equal to each scheme's `surface.primary`.
 2. **Add fonts** — place `.ttf`/`.otf` files in `compose-ui/src/commonMain/composeResources/font/`.
 3. **Wire real repositories** — replace `TODO()` stubs in the data layer, then connect each domain's `RepositoryProvidersImpl` to the use-case module that needs it (see the `// TODO` in `RootAppBuilder.build()`).
 4. **Add screens** — use `/create-screen` to add more screens to existing features.
