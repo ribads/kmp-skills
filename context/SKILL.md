@@ -28,6 +28,8 @@ expect object AppContextProvider {
 
 Auto-initialized on Android via a `ContentProvider` registered in the manifest — no manual setup needed.
 
+On Android, `currentActivity` is the most recently resumed `ComponentActivity` that is still alive. It stays set while that activity is paused or stopped (for example behind a permission prompt, or while the camera app is open), so a launch chained after a prompt's result still finds it. It is cleared when the activity is destroyed.
+
 ## Usage
 
 ```kotlin

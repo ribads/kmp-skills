@@ -182,6 +182,8 @@ fun WithTextClickHandler(
 )
 ```
 
+Clickable clauses (`textActionId` on text, `actionId` on `Graphics`) take their look only from their own `TextFormat`. Synapse opts their links out of Material3's default link style (an underline in `MaterialTheme.colorScheme.primary`), so add `TextFormat.Underline` or an intent when a link should look like one.
+
 ---
 
 ## Extension Functions
