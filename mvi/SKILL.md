@@ -73,6 +73,10 @@ class FlowMviProcessor<Intent, Result, State, Effect>(
     coroutineScope: CoroutineScope,
     onPipelineError: (Throwable) -> Unit = {}
 ) : MviProcessor<Intent, Result, State, Effect>
+
+object MviLogging {
+    var isEnabled: Boolean = false   // read once per LifecycleViewModel, at construction
+}
 ```
 
 ### Reduction helpers
@@ -87,7 +91,20 @@ fun <State, Effect> State.noEffects(): Reduction<State, Effect>
 
 ```kotlin
 @Composable
-fun <Intent> LifecycleViewModel<Intent, *, *, *>.OnFirstComposition(vararg intents: Intent)
+fun <Intent> LifecycleViewModel<Intent, *, *, *>.OnFirstComposition(
+    vararg intents: Intent,
+    delay: Duration = Duration.ZERO
+)
+
+@Composable
+fun <Intent> LifecycleViewModel<Intent, *, *, *>.OnFirstComposition(
+    vararg intents: ScheduledIntent<Intent>
+)
+
+data class ScheduledIntent<out Intent>(
+    val intent: Intent,
+    val delay: Duration = Duration.ZERO  // throws IllegalArgumentException when negative
+)
 
 @Composable
 fun <Effect> Flow<Effect>.CollectAsEffect(onEffect: suspend (Effect) -> Unit)
@@ -482,7 +499,35 @@ fun MyScreen(viewModel: MyViewModel) {
 }
 ```
 
-This replaces the old `if (viewModel.isFirstIntent) viewModel.emit(...)` pattern. `OnFirstComposition` emits the intents **exactly once per ViewModel lifetime** — the guard lives on the `LifecycleViewModel`, not the composition, so navigating away and returning (ViewModel retained by the nav back stack) will **not** re-emit. A fresh ViewModel instance (e.g. after `onCleared`) emits again.
+This replaces the old `if (viewModel.isFirstIntent) viewModel.emit(...)` pattern. `OnFirstComposition` emits the intents **exactly once per ViewModel lifetime**. The guard lives on the `LifecycleViewModel`, not the composition, so navigating away and returning (ViewModel retained by the nav back stack) will **not** re-emit. A fresh ViewModel instance (e.g. after `onCleared`) emits again.
+
+### Delaying initial intents
+
+One delay for every intent:
+
+```kotlin
+viewModel.OnFirstComposition(Intent.ShowOnboardingHint, delay = 250.milliseconds)
+```
+
+A delay per intent:
+
+```kotlin
+viewModel.OnFirstComposition(
+    ScheduledIntent(Intent.LoadInitialData),
+    ScheduledIntent(Intent.ShowOnboardingHint, delay = 250.milliseconds),
+    ScheduledIntent(Intent.StartPulse, delay = 600.milliseconds),
+)
+```
+
+Use a delay to hold an intent back until the screen has been composed for that long, for example to let an enter transition settle before a hint, a keyboard request, or an animation-driving state change. The two overloads share one set of rules, since the single-`delay` form is the same schedule with every intent at that offset:
+
+- **Every delay is an offset from first composition, not from the previous intent.** Above, `StartPulse` fires at 600ms, not 850ms. Argument order does not change timing; intents with equal delays fire in argument order.
+- **The schedule is tied to the composition.** It runs inside the `LaunchedEffect`, so leaving composition cancels whatever has not fired yet.
+- **Each intent fires once per ViewModel lifetime.** Intents that already fired stay fired. On the next first composition of the same ViewModel, only the pending ones run, each measured from that new composition. Leaving at 300ms above means `StartPulse` fires 600ms after the return.
+- **Progress is tracked by position in the schedule**, so pass the same schedule on every composition and call `OnFirstComposition` once per screen.
+- **`Duration.ZERO` (the default) fires immediately.** A negative delay throws `IllegalArgumentException` when the `ScheduledIntent` is created.
+
+Don't use a delay to wait for data or to dodge a race with another intent. Sequence that in the Interactor; a fixed timer only hides the ordering problem.
 
 ---
 
@@ -511,6 +556,45 @@ FlowViewModelArgs(
 ```
 
 A `CoroutineExceptionHandler` tied to the same callback catches any escaped coroutine exceptions inside the internal `SupervisorJob`.
+
+---
+
+## Debug tracing
+
+`MviLogging` prints every screen's Intent → Result → Effect flow, plus pipeline errors, one line per event. It is off by default. The app switches it on at startup, guarded by its own debug check, because a published Synapse artifact cannot see the app's build type:
+
+```kotlin
+// androidApp, MainActivity.onCreate (needs buildFeatures { buildConfig = true })
+MviLogging.isEnabled = BuildConfig.DEBUG
+
+// composeApp, iosMain MainViewController
+@OptIn(ExperimentalNativeApi::class)
+MviLogging.isEnabled = Platform.isDebugBinary
+```
+
+`MviLogging` lives in `ui-mvi`, so the module that sets it (usually `androidApp`) needs `ui-mvi` on its own classpath; `composeApp`'s `implementation` dependency does not reach it.
+
+Output is tagged with the ViewModel's class name. The value is the type's `toString()`:
+
+```
+LoginViewModel  Intent  OnEmailChanged(value=a@b.co)
+LoginViewModel  Result  OnEmailUpdated(email=..., submitState=Enabled)
+LoginViewModel  Intent  OnSubmitClick
+LoginViewModel  Result  OnSubmitStateUpdated(submitState=Loading)
+LoginViewModel  Effect  Navigate(command=ScreenCommand(...))
+LoginViewModel  Error   java.lang.IllegalStateException: boom
+```
+
+| Platform | Where | Filter |
+|---|---|---|
+| Android | Logcat, tag `MVI`; `Error` lines at error priority with the stack trace | `adb logcat -s MVI` |
+| iOS | Xcode console via `println`, prefixed `[MVI]` | `[MVI]` in the console filter |
+
+- **Read at ViewModel construction.** Flipping the flag later only affects ViewModels created afterwards. When it's off, nothing is wrapped and events cost nothing.
+- **Each event is traced once.** Intents are traced as they're emitted, not per `filterIsInstance` registration, so fanning out inside the Interactor doesn't duplicate lines.
+- **Errors are traced and still reach `onPipelineError`.** That includes the default `{}`, which otherwise swallows them silently.
+- **ViewState is not traced.** Results already carry each delta.
+- **Raw user input is printed.** A `data class` Intent such as `OnPasswordChanged(value=...)` prints its value. Keep the flag debug-only, and override `toString()` on any Intent or Result whose payload must never reach a log.
 
 ---
 
