@@ -7,7 +7,7 @@ user-invocable: true
 # core:moonshine — Speech-to-Text Transcription
 
 **Module**: `core:moonshine` | **Artifact**: `com.ribads.synapse:core-moonshine`
-**Package**: `com.ribads.synapse.core.moonshine`
+**Package**: `com.ribads.synapse.core.moonshine` (models in `com.ribads.synapse.core.moonshine.model`)
 
 ```kotlin
 commonMain.dependencies {
@@ -15,62 +15,78 @@ commonMain.dependencies {
 }
 ```
 
+Depends on `core:context` (Android). Exposes `kotlinx-coroutines-core` as `api`.
+
 ---
 
-## Core Interfaces
+## Entry Point
 
-### Transcriber
+```kotlin
+// Loads the model and returns a ready Transcriber. Runs on Dispatchers.IO.
+suspend fun loadTranscriber(config: TranscriberConfig): Result<Transcriber>
+```
+
+There is no half-built state: a `Transcriber` always has its model loaded. Load failures (missing
+files, wrong `arch`) come back as `Result.failure`.
+
+---
+
+## Transcriber
 
 ```kotlin
 interface Transcriber {
-    val events: Flow<TranscriptEvent>
-    val isActive: StateFlow<Boolean>
-    fun start(audioChunks: Flow<FloatArray>, scope: CoroutineScope)
-    suspend fun stop()
-    suspend fun transcribeFile(filePath: String, format: AudioFormat = AudioFormat.WAV): Result<List<TranscriptLine>>
+    // Live audio (e.g. a microphone). One stream at a time per Transcriber.
+    suspend fun startStream(
+        audio: Flow<FloatArray>,     // mono samples in [-1.0, 1.0]
+        sampleRate: Int,             // rate of `audio` in Hz; Moonshine resamples to 16 kHz
+        scope: CoroutineScope,       // owner of the stream; cancelling it stops the stream
+    ): Result<TranscriptionStream>
+
+    // A complete in-memory buffer of mono samples.
+    suspend fun transcribe(samples: FloatArray, sampleRate: Int): Result<Transcript>
+
+    // A file on disk. Format is detected from the contents; decoded and transcribed in bounded
+    // windows, so memory does not grow with file length. Timestamps are file-relative.
+    suspend fun transcribeFile(path: String): Result<Transcript>
+
+    // Stops any live stream (flushing it), then frees the model. Idempotent; later calls fail.
     suspend fun release()
 }
 ```
 
-### LocalTranscriber (extends Transcriber)
+- All methods are safe from any thread; native work runs on background dispatchers.
+- `startStream` fails with `IllegalStateException` while another stream is running or after `release()`.
+- Live streams and file/buffer transcriptions may overlap. They share one engine that works one request
+  at a time, so a long file transcription delays live updates.
+- Supported files: WAV (PCM 8/16/24/32-bit, IEEE float 32/64-bit, WAVE_FORMAT_EXTENSIBLE, any channel
+  count) is parsed directly; anything else goes through MediaCodec (Android: M4A/AAC, MP3, FLAC, Ogg, ...)
+  or AVAudioFile (iOS: M4A/AAC, MP3, CAF, AIFF, ...). Multi-channel audio is averaged to mono.
+
+## TranscriptionStream
 
 ```kotlin
-interface LocalTranscriber : Transcriber {
-    suspend fun loadModel(modelPath: String, context: Any? = null)
+interface TranscriptionStream {
+    val transcript: StateFlow<Transcript>   // everything heard so far; final once state != Running
+    val state: StateFlow<StreamState>
+    suspend fun stop(): Result<Transcript>  // flushes the trailing line; idempotent
 }
 
-expect fun buildLocalTranscriber(options: TranscriberOptions): LocalTranscriber
+// Each line once, when it completes; finishes when the stream ends. Lossless (derived from
+// `transcript`), and a late collector first receives the lines that completed before it.
+val TranscriptionStream.completedLines: Flow<TranscriptLine>
 ```
 
-### TranscriberSession
+A stream ends when `stop()` is called, its `audio` flow completes, or its `scope` is cancelled. Every
+path flushes the trailing line into `transcript` before `state` changes. Failures of the audio flow or
+the engine end the stream as `StreamState.Failed` and are **never thrown into `scope`**; `stop()` then
+returns that failure.
+
+## PCM bridge
 
 ```kotlin
-interface TranscriberSession {
-    val transcriber: Transcriber
-    val lines: StateFlow<List<TranscriptLine>>
-    val isActive: StateFlow<Boolean>
-    val currentSessionId: String?
-    fun start(audioChunks: Flow<FloatArray>, scope: CoroutineScope): String
-    suspend fun stop(): Result<SessionResult>
-}
-
-fun TranscriberSession(transcriber: Transcriber): TranscriberSession
-```
-
-### WavDecoder
-
-```kotlin
-expect object WavDecoder {
-    fun decode(filePath: String): FloatArray
-}
-```
-
-### Utility
-
-```kotlin
-// Cold operator: decodes 16-bit LE PCM bytes to normalized floats as they are collected,
-// so cancellation and back-pressure propagate from the transcriber to the audio source.
-fun Flow<ByteArray>.pcmBytesToFloat(): Flow<FloatArray>
+// 16-bit little-endian PCM (core:record's AudioRecorder.audioChunks) -> mono floats.
+// Interleaved channels are averaged; a frame split across chunks is reassembled. Cold operator.
+fun Flow<ByteArray>.decodePcm16(channels: Int = 1): Flow<FloatArray>
 ```
 
 ---
@@ -78,20 +94,29 @@ fun Flow<ByteArray>.pcmBytesToFloat(): Flow<FloatArray>
 ## Models
 
 ```kotlin
-sealed interface TranscriptEvent {
-    val line: TranscriptLine
-    data class LineStarted(override val line: TranscriptLine) : TranscriptEvent
-    data class LineUpdated(override val line: TranscriptLine) : TranscriptEvent
-    data class LineTextChanged(override val line: TranscriptLine) : TranscriptEvent
-    data class LineCompleted(override val line: TranscriptLine) : TranscriptEvent
+data class TranscriberConfig(
+    val model: ModelSource,
+    val arch: ModelArch,                              // must match the files `model` points at
+    val options: Map<String, String> = emptyMap(),    // raw Moonshine engine options, passed through
+)
+
+sealed interface ModelSource {
+    data class Directory(val path: String) : ModelSource  // absolute path on the device
+    data class Bundled(val path: String) : ModelSource    // Android assets/<path>, iOS <bundle>/<path>
+}
+
+enum class ModelArch { Tiny, Base, TinyStreaming, BaseStreaming, SmallStreaming, MediumStreaming }
+
+data class Transcript(val lines: List<TranscriptLine> = emptyList()) {
+    val text: String   // line texts, trimmed, blank lines skipped, joined with " "
 }
 
 data class TranscriptLine(
-    val id: Long,
+    val id: Long,              // stable while a live line is refined
     val text: String,
-    val startTime: Float,
-    val duration: Float,
-    val isComplete: Boolean,
+    val startTime: Float,      // seconds from the start of the stream / file
+    val duration: Float,       // seconds
+    val isComplete: Boolean,   // false while a live line can still change
     val words: List<WordTiming> = emptyList(),
     val speakerId: Long? = null,
 )
@@ -103,63 +128,64 @@ data class WordTiming(
     val confidence: Float,
 )
 
-data class SessionResult(
-    val sessionId: String,
-    val lines: List<TranscriptLine>,
-)
-
-data class TranscriberOptions(
-    val modelArch: ModelArch,
-    val extraOptions: Map<String, String> = emptyMap(),
-)
-
-enum class ModelArch(val value: Int) {
-    Tiny(0), Base(1), TinyStreaming(2), BaseStreaming(3), SmallStreaming(4), MediumStreaming(5)
+sealed interface StreamState {
+    data object Running : StreamState
+    data object Stopped : StreamState                       // stopped, audio completed, or scope cancelled
+    data class Failed(val cause: Throwable) : StreamState   // transcript keeps what was heard before
 }
-
-enum class AudioFormat { WAV, AAC_M4A }
 ```
 
 ---
 
 ## Usage
 
-### Real-time microphone transcription
+### Live microphone transcription (with `core:record`)
 
-This module does not own a microphone. Supply a live audio source (e.g. `core:record`'s
-`AudioRecorder.audioChunks`) and bridge 16-bit LE PCM bytes to floats with `pcmBytesToFloat()`.
+This module does not own a microphone. Feed it any `Flow<FloatArray>`; for `core:record`, bridge the
+16-bit PCM chunks with `decodePcm16` and pass the recorder's real sample rate and channel count.
 
 ```kotlin
-val transcriber = buildLocalTranscriber(TranscriberOptions(modelArch = ModelArch.BaseStreaming))
-transcriber.loadModel(modelPath = "/path/to/model")
+val transcriber = loadTranscriber(
+    TranscriberConfig(model = ModelSource.Bundled("base-en"), arch = ModelArch.Base),
+).getOrElse { return showError(it) }
 
-val session = TranscriberSession(transcriber)
-
-val recorder = buildAudioRecorder(RecordingConfig.Wav())
+val config = RecordingConfig.Wav()
+val recorder = buildAudioRecorder(config)
+val stream = transcriber.startStream(
+    audio = recorder.audioChunks.decodePcm16(channels = config.channels),
+    sampleRate = config.sampleRate,
+    scope = viewModelScope,
+).getOrElse { return showError(it) }
 recorder.start()
-val sessionId = session.start(recorder.audioChunks.pcmBytesToFloat(), viewModelScope)
 
-// Observe transcript events
-session.lines.collect { lines ->
-    lines.forEach { line -> println("${line.text} (complete=${line.isComplete})") }
+// Live UI
+viewModelScope.launch {
+    stream.transcript.collect { transcript -> render(transcript.lines) }
 }
 
-// Stop
+// Stop the recorder first so no new audio arrives, then the stream
 recorder.stop()
-val result = session.stop()
-result.onSuccess { println("Session ${it.sessionId}: ${it.lines.size} lines") }
+stream.stop()
+    .onSuccess { transcript -> save(transcript.text) }
+    .onFailure { showError(it) }
+
+// When the feature is done with the model
+transcriber.release()
 ```
 
-### Offline file transcription
+### Reacting to finished lines (e.g. voice commands)
 
 ```kotlin
-val transcriber = buildLocalTranscriber(TranscriberOptions(modelArch = ModelArch.Base))
-transcriber.loadModel(modelPath = "/path/to/model")
-
-val result = transcriber.transcribeFile("/path/to/audio.wav")
-result.onSuccess { lines ->
-    lines.forEach { println("${it.startTime}s: ${it.text}") }
+viewModelScope.launch {
+    stream.completedLines.collect { line -> handleCommand(line.text) }
 }
+```
+
+### File transcription
+
+```kotlin
+transcriber.transcribeFile("/path/to/memo.m4a")
+    .onSuccess { transcript -> transcript.lines.forEach { println("${it.startTime}s: ${it.text}") } }
 ```
 
 ---
@@ -168,9 +194,10 @@ result.onSuccess { lines ->
 
 ### Android
 
-#### 1. Add model files to assets
+#### 1. Ship or download the model
 
-Place Moonshine model files in your app module's assets:
+Bundled: put the model folder for your `arch`, exactly as exported, under the app's assets and pass the
+folder name:
 
 ```
 composeApp/src/androidMain/assets/base-en/
@@ -179,22 +206,31 @@ composeApp/src/androidMain/assets/base-en/
 └── tokenizer.bin
 ```
 
-The asset path passed to `loadModel()` should be the folder name (e.g. `"base-en"`).
-
-#### 2. Declare permissions in AndroidManifest.xml
-
-In your **app module's** manifest (not the library module):
-
-```xml
-<uses-permission android:name="android.permission.RECORD_AUDIO" />
-<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+```kotlin
+ModelSource.Bundled("base-en")
 ```
 
-`POST_NOTIFICATIONS` (API 33+) is only needed if you drive the persistent foreground-service recorder, whose ongoing notification requires it; the `RECORD_AUDIO` permission request no longer bundles it.
+Moonshine loads models from a directory, so the first load after each install or update copies the
+folder to `noBackupFilesDir/moonshine-models/<path>` and later loads reuse that copy. Any architecture
+works because the whole folder is copied. The copy costs the model's size in disk space; to avoid it,
+download the model at runtime and use `ModelSource.Directory(absolutePath)`.
 
-#### 3. minSdk override
+`core:context` must be initialized for bundled models (it initializes itself through its manifest
+provider).
 
-The `moonshine-voice` AAR declares `minSdk 35`. The moonshine module's manifest already includes:
+#### 2. ABI
+
+The `moonshine-voice` AAR ships `arm64-v8a` native libraries only. Run on a physical device or an
+arm64 emulator image.
+
+#### 3. Permissions
+
+Declared by the app module, not this library: `RECORD_AUDIO` for live microphone audio (see
+`/audio-recorder`). File and buffer transcription need no permission.
+
+#### 4. minSdk override
+
+The `moonshine-voice` AAR declares `minSdk 35`. The module's manifest already includes:
 
 ```xml
 <uses-sdk tools:overrideLibrary="ai.moonshine.voice" />
@@ -202,23 +238,13 @@ The `moonshine-voice` AAR declares `minSdk 35`. The moonshine module's manifest 
 
 No action needed unless you remove or recreate the module manifest.
 
-#### 4. Usage
-
-```kotlin
-val options = TranscriberOptions(modelArch = ModelArch.Base)
-val transcriber = buildLocalTranscriber(options)
-transcriber.loadModel("base-en", context = activity)
-
-val recorder = buildAudioRecorder(RecordingConfig.Wav())
-recorder.start()
-transcriber.start(recorder.audioChunks.pcmBytesToFloat(), coroutineScope)
-```
-
 ### iOS
 
-#### 1. Add MoonshineVoiceBridge SPM dependency
+#### 1. Add the MoonshineVoiceBridge SPM dependency
 
-Kotlin/Native can only interop with Objective-C, but MoonshineVoice is pure Swift. The `MoonshineVoiceBridge` SPM package provides the required `@objc` bridging layer and pulls in `MoonshineVoice` transitively.
+Kotlin/Native can only interop with Objective-C, but MoonshineVoice is pure Swift. The
+`MoonshineVoiceBridge` SPM package provides the `@objc` bridging layer and pulls in `MoonshineVoice`
+transitively.
 
 In Xcode: **File > Add Package Dependencies**, add:
 
@@ -230,30 +256,32 @@ Select the `MoonshineVoiceBridge` library product.
 
 #### 2. Cinterop (already configured)
 
-The module ships with the cinterop definition and ObjC header:
+The module ships the cinterop definition and ObjC header:
 
 - `core/moonshine/src/nativeInterop/cinterop/MoonshineVoice.def`
 - `core/moonshine/src/nativeInterop/cinterop/MoonshineVoiceBridge.h`
 
-The module's `build.gradle.kts` configures cinterop automatically. The cinterop package name comes from the `.def` filename, so Kotlin imports use `import MoonshineVoice.MVBTranscriber`, etc.
+The module's `build.gradle.kts` configures cinterop automatically. iOS targets of this module compile on
+macOS only (cinterop cannot cross-compile).
 
-#### 3. Add model files to Xcode bundle
+#### 3. Bundle the model
 
-Add model files directly to your Xcode target (not inside a folder reference — Xcode flattens folder references):
+Add the model folder to the Xcode target as a **folder reference** (blue folder, "Create folder
+references") so its directory structure survives the copy, and check it is listed under
+**Build Phases > Copy Bundle Resources**:
 
 ```
 iosApp/iosApp/Model/base-en/
-├── encoder.ort
+├── encoder_model.ort
 ├── decoder_model_merged.ort
-├── frontend.ort
-├── adapter.ort
-├── streaming_config.json
 └── tokenizer.bin
 ```
 
-Ensure all files are listed under **Build Phases > Copy Bundle Resources**. Use `NSBundle.mainBundle.resourcePath` as the model path, not a subdirectory.
+```kotlin
+ModelSource.Bundled("Model/base-en")   // resolved against NSBundle.mainBundle.resourcePath
+```
 
-#### 4. Add microphone permission
+#### 4. Microphone permission (live audio only)
 
 In `Info.plist`:
 
@@ -262,23 +290,19 @@ In `Info.plist`:
 <string>This app needs microphone access for speech-to-text transcription.</string>
 ```
 
-#### 5. Usage
-
-```kotlin
-val options = TranscriberOptions(modelArch = ModelArch.Base)
-val transcriber = buildLocalTranscriber(options)
-transcriber.loadModel(NSBundle.mainBundle.resourcePath!!)
-
-val recorder = buildAudioRecorder(RecordingConfig.Wav())
-recorder.start()
-transcriber.start(recorder.audioChunks.pcmBytesToFloat(), coroutineScope)
-```
-
 ---
 
 ## Key Notes
 
-- **ModelArch**: Use `ModelArch.Base` for non-streaming `base-en` models. `ModelArch.BaseStreaming` is for streaming-specific model files.
-- **Audio source**: This module transcribes from any `Flow<FloatArray>` (16 kHz mono, normalized to [-1.0, 1.0]); it does not capture audio itself. Use `core:record` for the microphone and bridge its 16-bit LE PCM `ByteArray` chunks with `pcmBytesToFloat()`.
-- **WavDecoder**: Use `WavDecoder.decode(filePath)` to decode a `.wav` file into a `FloatArray` for offline transcription via `transcriber.transcribeFile()`.
-- **Event flow**: Collect from `transcriber.events` to receive raw `TranscriptEvent` updates, or from `TranscriberSession.lines` for the accumulated transcript.
+- **Sample rate**: always pass the real rate of the audio. Moonshine resamples internally; a wrong rate
+  produces garbage, not an error.
+- **Arch must match the files**: non-streaming (`Tiny`, `Base`) and streaming (`*Streaming`) models are
+  exported as different file sets. Pass the `arch` the folder was exported for; a mismatch either fails
+  `loadTranscriber` or transcribes badly.
+- **Errors**: every call returns `Result`; cancellation of the caller is rethrown, never reported as a
+  failure. A live stream's failure surfaces in `state` and `stop()`, never in the caller's scope.
+- **iOS throughput**: the Swift bridge takes `[Float]`, so each sample is boxed to `NSNumber` on its way to
+  the engine. Fine for live audio; file transcription bounds this to one window (2 minutes at 16 kHz) at a
+  time.
+- **Lifecycle**: load once per feature, `release()` when done. Releasing stops and flushes any live stream
+  first.
