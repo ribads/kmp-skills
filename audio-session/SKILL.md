@@ -7,7 +7,7 @@ user-invocable: true
 # core:audio-session — iOS AVAudioSession Coordination
 
 **Module**: `core:audio-session` | **Artifact**: `com.ribads.synapse:core-audio-session`
-**Package**: `com.ribads.synapse.core.audiosession` | **iOS-only**
+**Packages**: `com.ribads.synapse.core.audiosession`; see [Imports](#imports)
 
 ```kotlin
 iosMain.dependencies {
@@ -23,6 +23,15 @@ the last holder releases its token. `core:record` and `core:playback` use it int
 rarely need it directly.
 
 Android has no equivalent (it uses per-component audio focus), so this module has no Android target.
+
+## Imports
+
+Import them from exactly these paths:
+
+```kotlin
+import com.ribads.synapse.core.audiosession.AudioSessionCoordinator // iosMain only
+import com.ribads.synapse.core.audiosession.AudioSessionException // iosMain only
+```
 
 ---
 

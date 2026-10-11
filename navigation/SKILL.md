@@ -7,7 +7,7 @@ user-invocable: true
 # ui:compose-presentation — Navigation & State Management
 
 **Module**: `ui:compose-presentation` | **Artifact**: `com.ribads.synapse:ui-compose-presentation`
-**Package**: `com.ribads.synapse.ui.compose.presentation`
+**Packages**: `com.ribads.synapse.ui.compose.presentation`, `com.ribads.synapse.ui.compose.presentation.feature`, `com.ribads.synapse.ui.compose.presentation.navigation`, `com.ribads.synapse.ui.compose.presentation.navigation.compose`; see [Imports](#imports)
 
 Built on **Jetpack Navigation 3** (`org.jetbrains.androidx.navigation3`). You own a typed back stack of `NavKey`s; the library wires the `NavDisplay`, entry-scoped ViewModels, saved state, scenes, and transitions, and exposes a small command-based seam (`NavigationDispatcher`) so screens stay decoupled from the engine.
 
@@ -22,6 +22,36 @@ Consumer modules that declare destinations also need the kotlinx-serialization p
 ```kotlin
 plugins { alias(libs.plugins.kotlinSerialization) }
 ```
+
+## Imports
+
+Types live in more than one package. Import them from exactly these paths:
+
+```kotlin
+import com.ribads.synapse.ui.compose.presentation.BackStackResultHandler
+import com.ribads.synapse.ui.compose.presentation.feature.FeatureLauncher
+import com.ribads.synapse.ui.compose.presentation.feature.NavFlow
+import com.ribads.synapse.ui.compose.presentation.navigation.FlowPath
+import com.ribads.synapse.ui.compose.presentation.navigation.LocalNavigationResultStore
+import com.ribads.synapse.ui.compose.presentation.navigation.NavKey
+import com.ribads.synapse.ui.compose.presentation.navigation.NavigationCommand
+import com.ribads.synapse.ui.compose.presentation.navigation.NavigationDispatcher
+import com.ribads.synapse.ui.compose.presentation.navigation.NavigationResult
+import com.ribads.synapse.ui.compose.presentation.navigation.NavigationResultStore
+import com.ribads.synapse.ui.compose.presentation.navigation.compose.BottomSheetAppearance
+import com.ribads.synapse.ui.compose.presentation.navigation.compose.BottomSheetOptions
+import com.ribads.synapse.ui.compose.presentation.navigation.compose.LocalBottomSheetAppearance
+import com.ribads.synapse.ui.compose.presentation.navigation.compose.NavContainer
+import com.ribads.synapse.ui.compose.presentation.navigation.compose.PageTransition
+import com.ribads.synapse.ui.compose.presentation.navigation.compose.bottomSheet
+import com.ribads.synapse.ui.compose.presentation.navigation.compose.detailPane
+import com.ribads.synapse.ui.compose.presentation.navigation.compose.dialog
+import com.ribads.synapse.ui.compose.presentation.navigation.compose.isMultiPaneWindow
+import com.ribads.synapse.ui.compose.presentation.navigation.compose.listPane
+import com.ribads.synapse.ui.compose.presentation.navigation.compose.pageTransition
+```
+
+`EntryProviderScope` is Jetpack Navigation 3's, not Synapse's: `import androidx.navigation3.runtime.EntryProviderScope`.
 
 ---
 
@@ -381,7 +411,7 @@ dispatcher.navigateTo(NavigationCommand.CloseFlow(result = DetailResult(picked =
 entry<HomeRoute> { key ->
     HomeScreen(...)
     BackStackResultHandler<DetailResult>(owner = key) { result ->
-        viewModel.onIntent(HomeIntent.DetailReturned(result))
+        viewModel.emit(HomeIntent.DetailReturned(result))
     }
 }
 ```

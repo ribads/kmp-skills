@@ -7,12 +7,20 @@ user-invocable: true
 # core:context — Android Context Provider
 
 **Module**: `core:context` | **Artifact**: `com.ribads.synapse:core-context`
-**Package**: `com.ribads.synapse.core.context`
+**Packages**: `com.ribads.synapse.core.context`; see [Imports](#imports)
 
 ```kotlin
 commonMain.dependencies {
     implementation("com.ribads.synapse:core-context:<version>")
 }
+```
+
+## Imports
+
+Import them from exactly these paths:
+
+```kotlin
+import com.ribads.synapse.core.context.AppContextProvider
 ```
 
 ---

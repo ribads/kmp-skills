@@ -7,13 +7,25 @@ user-invocable: true
 # ui:element — Design System Foundation
 
 **Module**: `ui:element` | **Artifact**: `com.ribads.synapse:ui-element`
-**Package**: `com.ribads.synapse.ui.element`
+**Packages**: 5 packages under `com.ribads.synapse.ui.element`; see [Imports](#imports)
 
 ```kotlin
 commonMain.dependencies {
     implementation("com.ribads.synapse:ui-element:<version>")
 }
 ```
+
+## Imports
+
+Import each type from its package below.
+
+| Package | Types |
+|---|---|
+| `com.ribads.synapse.ui.element.brush` | `shimmer` |
+| `com.ribads.synapse.ui.element.image` | `AsyncImagePainterFactory`, `Icon`, `Image`, `ImagePainterFactory`, `OptionalClickCallback`, `WithImagePainter`, `installSynapseImageComponents`, `isEnabled`, `withContentDescription` |
+| `com.ribads.synapse.ui.element.text` | `Clause`, `CompositeClause`, `Currency`, `Graphics`, `LocalTextIntentPalette`, `MoneyParser`, `Text`, `TextFormat`, `TextIntent`, `TextIntentPalette`, `TextLink`, `WithTextClickHandler`, `WithTextIntentPalette`, `asClickable`, `asMention`, `asText`, `getMoneyParser`, `localizedClause`, `textIntentPalette`, `toBackgroundColor`, `toColor`, `toComposite`, `withFormat` |
+| `com.ribads.synapse.ui.element.text.markdown` | `asMarkdown` |
+| `com.ribads.synapse.ui.element.theme` | `Appearance`, `Border`, `ColorSchemes`, `Colors`, `Element`, `ElementInteractive`, `IntentPalette`, `Intents`, `LocalContentColor`, `Overlay`, `Shadow`, `Shape`, `Spacing`, `Surface`, `SurfaceInteractive`, `Theme`, `ThemedSystemBars`, `Typography`, `WithAppTheme`, `WithAppearance`, `WithRaisedSurface`, `WithTheme` |
 
 ---
 

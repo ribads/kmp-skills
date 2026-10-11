@@ -7,12 +7,20 @@ user-invocable: true
 # core:datetime — Date/Time Utilities
 
 **Module**: `core:datetime` | **Artifact**: `com.ribads.synapse:core-datetime`
-**Package**: `com.ribads.synapse.core.datetime`
+**Packages**: `com.ribads.synapse.core.datetime`; see [Imports](#imports)
 
 ```kotlin
 commonMain.dependencies {
     implementation("com.ribads.synapse:core-datetime:<version>")
 }
+```
+
+## Imports
+
+Import them from exactly these paths:
+
+```kotlin
+import com.ribads.synapse.core.datetime.DateTimeParser
 ```
 
 ---

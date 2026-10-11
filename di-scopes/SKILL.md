@@ -7,12 +7,20 @@ user-invocable: true
 # core:discopes — DI Scope Annotations
 
 **Module**: `core:discopes` | **Artifact**: `com.ribads.synapse:core-discopes`
-**Package**: `com.ribads.synapse.core.discopes`
+**Packages**: `com.ribads.synapse.core.discopes`; see [Imports](#imports)
 
 ```kotlin
 commonMain.dependencies {
     implementation("com.ribads.synapse:core-discopes:<version>")
 }
+```
+
+## Imports
+
+Import them from exactly these paths:
+
+```kotlin
+import com.ribads.synapse.core.discopes.SingletonScope
 ```
 
 ---

@@ -7,7 +7,7 @@ user-invocable: true
 # core:file — File Picker & File Operations
 
 **Module**: `core:file` | **Artifact**: `com.ribads.synapse:core-file`
-**Package**: `com.ribads.synapse.core.file`
+**Packages**: `com.ribads.synapse.core.file`, `com.ribads.synapse.core.file.dto`; see [Imports](#imports)
 
 ```kotlin
 commonMain.dependencies {
@@ -16,6 +16,23 @@ commonMain.dependencies {
 ```
 
 Depends on `core:context`.
+
+## Imports
+
+Types live in more than one package. Import them from exactly these paths:
+
+```kotlin
+import com.ribads.synapse.core.file.FilePicker
+import com.ribads.synapse.core.file.FilePickerRequest
+import com.ribads.synapse.core.file.FilePickerResult
+import com.ribads.synapse.core.file.ImageFileSize // iosMain only
+import com.ribads.synapse.core.file.ImageResult
+import com.ribads.synapse.core.file.LocalAssetInMemoryProvider // iosMain only
+import com.ribads.synapse.core.file.PhotoSaver // iosMain only
+import com.ribads.synapse.core.file.buildFilePicker
+import com.ribads.synapse.core.file.dto.IosPickerResult // iosMain only
+import com.ribads.synapse.core.file.dto.PermissionResult // iosMain only
+```
 
 ---
 

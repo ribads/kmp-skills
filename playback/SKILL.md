@@ -8,7 +8,7 @@ user-invocable: true
 
 **Modules**: `core:playback` (engine, no UI deps) | `ui:playback` (Compose rendering)
 **Artifacts**: `com.ribads.synapse:core-playback` | `com.ribads.synapse:ui-playback`
-**Packages**: `com.ribads.synapse.core.playback` | `com.ribads.synapse.ui.playback`
+**Packages**: `com.ribads.synapse.core.playback`, `com.ribads.synapse.core.playback.model`, `com.ribads.synapse.ui.playback`; see [Imports](#imports)
 
 ```kotlin
 commonMain.dependencies {
@@ -20,6 +20,34 @@ commonMain.dependencies {
 `core:playback` depends on `core:context`. `ui:playback` depends on `core:playback` (api) and Compose.
 
 Supports local files (WAV, MP3, AAC/M4A, OGG, FLAC, MP4, MOV) and remote media (progressive HTTP, HLS, DASH). Format is detected automatically — no explicit format selection.
+
+## Imports
+
+Types live in more than one package. Import them from exactly these paths:
+
+```kotlin
+import com.ribads.synapse.core.playback.AudioPlayer
+import com.ribads.synapse.core.playback.MediaPlayer
+import com.ribads.synapse.core.playback.VideoPlayer
+import com.ribads.synapse.core.playback.VideoSurface
+import com.ribads.synapse.core.playback.buildAudioPlayer
+import com.ribads.synapse.core.playback.buildPersistentAudioPlayer
+import com.ribads.synapse.core.playback.buildVideoPlayer
+import com.ribads.synapse.core.playback.model.AmplitudeConfig
+import com.ribads.synapse.core.playback.model.AmplitudeInfo
+import com.ribads.synapse.core.playback.model.AudioFocusStrategy
+import com.ribads.synapse.core.playback.model.CommandResult
+import com.ribads.synapse.core.playback.model.MediaMetadata
+import com.ribads.synapse.core.playback.model.PlaybackCommand
+import com.ribads.synapse.core.playback.model.PlaybackNotification
+import com.ribads.synapse.core.playback.model.PlaybackSource
+import com.ribads.synapse.core.playback.model.PlaybackState
+import com.ribads.synapse.core.playback.model.PlayerConfig
+import com.ribads.synapse.core.playback.model.PositionInfo
+import com.ribads.synapse.core.playback.model.VideoSize
+import com.ribads.synapse.ui.playback.VideoPlayerSurface
+import com.ribads.synapse.ui.playback.VideoResizeMode
+```
 
 ---
 

@@ -7,7 +7,7 @@ user-invocable: true
 # ui:renderer — Server-Driven UI
 
 **Module**: `ui:renderer` | **Artifact**: `com.ribads.synapse:ui-renderer`
-**Package**: `com.ribads.synapse.ui.renderer`
+**Packages**: 8 packages under `com.ribads.synapse.ui.renderer`; see [Imports](#imports)
 
 ```kotlin
 commonMain.dependencies {
@@ -29,6 +29,21 @@ validating schemas on a server or in a tool.
 ```kotlin
 implementation("com.ribads.synapse:ui-renderer-core:<version>")
 ```
+
+## Imports
+
+Import each type from its package below.
+
+| Package | Types |
+|---|---|
+| `com.ribads.synapse.ui.renderer.action` | `ActionDispatcher`, `ActionHandler`, `ActionPayload`, `bridgedActionHandler`, `onAction` |
+| `com.ribads.synapse.ui.renderer.data` | `DataPersistence`, `MutationExecutor`, `MutationResult`, `ReactiveDataStore` |
+| `com.ribads.synapse.ui.renderer.diagnostics` | `RenderDiagnostics`, `RenderPassSummary`, `callbackRenderDiagnostics`, `children`, `reportNodeRenderError`, `summarizeTree` |
+| `com.ribads.synapse.ui.renderer.engine` | `BoundRecordGroups`, `BoundRecords`, `CollectionProvider`, `ConditionEvaluator`, `DataRecord`, `DataRecordView`, `ITEM_CONTEXT_PAYLOAD_KEY`, `MediaProvider`, `NodeRendererRegistry`, `SynapseRenderer`, `TemplateEngine`, `boundRecords`, `dispatchWithRecord`, `effectiveTextFormat`, `hasConditionalFormat`, `narrowRecords`, `recordFieldReader`, `watchBoundRecords` |
+| `com.ribads.synapse.ui.renderer.navigation` | `RenderedPageConfig`, `RenderedPageKey`, `RenderedRoutesBuilder`, `SchemaStore`, `ScreenParseResult`, `UIPage`, `UIScreen`, `navigateToRenderedPage`, `parseUIScreen`, `renderedEntries`, `renderedEntry`, `rendererNavigationSerializers`, `toUIScreen` |
+| `com.ribads.synapse.ui.renderer.schema` | `ComputedField`, `DataCollection`, `DataCondition`, `DataEffect`, `DataField`, `DataFieldType`, `DataMutation`, `DataOrderBy`, `DataSchema`, `DataValueRef`, `SchemaParseResult`, `SortDirection`, `UIButtonState`, `UIDimension`, `UIGradient`, `UIModifier`, `UINavBarAction`, `UINavBarLeadingIcon`, `UINode`, `UITextFormat`, `UITextIntent`, `UITheme`, `UIThemeBorder`, `UIThemeColors`, `UIThemeElement`, `UIThemeElementInteractive`, `UIThemeIntentPalette`, `UIThemeIntents`, `UIThemeShadow`, `UIThemeShape`, `UIThemeSpacing`, `UIThemeSurface`, `UIThemeSurfaceInteractive`, `UIThemeTextStyle`, `UIThemeTypography`, `UIVisibility`, `parseUINode`, `schemaType`, `toUINode`, `toUINodes` |
+| `com.ribads.synapse.ui.renderer.state` | `InMemoryRendererStateHolder`, `RendererStateHolder`, `WatchHandle`, `watchBoolean`, `watchDouble`, `watchLong`, `watchRevision`, `watchString` |
+| `com.ribads.synapse.ui.renderer.theme` | `FontResolver`, `resolve` |
 
 ---
 

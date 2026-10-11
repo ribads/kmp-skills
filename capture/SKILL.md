@@ -7,24 +7,57 @@ user-invocable: true
 # core:capture + ui:capture — Camera Capture
 
 **Modules**: `core:capture` (engine) + `ui:capture` (Compose components)
-**Artifacts**: `com.ribads.synapse.core:core-capture`, `com.ribads.synapse.ui:ui-capture`
-**Packages**: `com.ribads.synapse.core.capture`, `com.ribads.synapse.ui.capture`
+**Artifacts**: `com.ribads.synapse:core-capture`, `com.ribads.synapse:ui-capture`
+**Packages**: `com.ribads.synapse.core.capture`, `com.ribads.synapse.core.capture.model`, `com.ribads.synapse.ui.capture`; see [Imports](#imports)
 
 ```kotlin
 commonMain.dependencies {
-    implementation("com.ribads.synapse.core:core-capture:<version>")
-    implementation("com.ribads.synapse.ui:ui-capture:<version>")  // optional, for Compose UI
+    implementation("com.ribads.synapse:core-capture:<version>")
+    implementation("com.ribads.synapse:ui-capture:<version>")  // optional, for Compose UI
 }
 ```
-
-> The published groupIds intentionally differ from the project-wide `com.ribads.synapse` group.
-> Both modules share the leaf project name `capture`, which collides at the Gradle
-> capability level (`group:name`); using distinct sub-groups (`com.ribads.synapse.core` and
-> `com.ribads.synapse.ui`) prevents Gradle from auto-substituting one for the other.
 
 `core:capture` depends on `core:context`. `ui:capture` depends on `core:capture` and `ui:element`.
 
 The engine handles its own audio pipeline — no dependency on `core:record`. Audio is captured directly via CameraX's `Recorder` on Android and `AVCaptureSession` on iOS.
+
+## Imports
+
+Types live in more than one package. Import them from exactly these paths:
+
+```kotlin
+import com.ribads.synapse.core.capture.CaptureController
+import com.ribads.synapse.core.capture.CapturePreviewSurface
+import com.ribads.synapse.core.capture.createCaptureController
+import com.ribads.synapse.core.capture.requiredPermissions
+import com.ribads.synapse.core.capture.model.CameraFacing
+import com.ribads.synapse.core.capture.model.CaptureCapabilities
+import com.ribads.synapse.core.capture.model.CaptureConfig
+import com.ribads.synapse.core.capture.model.CaptureError
+import com.ribads.synapse.core.capture.model.CaptureEvent
+import com.ribads.synapse.core.capture.model.CaptureLifecycle
+import com.ribads.synapse.core.capture.model.CaptureMode
+import com.ribads.synapse.core.capture.model.CaptureOutcome
+import com.ribads.synapse.core.capture.model.CapturePermission
+import com.ribads.synapse.core.capture.model.CaptureSession
+import com.ribads.synapse.core.capture.model.FlashMode
+import com.ribads.synapse.core.capture.model.NormalizedPoint
+import com.ribads.synapse.core.capture.model.PhotoOutcome
+import com.ribads.synapse.core.capture.model.PhotoQuality
+import com.ribads.synapse.core.capture.model.RecordingPhase
+import com.ribads.synapse.core.capture.model.RecordingProgress
+import com.ribads.synapse.core.capture.model.VideoOutcome
+import com.ribads.synapse.core.capture.model.VideoQuality
+import com.ribads.synapse.ui.capture.CaptureFlashButton
+import com.ribads.synapse.ui.capture.CaptureFlipButton
+import com.ribads.synapse.ui.capture.CaptureModeSelector
+import com.ribads.synapse.ui.capture.CapturePreview
+import com.ribads.synapse.ui.capture.CaptureScreen
+import com.ribads.synapse.ui.capture.CaptureShutter
+import com.ribads.synapse.ui.capture.CaptureShutterScope
+import com.ribads.synapse.ui.capture.DefaultShutter
+import com.ribads.synapse.ui.capture.captureTapToFocus
+```
 
 ---
 

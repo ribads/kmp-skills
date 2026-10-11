@@ -7,7 +7,7 @@ user-invocable: true
 # core:sharedpref — Key-Value Storage
 
 **Module**: `core:sharedpref` | **Artifact**: `com.ribads.synapse:core-sharedpref`
-**Package**: `com.ribads.synapse.core.sharedpref`
+**Packages**: `com.ribads.synapse.core.sharedpref`; see [Imports](#imports)
 
 ```kotlin
 commonMain.dependencies {
@@ -16,6 +16,17 @@ commonMain.dependencies {
 ```
 
 Depends on `core:context`.
+
+## Imports
+
+Import them from exactly these paths:
+
+```kotlin
+import com.ribads.synapse.core.sharedpref.SharedPrefManager
+import com.ribads.synapse.core.sharedpref.buildEncryptedSharedPrefManager
+import com.ribads.synapse.core.sharedpref.buildSharedPrefManager
+import com.ribads.synapse.core.sharedpref.getStringOrNull
+```
 
 ---
 

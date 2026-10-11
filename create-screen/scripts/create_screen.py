@@ -50,10 +50,14 @@ internal object __NAME__Contract {
 
     @Immutable
     data class ViewState(
-        val isLoading: Boolean = false,
+        val content: Content,
     ) {
+        sealed class Content {
+            data object Loading : Content()
+        }
+
         companion object {
-            val Default = ViewState()
+            val Default = ViewState(content = Content.Loading)
         }
     }
 }

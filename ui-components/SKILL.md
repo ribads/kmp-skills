@@ -7,7 +7,7 @@ user-invocable: true
 # ui:component — Reusable UI Components
 
 **Module**: `ui:component` | **Artifact**: `com.ribads.synapse:ui-component`
-**Package**: `com.ribads.synapse.ui.component`
+**Packages**: `com.ribads.synapse.ui.component.<family>` and `.<family>.model`; see [Imports](#imports)
 
 ```kotlin
 commonMain.dependencies {
@@ -16,6 +16,60 @@ commonMain.dependencies {
 ```
 
 Depends on `ui:element`.
+
+## Imports
+
+Each family's composables live in `com.ribads.synapse.ui.component.<family>` and its models in `com.ribads.synapse.ui.component.<family>.model`. Nothing is importable from `com.ribads.synapse.ui.component` itself.
+
+Import each type from its package below.
+
+| Package | Types |
+|---|---|
+| `com.ribads.synapse.ui.component.bottomnavbar` | `BottomNavigationBar`, `LiquidGlassBottomNavigationBar` |
+| `com.ribads.synapse.ui.component.bottomnavbar.model` | `BottomNavigationBadge`, `BottomNavigationBarModel`, `BottomNavigationItem` |
+| `com.ribads.synapse.ui.component.button` | `BaseButton`, `OutlineButton`, `PrimaryButton`, `SmallButton`, `SmallOutlineButton` |
+| `com.ribads.synapse.ui.component.button.model` | `ButtonModel`, `ButtonState`, `ButtonStyle`, `asButton` |
+| `com.ribads.synapse.ui.component.calendar` | `DatePicker`, `DatePickerBottomSheet` |
+| `com.ribads.synapse.ui.component.calendar.model` | `DatePickerModel` |
+| `com.ribads.synapse.ui.component.card` | `Card` |
+| `com.ribads.synapse.ui.component.chart` | `BarChart`, `LineChart`, `PieChart` |
+| `com.ribads.synapse.ui.component.chart.model` | `BarChartModel`, `ChartEntry`, `ChartSeries`, `LineChartModel`, `PieChartModel`, `PieSlice` |
+| `com.ribads.synapse.ui.component.chat` | `ChatTextArea`, `MessageBubble` |
+| `com.ribads.synapse.ui.component.chat.model` | `ChatAttachment`, `ChatInputAction`, `ChatTextAreaModel`, `MessageAudio`, `MessageBubbleModel`, `MessageStatus`, `MessageVariant` |
+| `com.ribads.synapse.ui.component.chip` | `ChipGroup` |
+| `com.ribads.synapse.ui.component.chip.model` | `ChipGroupModel`, `ChipOption` |
+| `com.ribads.synapse.ui.component.dialog` | `ConfirmDialog` |
+| `com.ribads.synapse.ui.component.dialog.model` | `ConfirmDialogModel` |
+| `com.ribads.synapse.ui.component.divider` | `Divider` |
+| `com.ribads.synapse.ui.component.emptystate` | `EmptyState` |
+| `com.ribads.synapse.ui.component.emptystate.model` | `EmptyStateModel` |
+| `com.ribads.synapse.ui.component.field` | `CurrencyTextField`, `DropdownSelectionField`, `LabelTextField`, `PasswordTextField`, `PhoneTextField`, `SelectionTextField`, `TextArea` |
+| `com.ribads.synapse.ui.component.field.model` | `CountryLocale`, `CurrencyAmount`, `CurrencyInputModel`, `PhoneInputModel`, `SelectionFieldModel`, `SelectionOption`, `TextInputModel` |
+| `com.ribads.synapse.ui.component.progress` | `CircularProgress`, `ProgressBar` |
+| `com.ribads.synapse.ui.component.progress.model` | `CircularProgressModel`, `ProgressBarModel` |
+| `com.ribads.synapse.ui.component.radio` | `RadioGroup` |
+| `com.ribads.synapse.ui.component.radio.model` | `RadioGroupModel`, `RadioOption` |
+| `com.ribads.synapse.ui.component.rating` | `RatingInput` |
+| `com.ribads.synapse.ui.component.rating.model` | `RatingInputModel` |
+| `com.ribads.synapse.ui.component.scaffold` | `Scaffold` |
+| `com.ribads.synapse.ui.component.slider` | `Slider` |
+| `com.ribads.synapse.ui.component.slider.model` | `SliderModel` |
+| `com.ribads.synapse.ui.component.stepper` | `Stepper` |
+| `com.ribads.synapse.ui.component.stepper.model` | `StepperModel` |
+| `com.ribads.synapse.ui.component.tab` | `LiquidGlassTabLayout`, `TabLayout` |
+| `com.ribads.synapse.ui.component.tab.model` | `TabItem`, `TabLayoutModel` |
+| `com.ribads.synapse.ui.component.timepicker` | `TimePicker` |
+| `com.ribads.synapse.ui.component.timepicker.model` | `TimePickerModel` |
+| `com.ribads.synapse.ui.component.timer` | `Timer` |
+| `com.ribads.synapse.ui.component.timer.model` | `TimerModel` |
+| `com.ribads.synapse.ui.component.toast` | `LocalToastController`, `Toast`, `ToastController`, `ToastHandler` |
+| `com.ribads.synapse.ui.component.toast.model` | `ToastDefaults`, `ToastDuration`, `ToastId`, `ToastIntent`, `ToastIntentStyle`, `ToastModel`, `ToastPosition`, `ToastSnapshot`, `ToastStyle` |
+| `com.ribads.synapse.ui.component.toggle` | `LabelCheckbox` |
+| `com.ribads.synapse.ui.component.toggle.model` | `CheckboxModel` |
+| `com.ribads.synapse.ui.component.topnavbar` | `TopNavBar` |
+| `com.ribads.synapse.ui.component.topnavbar.model` | `NavBarIconType`, `TopNavBarModel`, `TopNavBarTrailingContentModel`, `TrailingIconModel` |
+| `com.ribads.synapse.ui.component.tray` | `ScrollableTray`, `ScrollableTraySurface`, `ThemedBottomSheetAppearance`, `Tray`, `TraySurface` |
+| `com.ribads.synapse.ui.component.waveform` | `Waveform` |
 
 ---
 

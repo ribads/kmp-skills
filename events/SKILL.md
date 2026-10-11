@@ -7,12 +7,28 @@ user-invocable: true
 # core:events — App Event Bus
 
 **Module**: `core:events` | **Artifact**: `com.ribads.synapse:core-events`
-**Package**: `com.ribads.synapse.core.events`
+**Packages**: `com.ribads.synapse.core.events`; see [Imports](#imports)
 
 ```kotlin
 commonMain.dependencies {
     implementation("com.ribads.synapse:core-events:<version>")
 }
+```
+
+## Imports
+
+Import them from exactly these paths:
+
+```kotlin
+import com.ribads.synapse.core.events.AppEvent
+import com.ribads.synapse.core.events.EventBus
+import com.ribads.synapse.core.events.EventInterceptor
+import com.ribads.synapse.core.events.EventPublisher
+import com.ribads.synapse.core.events.EventSubscriber
+import com.ribads.synapse.core.events.StickyEvent
+import com.ribads.synapse.core.events.events
+import com.ribads.synapse.core.events.latest
+import com.ribads.synapse.core.events.sticky
 ```
 
 ---
@@ -247,11 +263,16 @@ class DebugLogInterceptor(private val log: Logger) : EventInterceptor {
     }
 }
 
+interface AnalyticsEvent : AppEvent {
+    val name: String
+    val params: Map<String, AnalyticsParams>
+}
+
 class AnalyticsForwardingInterceptor(
     private val analytics: Analytics,
 ) : EventInterceptor {
     override suspend fun intercept(event: AppEvent) {
-        if (event is AnalyticsEvent) analytics.track(event.name, event.props)
+        if (event is AnalyticsEvent) analytics.log(event.name, event.params)
     }
 }
 

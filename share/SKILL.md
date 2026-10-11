@@ -7,7 +7,7 @@ user-invocable: true
 # core:share — Native Sharing
 
 **Module**: `core:share` | **Artifact**: `com.ribads.synapse:core-share`
-**Package**: `com.ribads.synapse.core.share`
+**Packages**: `com.ribads.synapse.core.share`; see [Imports](#imports)
 
 ```kotlin
 commonMain.dependencies {
@@ -16,6 +16,22 @@ commonMain.dependencies {
 ```
 
 Depends on `core:context` (Android only — auto-initialized via ContentProvider, nothing to call).
+
+## Imports
+
+Import them from exactly these paths:
+
+```kotlin
+import com.ribads.synapse.core.share.ShareCompletion
+import com.ribads.synapse.core.share.ShareContent
+import com.ribads.synapse.core.share.ShareContentKind
+import com.ribads.synapse.core.share.ShareMedia
+import com.ribads.synapse.core.share.ShareResult
+import com.ribads.synapse.core.share.ShareTarget
+import com.ribads.synapse.core.share.Sharer
+import com.ribads.synapse.core.share.buildSharer
+import com.ribads.synapse.core.share.kind
+```
 
 ---
 

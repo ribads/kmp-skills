@@ -1,6 +1,6 @@
 ---
 name: component-authoring
-description: Use when writing a new @Composable that Synapse does not already provide: an app-level component in compose-ui/, or a screen-local section composable in a feature's ui/ module. Covers the escape-hatch gate, file and package layout, parameter ordering, callback naming, model design (Clause over String, sealed variants, Placeholder), colour roles and fixed-appearance regions, and size constants. Trigger when reaching for a custom composable, reviewing one, or deciding whether to promote a component to a shared module.
+description: "Use when writing a new @Composable that Synapse does not already provide: an app-level component in compose-ui/, or a screen-local section composable in a feature's ui/ module. Covers the escape-hatch gate, file and package layout, parameter ordering, callback naming, model design (Clause over String, sealed variants, Placeholder), colour roles and fixed-appearance regions, and size constants. Trigger when reaching for a custom composable, reviewing one, or deciding whether to promote a component to a shared module."
 user-invocable: true
 ---
 

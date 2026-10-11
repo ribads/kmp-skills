@@ -1,16 +1,31 @@
 ---
 name: payments
-description: Use when implementing payment processing, Paystack integration, Stripe integration, card payments, mobile money, payment sheets, or transaction handling in a KMP project.
+description: "Use when implementing payment processing in a KMP project: Paystack card payments, mobile money, the Paystack payment sheet, or transaction handling. Also use when asked for Stripe, because Synapse has no Stripe API yet (its module is an empty scaffold)."
 user-invocable: true
 ---
 
-# Payment Modules — Paystack & Stripe
+# Payment Modules: Paystack, plus a Stripe scaffold
+
+## Imports
+
+Import each type from its package below.
+
+| Package | Types |
+|---|---|
+| `com.ribads.synapse.paystack.core` | `Paystack`, `PaystackConfig`, `PaystackConfigBuilder`, `paystack` |
+| `com.ribads.synapse.paystack.core.api.models` | `AccessCodeData`, `AddressState`, `CardParams`, `ChannelOptions`, `ChargeAuthorization`, `ChargeResponse`, `Customer`, `MobileMoneyChannelOption`, `MobileMoneyChargeResponse`, `PaymentChannel`, `PaystackDomain`, `PaystackError`, `RedirectAuthResponse`, `TransactionEvent`, `TransactionStatus`, `asPaystackError` |
+| `com.ribads.synapse.paystack.core.api.services` | `CardPaymentService`, `MobileMoneyService`, `TransactionService` |
+| `com.ribads.synapse.paystack.core.logging` | `Logger` |
+| `com.ribads.synapse.paystack.ui` | `PaymentSheet` (androidMain only), `PaymentSheetContent`, `PaymentSheetResult`, `PaymentSheetResultCallback`, `PaymentSheetViewController` (iosMain only), `PaystackPaymentSheet`, `PaystackPaymentSheetState`, `rememberPaystackPaymentSheetState` |
+| `com.ribads.synapse.paystack.ui.models` | `PaymentCompletionDetails` |
+
+---
 
 ## Paystack (KMP)
 
 ### core:paystack:core — SDK Core
 
-**Package**: `com.ribads.synapse.paystack.core`
+**Package**: `com.ribads.synapse.paystack.core`; see [Imports](#imports) for the rest
 
 ```kotlin
 // --- Initialization ---

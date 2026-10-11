@@ -6,6 +6,17 @@ user-invocable: true
 
 # Analytics Modules
 
+## Imports
+
+Types live in more than one package. Import them from exactly these paths:
+
+```kotlin
+import com.ribads.synapse.core.analytics.base.Analytics
+import com.ribads.synapse.core.analytics.base.AnalyticsParams
+import com.ribads.synapse.core.analytics.compose.LocalAnalyticsLogger
+import com.ribads.synapse.core.analytics.compose.WithAnalytics
+```
+
 ## core:analytics:base
 
 **Package**: `com.ribads.synapse.core.analytics.base`

@@ -7,7 +7,7 @@ user-invocable: true
 # core:connectivity — Connectivity Monitor
 
 **Module**: `core:connectivity` | **Artifact**: `com.ribads.synapse:core-connectivity`
-**Package**: `com.ribads.synapse.core.connectivity`
+**Packages**: `com.ribads.synapse.core.connectivity`; see [Imports](#imports)
 
 ```kotlin
 commonMain.dependencies {
@@ -16,6 +16,18 @@ commonMain.dependencies {
 ```
 
 Depends on `core:context` (Android only — auto-initialized via ContentProvider, nothing to call).
+
+## Imports
+
+Import them from exactly these paths:
+
+```kotlin
+import com.ribads.synapse.core.connectivity.ConnectivityConfig
+import com.ribads.synapse.core.connectivity.ConnectivityMonitor
+import com.ribads.synapse.core.connectivity.ConnectivityStatus
+import com.ribads.synapse.core.connectivity.Transport
+import com.ribads.synapse.core.connectivity.buildConnectivityMonitor
+```
 
 ---
 

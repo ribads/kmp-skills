@@ -7,7 +7,7 @@ user-invocable: true
 # core:moonshine — Speech-to-Text Transcription
 
 **Module**: `core:moonshine` | **Artifact**: `com.ribads.synapse:core-moonshine`
-**Package**: `com.ribads.synapse.core.moonshine` (models in `com.ribads.synapse.core.moonshine.model`)
+**Packages**: `com.ribads.synapse.core.moonshine`, `com.ribads.synapse.core.moonshine.model`; see [Imports](#imports)
 
 ```kotlin
 commonMain.dependencies {
@@ -16,6 +16,27 @@ commonMain.dependencies {
 ```
 
 Depends on `core:context` (Android). Exposes `kotlinx-coroutines-core` as `api`.
+
+## Imports
+
+Types live in more than one package. Import them from exactly these paths:
+
+```kotlin
+import com.ribads.synapse.core.moonshine.Transcriber
+import com.ribads.synapse.core.moonshine.TranscriptionStream
+import com.ribads.synapse.core.moonshine.completedLines
+import com.ribads.synapse.core.moonshine.decodePcm16
+import com.ribads.synapse.core.moonshine.loadTranscriber
+import com.ribads.synapse.core.moonshine.model.ModelArch
+import com.ribads.synapse.core.moonshine.model.ModelSource
+import com.ribads.synapse.core.moonshine.model.SpeakerSpan
+import com.ribads.synapse.core.moonshine.model.StreamState
+import com.ribads.synapse.core.moonshine.model.TranscriberConfig
+import com.ribads.synapse.core.moonshine.model.Transcript
+import com.ribads.synapse.core.moonshine.model.TranscriptLine
+import com.ribads.synapse.core.moonshine.model.VocabularyBias
+import com.ribads.synapse.core.moonshine.model.WordTiming
+```
 
 ---
 

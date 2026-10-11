@@ -34,7 +34,7 @@ Orchestration recipe for turning a screen requirement into a working IRSE-MVI sc
 2. **Pick components.** Match each UI element to a Synapse component using the picker below. Only reach for a custom composable after step-6's rules.
 3. **Scaffold.** Run `/create-screen` with `--name`, `--package`, `--src|--dir`, and `--use-case-provider` if any UseCase is needed. That creates the 7 files with sensible defaults.
 4. **Fill `Contract`.** Add one `Intent.*` per user interaction, one `Result.*` per state change or nav, one `Effect.*` per one-shot (nav/toast). Declare `ViewState` with the component models picked in step 2. Build initial values in `ViewState.Default` inside the `companion object`.
-5. **Wire `Mapper` → `Interactor` → `Reducer`.** Use the interaction matrix. Processors (`on*Processor`) go **above** `process()`, take `Flow<Intent.SpecificType>` (plus `StateFlow<ViewState>` only if state is needed).
+5. **Wire `Mapper` → `Interactor` → `Reducer`.** Use the interaction matrix. Processors (`{verb}Processor`, e.g. `submitProcessor`) go **above** `process()`, take `Flow<Intent.SpecificType>` (plus `StateFlow<ViewState>` only if state is needed).
 6. **Compose `Screen.kt`.** Body order is the same on every screen:
 
    ```
@@ -131,11 +131,11 @@ For each UI event, the changes you need across the 4 files.
 | Toggle / checkbox | `Intent.OnXToggled(b: Boolean)`, `Result.XToggled(b)` | `.map { Result.XToggled(it.b) }` | `state.copy(x = state.x.copy(checked = result.b)).noEffects()` | `onCheckedChange = { viewModel.emit(Intent.OnXToggled(it)) }` |
 | Click → navigate | `Intent.OnXClick`, `Result.OnNavigate(cmd)`, `Effect.Navigate(cmd)` | `.map { Result.OnNavigate(ScreenCommand(DetailRoute(it.id))) }` | `state withEffect Effect.Navigate(result.command)` | `onClick = { viewModel.emit(Intent.OnXClick) }` |
 | Show toast | `Effect.ShowToast(toast: ToastModel)` | (emit from processor) | `state withEffect Effect.ShowToast(toast)` | `val toaster = Toast.current` (outside effect lambda); `is Effect.ShowToast -> toaster.show(effect.toast)` |
-| Click → async UseCase | `Intent.OnSubmit`, `Result.Loading` / `Success` / `Error` | `onSubmitProcessor(upstream, state)` using `flatMapLatest { flow { emit(useCase.execute(state.value.field)) }.map(mapper::toResult).onStart { emit(Result.Loading) } }` | `copy(submitState = ButtonState.Loading / Enabled, error = ...)` + `withEffect(Effect.Navigate(...))` on success | `onClick = { viewModel.emit(Intent.OnSubmit) }` |
-| Initial load | (already in scaffold) `Intent.LoadInitialData` | `onLoadInitialDataProcessor` calling UseCase via `.map(mapper::toResult)` | `copy(items = result.items).noEffects()` | `viewModel.OnFirstComposition(Intent.LoadInitialData)` |
+| Click → async UseCase | `Intent.OnSubmitClick`, `Result.Submitting` / `LoggedIn` / `LoginFailed(toast)` | `submitProcessor(upstream, state)` using `flatMapConcat { flow { emit(useCase.execute(state.value.field)) }.map(mapper::toResult).onStart { emit(Result.Submitting) } }` (`flatMapConcat`: a second tap must not cancel the first submit) | `copy(submitState = ButtonState.Loading / Enabled)` + `withEffect(Effect.Navigate(...))` on success, `withEffect(Effect.ShowToast(...))` on failure | `onClick = { viewModel.emit(Intent.OnSubmitClick) }` |
+| Initial load | (already in scaffold) `Intent.LoadInitialData` | `loadInitialDataProcessor` calling UseCase via `.map(mapper::toResult)` | `copy(items = result.items).noEffects()` | `viewModel.OnFirstComposition(Intent.LoadInitialData)` |
 | Back | `Intent.Navigation.Back` (in scaffold) | (in scaffold — maps via Mapper) | `state withEffect Effect.Navigate(BackCommand())` | Back icon in `TopNavBar` emits the intent |
 
-**Processor convention:** handlers are named `on{IntentName}Processor`, take `Flow<Intent.SpecificType>` (and `StateFlow<ViewState>` only if current state is needed), return `Flow<Result>`, and live **above** `process()`. Never pass state through intents — read `state.value` inside the processor.
+**Processor convention:** handlers are named `{verb}Processor` (`submitProcessor`, `loadInitialDataProcessor`), take `Flow<Intent.SpecificType>` (and `StateFlow<ViewState>` only if current state is needed), return `Flow<Result>`, and live **above** `process()`. Never pass state through intents; read `state.value` inside the processor.
 
 ---
 
@@ -153,7 +153,7 @@ sealed class Intent {
     sealed class Navigation : Intent() { data object Back : Navigation() }
     data class OnEmailChanged(val v: String) : Intent()
     data class OnPasswordChanged(val v: String) : Intent()
-    data object OnSubmit : Intent()
+    data object OnSubmitClick : Intent()
 }
 
 sealed class Result {
@@ -163,11 +163,12 @@ sealed class Result {
     data class PasswordUpdated(val v: String) : Result()
     data object Submitting : Result()
     data class LoggedIn(val userId: String) : Result()
-    data class LoginFailed(val message: String) : Result()
+    data class LoginFailed(val toast: ToastModel) : Result()
 }
 
 sealed class Effect {
     data class Navigate(val command: NavigationCommand) : Effect()
+    data class ShowToast(val model: ToastModel) : Effect()
 }
 
 @Immutable
@@ -176,7 +177,6 @@ data class ViewState(
     val password: TextInputModel,
     val submit: ButtonModel,
     val submitState: ButtonState,
-    val error: String?,
 ) {
     companion object {
         val Default = ViewState(
@@ -184,28 +184,32 @@ data class ViewState(
             password = TextInputModel(label = "Password".asText(), value = "", placeholder = "••••••".asText()),
             submit = ButtonModel(title = "Log in".asText()),
             submitState = ButtonState.Enabled,
-            error = null,
         )
     }
 }
 ```
 
-**Mapper** — only domain → Result (input Intents are trivial enough to map inline in the Interactor):
+**Mapper**: only domain → Result (input Intents are trivial enough to map inline in the Interactor). The failure is typed; the Mapper turns it into user-facing copy:
 
 ```kotlin
+private val LoginFailedToast = ToastModel(
+    message = Text.Localized(Res.string.login_failed),
+    intent = ToastIntent.Error,
+)
+
 fun toResult(result: LoginEntityResult): Result = when (result) {
     is LoginEntityResult.Success -> Result.LoggedIn(result.userId)
-    is LoginEntityResult.Failure -> Result.LoginFailed(result.message)
+    is LoginEntityResult.Failure -> Result.LoginFailed(toast = LoginFailedToast)
 }
 ```
 
 **Interactor** — processor for submit, inline for the rest:
 
 ```kotlin
-private fun onSubmitProcessor(
-    upstream: Flow<Intent.OnSubmit>,
+private fun submitProcessor(
+    upstream: Flow<Intent.OnSubmitClick>,
     state: StateFlow<ViewState>,
-): Flow<Result> = upstream.flatMapLatest {
+): Flow<Result> = upstream.flatMapConcat {
     val s = state.value
     flow { emit(loginUseCase.execute(s.email.value, s.password.value)) }
         .map(mapper::toResult)
@@ -217,19 +221,19 @@ override fun process(intents: Flow<Intent>, state: StateFlow<ViewState>): Flow<R
     intents.filterIsInstance<Intent.Navigation>().map(mapper::toResult),
     intents.filterIsInstance<Intent.OnEmailChanged>().map { Result.EmailUpdated(it.v) },
     intents.filterIsInstance<Intent.OnPasswordChanged>().map { Result.PasswordUpdated(it.v) },
-    intents.filterIsInstance<Intent.OnSubmit>().let { onSubmitProcessor(it, state) },
+    intents.filterIsInstance<Intent.OnSubmitClick>().let { submitProcessor(it, state) },
 )
 ```
 
 **Reducer**:
 
 ```kotlin
-is Result.EmailUpdated    -> state.copy(email = state.email.copy(value = result.v), error = null).noEffects()
-is Result.PasswordUpdated -> state.copy(password = state.password.copy(value = result.v), error = null).noEffects()
-is Result.Submitting      -> state.copy(submitState = ButtonState.Loading, error = null).noEffects()
+is Result.EmailUpdated    -> state.copy(email = state.email.copy(value = result.v)).noEffects()
+is Result.PasswordUpdated -> state.copy(password = state.password.copy(value = result.v)).noEffects()
+is Result.Submitting      -> state.copy(submitState = ButtonState.Loading).noEffects()
 is Result.LoggedIn        -> state.copy(submitState = ButtonState.Enabled) withEffect
     Effect.Navigate(NavigationCommand.ScreenCommand(HomeRoute(userId = result.userId)))
-is Result.LoginFailed     -> state.copy(submitState = ButtonState.Enabled, error = result.message).noEffects()
+is Result.LoginFailed     -> state.copy(submitState = ButtonState.Enabled) withEffect Effect.ShowToast(result.toast)
 ```
 
 **Screen** body (inside the Scaffold):
@@ -237,7 +241,7 @@ is Result.LoginFailed     -> state.copy(submitState = ButtonState.Enabled, error
 ```kotlin
 LabelTextField(model = viewState.email,    onValueChange = { viewModel.emit(Intent.OnEmailChanged(it)) })
 PasswordTextField(model = viewState.password, onValueChange = { viewModel.emit(Intent.OnPasswordChanged(it)) })
-PrimaryButton(model = viewState.submit, state = viewState.submitState, onClick = { viewModel.emit(Intent.OnSubmit) })
+PrimaryButton(model = viewState.submit, state = viewState.submitState, onClick = { viewModel.emit(Intent.OnSubmitClick) })
 ```
 
 ---

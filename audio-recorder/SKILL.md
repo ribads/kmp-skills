@@ -7,7 +7,7 @@ user-invocable: true
 # core:record — Audio Recording
 
 **Module**: `core:record` | **Artifact**: `com.ribads.synapse:core-record`
-**Package**: `com.ribads.synapse.core.record`
+**Packages**: `com.ribads.synapse.core.record`, `com.ribads.synapse.core.record.model`; see [Imports](#imports)
 
 ```kotlin
 commonMain.dependencies {
@@ -16,6 +16,22 @@ commonMain.dependencies {
 ```
 
 Depends on `core:context`.
+
+## Imports
+
+Types live in more than one package. Import them from exactly these paths:
+
+```kotlin
+import com.ribads.synapse.core.record.AudioRecorder
+import com.ribads.synapse.core.record.PersistentAudioRecorder
+import com.ribads.synapse.core.record.buildAudioRecorder
+import com.ribads.synapse.core.record.buildPersistentAudioRecorder
+import com.ribads.synapse.core.record.exportRecording
+import com.ribads.synapse.core.record.model.OutputFormat
+import com.ribads.synapse.core.record.model.RecordingConfig
+import com.ribads.synapse.core.record.model.RecordingOutput
+import com.ribads.synapse.core.record.model.RecordingState
+```
 
 ---
 

@@ -7,12 +7,35 @@ user-invocable: true
 # ui:mvi — IRSE-MVI Architecture
 
 **Module**: `ui:mvi` | **Artifact**: `com.ribads.synapse:ui-mvi`
-**Package**: `com.ribads.synapse.ui.mvi`
+**Packages**: `com.ribads.synapse.ui.mvi`; see [Imports](#imports)
 
 ```kotlin
 commonMain.dependencies {
     implementation("com.ribads.synapse:ui-mvi:<version>")
 }
+```
+
+## Imports
+
+Import them from exactly these paths:
+
+```kotlin
+import com.ribads.synapse.ui.mvi.CollectAsEffect
+import com.ribads.synapse.ui.mvi.FlowMviProcessor
+import com.ribads.synapse.ui.mvi.FlowViewModelArgs
+import com.ribads.synapse.ui.mvi.IntentFlowHolder
+import com.ribads.synapse.ui.mvi.Interactor
+import com.ribads.synapse.ui.mvi.LifecycleViewModel
+import com.ribads.synapse.ui.mvi.MviLogging
+import com.ribads.synapse.ui.mvi.MviProcessor
+import com.ribads.synapse.ui.mvi.OnFirstComposition
+import com.ribads.synapse.ui.mvi.Reducer
+import com.ribads.synapse.ui.mvi.Reduction
+import com.ribads.synapse.ui.mvi.ScheduledIntent
+import com.ribads.synapse.ui.mvi.SharedIntentFlowHolder
+import com.ribads.synapse.ui.mvi.noEffects
+import com.ribads.synapse.ui.mvi.withEffect
+import com.ribads.synapse.ui.mvi.withEffects
 ```
 
 ---

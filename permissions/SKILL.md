@@ -7,7 +7,7 @@ user-invocable: true
 # core:permissions — Runtime Permissions
 
 **Module**: `core:permissions` | **Artifact**: `com.ribads.synapse:core-permissions`
-**Package**: `com.ribads.synapse.core.permissions`
+**Packages**: `com.ribads.synapse.core.permissions`, `com.ribads.synapse.core.permissions.model`; see [Imports](#imports)
 
 ```kotlin
 commonMain.dependencies {
@@ -16,6 +16,17 @@ commonMain.dependencies {
 ```
 
 Depends on `core:context`.
+
+## Imports
+
+Types live in more than one package. Import them from exactly these paths:
+
+```kotlin
+import com.ribads.synapse.core.permissions.PermissionsManager
+import com.ribads.synapse.core.permissions.buildPermissionsManager
+import com.ribads.synapse.core.permissions.model.PermissionsRequest
+import com.ribads.synapse.core.permissions.model.PermissionsResult
+```
 
 ---
 
@@ -45,7 +56,9 @@ sealed class PermissionsRequest(open val contextUiDisplayed: Boolean) {
 }
 ```
 
-`contextUiDisplayed` — set `true` if you've already shown the user a rationale UI before requesting.
+`contextUiDisplayed`: pass `true` once your UI has explained why the app needs the permission.
+Android then goes straight to the system prompt; with `false` it may return
+`ShouldShowPermissionRationale` instead of prompting (see below).
 
 ### PermissionsResult
 
@@ -57,12 +70,17 @@ sealed class PermissionsResult {
 }
 ```
 
-`ShouldShowPermissionRationale` is **Android-only**. It is returned when the OS reports that a
-rationale should be shown before re-requesting (and `contextUiDisplayed` is `false`). iOS never
-produces it: the system handles rationale via its own pre-prompt and only ever returns `Success`
-or `Denied`. Shared code must branch on all three results, but should treat
-`ShouldShowPermissionRationale` as a softer, retry-able form of denial: on iOS the equivalent denial
-surfaces as `Denied`.
+`ShouldShowPermissionRationale` is **Android-only** and is not a denial: no system prompt was
+shown. Android returns it when `contextUiDisplayed` is `false` and the user has declined the
+permission before. Show your rationale, then request again with `contextUiDisplayed = true`.
+Requesting again with `false` returns `ShouldShowPermissionRationale` every time, so the prompt
+never appears. With `contextUiDisplayed = true` the result is only ever `Success` or `Denied`, and
+iOS never produces it at all.
+
+`Denied` may be final. iOS prompts once per permission and answers every later request with
+`Denied` straight away; Android does the same after the user declines twice (Android 11+) or ticks
+"Don't ask again". Tell the user they can enable the permission in system settings rather than
+offering only a retry that may not prompt.
 
 ---
 
@@ -71,13 +89,21 @@ surfaces as `Denied`.
 ```kotlin
 val manager = PermissionsManager.shared
 
-val result = manager.requestPermission(PermissionsRequest.Audio(contextUiDisplayed = false))
-when (result) {
-    PermissionsResult.Success -> startRecording()
-    PermissionsResult.Denied -> showDeniedMessage()
-    PermissionsResult.ShouldShowPermissionRationale -> showRationale()
+suspend fun requestMicrophone(rationaleShown: Boolean = false) {
+    val request = PermissionsRequest.Audio(contextUiDisplayed = rationaleShown)
+    when (manager.requestPermission(request)) {
+        PermissionsResult.Success -> startRecording()
+        PermissionsResult.ShouldShowPermissionRationale -> showRationale()
+        PermissionsResult.Denied -> showDeniedMessage()
+    }
 }
 ```
+
+`showRationale()` explains why the app needs the microphone, and its continue action calls
+`requestMicrophone(rationaleShown = true)`. `showDeniedMessage()` points the user to system
+settings. A screen that always explains the permission before asking passes `rationaleShown = true`
+on the first call: `ShouldShowPermissionRationale` then never comes back, but the `when` must still
+cover it.
 
 Platform details:
 - **Android**: Wraps `ActivityCompat` runtime permissions

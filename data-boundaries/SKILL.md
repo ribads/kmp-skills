@@ -1,6 +1,6 @@
 ---
 name: data-boundaries
-description: Use when deciding where a model, mapper, or error belongs across the layers of a Synapse KMP app: network DTOs, domain entities, use-case results, UI models. Covers what each module may import, what a UseCase returns, where exceptions are caught, where a domain failure becomes user-facing copy, and how to enforce all of it with Konsist. Trigger when adding a repository, use case, or model; when a layer needs data it cannot currently see; or when reviewing whether a type is leaking across a boundary.
+description: "Use when deciding where a model, mapper, or error belongs across the layers of a Synapse KMP app: network DTOs, domain entities, use-case results, UI models. Covers what each module may import, what a UseCase returns, where exceptions are caught, where a domain failure becomes user-facing copy, and how to enforce all of it with Konsist. Trigger when adding a repository, use case, or model; when a layer needs data it cannot currently see; or when reviewing whether a type is leaking across a boundary."
 user-invocable: true
 ---
 
