@@ -49,6 +49,10 @@ interface Transcriber {
     // windows, so memory does not grow with file length. Timestamps are file-relative.
     suspend fun transcribeFile(path: String): Result<Transcript>
 
+    // Replaces the vocabulary bias, from the next audio decoded (a running stream included).
+    // Streaming architectures only.
+    suspend fun setVocabularyBias(bias: VocabularyBias): Result<Unit>
+
     // Stops any live stream (flushing it), then frees the model. Idempotent; later calls fail.
     suspend fun release()
 }
@@ -56,6 +60,8 @@ interface Transcriber {
 
 - All methods are safe from any thread; native work runs on background dispatchers.
 - `startStream` fails with `IllegalStateException` while another stream is running or after `release()`.
+- `setVocabularyBias` fails with `IllegalStateException` when `arch.isStreaming` is false (`Tiny`, `Base`)
+  or after `release()`. It never rewrites text already transcribed.
 - Live streams and file/buffer transcriptions may overlap. They share one engine that works one request
   at a time, so a long file transcription delays live updates.
 - Supported files: WAV (PCM 8/16/24/32-bit, IEEE float 32/64-bit, WAVE_FORMAT_EXTENSIBLE, any channel
@@ -98,6 +104,7 @@ data class TranscriberConfig(
     val model: ModelSource,
     val arch: ModelArch,                              // must match the files `model` points at
     val options: Map<String, String> = emptyMap(),    // raw Moonshine engine options, passed through
+    val diarizationModel: ModelSource? = null,        // speaker identification models; null = off
 )
 
 sealed interface ModelSource {
@@ -105,7 +112,14 @@ sealed interface ModelSource {
     data class Bundled(val path: String) : ModelSource    // Android assets/<path>, iOS <bundle>/<path>
 }
 
-enum class ModelArch { Tiny, Base, TinyStreaming, BaseStreaming, SmallStreaming, MediumStreaming }
+enum class ModelArch(val isStreaming: Boolean) {
+    Tiny(isStreaming = false),
+    Base(isStreaming = false),
+    TinyStreaming(isStreaming = true),
+    BaseStreaming(isStreaming = true),
+    SmallStreaming(isStreaming = true),
+    MediumStreaming(isStreaming = true),
+}
 
 data class Transcript(val lines: List<TranscriptLine> = emptyList()) {
     val text: String   // line texts, trimmed, blank lines skipped, joined with " "
@@ -116,9 +130,17 @@ data class TranscriptLine(
     val text: String,
     val startTime: Float,      // seconds from the start of the stream / file
     val duration: Float,       // seconds
-    val isComplete: Boolean,   // false while a live line can still change
+    val isComplete: Boolean,   // false while a live line can still change; speakers may change after
     val words: List<WordTiming> = emptyList(),
-    val speakerId: Long? = null,
+    val speakers: List<SpeakerSpan> = emptyList(),  // empty unless diarizationModel is set
+)
+
+data class SpeakerSpan(
+    val speakerId: Long,       // Moonshine's id for the voice; stable within a live stream (opaque, may be negative)
+    val speakerIndex: Int,     // order this stream / transcript first reported the speaker, from 0
+    val startTime: Float,      // seconds from the start of the stream / file
+    val duration: Float,       // seconds
+    val textRange: IntRange?,  // characters of the line's `text` spoken in this span; null if unplaced
 )
 
 data class WordTiming(
@@ -127,6 +149,17 @@ data class WordTiming(
     val endTime: Float,
     val confidence: Float,
 )
+
+sealed interface VocabularyBias {
+    data object None : VocabularyBias
+    // Spelled and capitalized as they should appear. Throws IllegalArgumentException on a comma.
+    data class Terms(val terms: List<String>) : VocabularyBias
+    // Unusual words are picked out of `text` (the document on screen, a meeting agenda, ...).
+    // Throws IllegalArgumentException unless maxTerms > 0.
+    data class Context(val text: String, val maxTerms: Int = DEFAULT_MAX_TERMS) : VocabularyBias {
+        companion object { const val DEFAULT_MAX_TERMS = 200 }
+    }
+}
 
 sealed interface StreamState {
     data object Running : StreamState
@@ -188,6 +221,56 @@ transcriber.transcribeFile("/path/to/memo.m4a")
     .onSuccess { transcript -> transcript.lines.forEach { println("${it.startTime}s: ${it.text}") } }
 ```
 
+### Who said what (speaker identification)
+
+Point `diarizationModel` at a folder holding Moonshine's diarization models (`segmentation.ort` and
+`embedding.ort`, about 8 MB, from Moonshine's diarization model download). Loading fails if they are missing.
+
+```kotlin
+val transcriber = loadTranscriber(
+    TranscriberConfig(
+        model = ModelSource.Bundled("base-en"),
+        arch = ModelArch.Base,
+        diarizationModel = ModelSource.Bundled("diarization"),
+    ),
+).getOrThrow()
+
+stream.transcript.collect { transcript ->
+    transcript.lines.forEach { line ->
+        line.speakers.forEach { span ->
+            val words = span.textRange?.let(line.text::substring) ?: line.text
+            println("Speaker ${span.speakerIndex + 1}: $words")
+        }
+    }
+}
+```
+
+- Render from `transcript`, not from `completedLines` alone: speaker spans for roughly the last two minutes
+  are revised as more of each voice is heard, so a line can change speakers after it completes.
+- Spans follow the audio, not sentence boundaries: a line can carry several spans, including short blips
+  attributed to another voice. Pick the longest span when a line needs a single speaker.
+- `textRange` needs word timestamps, which need the model folder's word-timestamp decoder
+  (`decoder_with_attention.ort` or `alignment_model.ort` for `Tiny`/`Base`,
+  `decoder_kv_with_attention.ort` for streaming models). Without it every `textRange` is null.
+- `speakerIndex` restarts at 0 for every stream and every `transcribe` / `transcribeFile` result, even
+  though Moonshine's own counter keeps running across the transcriber's lifetime.
+
+### Vocabulary bias (streaming models)
+
+```kotlin
+// A known list: contact names, product names, jargon.
+transcriber.setVocabularyBias(VocabularyBias.Terms(listOf("Kubernetes", "Ceph", "Adaeze")))
+
+// Or hand over context and let Moonshine pick the unusual words.
+transcriber.setVocabularyBias(VocabularyBias.Context(documentOnScreen, maxTerms = 50))
+
+// Off.
+transcriber.setVocabularyBias(VocabularyBias.None)
+```
+
+Strength is the load-time `keyterm_boost` option (default `2.0`, the most accurate setting for the
+listed terms); lower it through `TranscriberConfig.options` if general accuracy matters more.
+
 ---
 
 ## Platform Setup
@@ -220,17 +303,28 @@ provider).
 
 #### 2. ABI
 
-The `moonshine-voice` AAR ships `arm64-v8a` native libraries only. Run on a physical device or an
-arm64 emulator image.
+The `moonshine-voice` AAR ships `arm64-v8a`, `armeabi-v7a` and `x86_64` native libraries.
 
-#### 3. Permissions
+#### 3. What `moonshine-voice` adds to the app
 
-Declared by the app module, not this library: `RECORD_AUDIO` for live microphone audio (see
-`/audio-recorder`). File and buffer transcription need no permission.
+The AAR's manifest merges into the app: `RECORD_AUDIO`, `INTERNET` and `ACCESS_NETWORK_STATE`
+permissions, plus `ai.moonshine.voice.MicrophonePermissionActivity`. It also brings `appcompat`,
+`material`, `okhttp` and `work-runtime` as runtime dependencies. This module uses none of them (it never
+downloads models or touches the microphone), and does not strip them, because a library-level
+`tools:node="remove"` would also remove the same permissions other libraries declare. An app that does not
+want them removes them in its own manifest:
+
+```xml
+<uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
+<activity android:name="ai.moonshine.voice.MicrophonePermissionActivity" tools:node="remove" />
+```
+
+Keep `RECORD_AUDIO` for live microphone audio (see `/audio-recorder`); file and buffer transcription need
+no permission.
 
 #### 4. minSdk override
 
-The `moonshine-voice` AAR declares `minSdk 35`. The module's manifest already includes:
+The `moonshine-voice` AAR declares `minSdk 26`. The module's manifest already includes:
 
 ```xml
 <uses-sdk tools:overrideLibrary="ai.moonshine.voice" />
@@ -252,7 +346,9 @@ In Xcode: **File > Add Package Dependencies**, add:
 https://github.com/ribads/moonshine-bridge-kmp
 ```
 
-Select the `MoonshineVoiceBridge` library product.
+Select the `MoonshineVoiceBridge` library product, with the dependency rule **Up to Next Minor Version**
+from `0.1.0`. Bridge `0.1.x` wraps moonshine-swift `0.1.x` and is the only line this module's header
+matches; an older bridge fails to link, a newer minor may fail at runtime.
 
 #### 2. Cinterop (already configured)
 
@@ -301,8 +397,11 @@ In `Info.plist`:
   `loadTranscriber` or transcribes badly.
 - **Errors**: every call returns `Result`; cancellation of the caller is rethrown, never reported as a
   failure. A live stream's failure surfaces in `state` and `stop()`, never in the caller's scope.
-- **iOS throughput**: the Swift bridge takes `[Float]`, so each sample is boxed to `NSNumber` on its way to
-  the engine. Fine for live audio; file transcription bounds this to one window (2 minutes at 16 kHz) at a
-  time.
+- **Speakers in files**: `transcribeFile` transcribes in two-minute windows, and each window identifies
+  speakers on its own. In files longer than one window, the same voice can come back under a new
+  `speakerId` (and so a new `speakerIndex`) in each window. Live streams keep voices consistent for the
+  whole stream.
+- **Speaker cost**: identification runs inside every transcription pass and its cost grows with session
+  length; tune it with the raw `diarization_cluster_window_sec` and `diarization_cluster_cadence` options.
 - **Lifecycle**: load once per feature, `release()` when done. Releasing stops and flushes any live stream
   first.
