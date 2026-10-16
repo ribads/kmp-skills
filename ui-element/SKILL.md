@@ -82,6 +82,7 @@ object Theme {
     val colorSchemes: ColorSchemes      @Composable get()   // both schemes, as the theme received them
     val isDark: Boolean                 @Composable get()   // for assets and third-party UI, not colour picks
     val typography: Typography          @Composable get()
+    @Composable inline fun <reified T : Typography> typography(): T   // the app's own Typography type; throws on a mismatch
     val spacing: Spacing                @Composable get()
     val shape: Shape                    @Composable get()
     val contentColor: Color             @Composable get()   // LocalContentColor.current
@@ -100,7 +101,7 @@ Besides the tokens, `WithTheme` (and so `WithAppTheme`) provides these for the r
 | `LocalTextSelectionColors` | handle `border.emphasis`, background `border.emphasis` at 40% alpha |
 | `LocalIndication` | Material 3 `ripple()`, coloured by the pressed component's content colour |
 
-Reading `Theme.colors`, `Theme.colorSchemes`, `Theme.isDark`, `Theme.shape` or `LocalContentColor` with no theme above throws, so a missing theme fails on first composition instead of rendering `Color.Unspecified`. `Theme.typography` and `Theme.spacing` fall back to `TextStyle.Default` and the default scale.
+Reading `Theme.colors`, `Theme.colorSchemes`, `Theme.isDark`, `Theme.shape` or `LocalContentColor` with no theme above throws, so a missing theme fails on first composition instead of rendering `Color.Unspecified`. `Theme.typography` and `Theme.spacing` fall back to `Typography(body = TextStyle.Default)` and the default spacing scale.
 
 ### Colors
 
@@ -175,15 +176,66 @@ data class Overlay(
 
 ### Typography
 
+`Typography` is the set of text roles Synapse's components read, not the app's whole type scale.
+
 ```kotlin
+/** Implementations must be immutable. */
 @Immutable
-data class Typography(
-    val h1: TextStyle, val h2: TextStyle, val h3: TextStyle, val h4: TextStyle,
-    val headingS: TextStyle, val headingM: TextStyle, val button: TextStyle,
-    val body: TextStyle, val bodyM: TextStyle, val bodyS: TextStyle, val bodyXs: TextStyle,
-    val labelS: TextStyle, val labelXs: TextStyle,
-)
+interface Typography {
+    val h1: TextStyle; val h2: TextStyle; val h3: TextStyle; val h4: TextStyle
+    val headingS: TextStyle; val headingM: TextStyle; val button: TextStyle
+    val body: TextStyle; val bodyM: TextStyle; val bodyS: TextStyle; val bodyXs: TextStyle
+    val labelS: TextStyle; val labelXs: TextStyle
+}
+
+/**
+ * Every role left out is derived from body or heading on the default scale, keeping the font family,
+ * colour and other attributes of the style it comes from. Pass any role to set it exactly.
+ */
+fun Typography(
+    body: TextStyle,
+    heading: TextStyle = body.copy(fontWeight = FontWeight.SemiBold),
+    h1: TextStyle = heading.copy(fontSize = 34.sp, lineHeight = 40.sp),
+    h2: TextStyle = heading.copy(fontSize = 28.sp, lineHeight = 34.sp),
+    h3: TextStyle = heading.copy(fontSize = 22.sp, lineHeight = 28.sp),
+    h4: TextStyle = heading.copy(fontSize = 18.sp, lineHeight = 24.sp),
+    headingM: TextStyle = heading.copy(fontSize = 16.sp, lineHeight = 22.sp),
+    headingS: TextStyle = heading.copy(fontSize = 14.sp, lineHeight = 20.sp),
+    button: TextStyle = body.copy(fontWeight = FontWeight.SemiBold, fontSize = 15.sp, lineHeight = 20.sp),
+    bodyM: TextStyle = body.copy(fontWeight = FontWeight.Medium),
+    bodyS: TextStyle = body.copy(fontSize = 14.sp, lineHeight = 20.sp),
+    bodyXs: TextStyle = body.copy(fontSize = 12.sp, lineHeight = 16.sp),
+    labelS: TextStyle = body.copy(fontWeight = FontWeight.Medium, fontSize = 12.sp, lineHeight = 16.sp),
+    labelXs: TextStyle = body.copy(fontWeight = FontWeight.Medium, fontSize = 10.sp, lineHeight = 14.sp),
+): Typography
 ```
+
+Pick one of three ways to provide it:
+
+```kotlin
+// 1. Just a body style (and optionally a heading style); the scale is derived.
+val typography = Typography(body = TextStyle(fontFamily = myFont, fontSize = 16.sp, lineHeight = 24.sp))
+
+// 2. Every role set explicitly, by name.
+val typography = Typography(body = …, h1 = …, h2 = …, /* … */ labelXs = …)
+
+// 3. The app's own, richer type scale: implement the interface and map each role to a token.
+@Immutable
+data class AppTypography(
+    val display: TextStyle,
+    val titleL: TextStyle,
+    val caption: TextStyle,
+    private val roles: Typography,               // what isn't remapped below
+) : Typography by roles {
+    override val headingM: TextStyle get() = titleL
+    override val bodyXs: TextStyle get() = caption
+}
+
+// Synapse components read the roles; app code reads its own tokens with the typed accessor.
+Text(clause = title, style = Theme.typography<AppTypography>().display)
+```
+
+With option 3 the app keeps one typography object and one theme: no parallel `CompositionLocal`, and every token stays reachable through `Theme`.
 
 ### Spacing
 

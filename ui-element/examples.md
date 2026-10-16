@@ -34,9 +34,9 @@ private val DarkColors = Colors(
 @Composable
 fun MyAppTheme(appearance: Appearance = Appearance.System, content: @Composable () -> Unit) {
     val typography = Typography(
+        body = TextStyle(fontFamily = myFont, fontSize = 16.sp, lineHeight = 24.sp),
         h1 = TextStyle(fontFamily = myFont, fontWeight = FontWeight.SemiBold, fontSize = 40.sp),
-        body = TextStyle(fontFamily = myFont, fontWeight = FontWeight.Medium, fontSize = 16.sp),
-        // ... all 13 styles, without colours
+        // ... any other role to set exactly; the rest derive from body. No colours.
     )
     val shape = Shape(
         buttonShape = RoundedCornerShape(28.dp),
