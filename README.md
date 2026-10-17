@@ -13,6 +13,8 @@ In Claude Code:
 
 Skills are namespaced under the plugin, for example `/synapse:ui-element` or `/synapse:build-screen`. Claude also loads a skill on its own when a task matches its description.
 
+The [Claude Code skills guide](https://ribads.com/guides/claude-code/) covers sharing the plugin with a project and what each skill does.
+
 ## Update
 
 Auto-update is off by default for third-party marketplaces. Turn it on in `/plugin` under Marketplaces, or update manually:
