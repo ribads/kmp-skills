@@ -19,6 +19,8 @@
 
 ## TopNavBar
 
+Both actions have icons, so both render as icons and announce their labels. Had `Save` been label-only, the bar would show only `Save`, as text (see the TopNavBar rules in nodes-reference.md).
+
 ```json
 {
   "type": "Scaffold",
@@ -27,8 +29,8 @@
     "title": "Expenses",
     "leadingIcon": { "type": "back", "actionId": "navigate_back" },
     "trailingActions": [
-      { "iconUrl": "ic_filter.png", "actionId": "open_filter" },
-      { "label": "Save", "actionId": "save_form" }
+      { "iconUrl": "ic_filter.png", "label": "Filter", "actionId": "open_filter" },
+      { "iconUrl": "ic_save.png", "label": "Save", "actionId": "save_form" }
     ]
   },
   "content": [
@@ -82,6 +84,8 @@
 
 ## Conditional
 
+A `Conditional` draws no layout of its own, so its branch takes its place in the parent: a `weight` on the branch works when the `Conditional` sits directly in a `Row` or `Column`.
+
 ```json
 {
   "type": "Conditional",
@@ -108,7 +112,7 @@
 
 ---
 
-## Data Layer — Full Note-Taking App
+## Data Layer: Full Note-Taking App
 
 A multi-page app with reactive collections, computed fields, mutations, and conditional UI:
 
@@ -175,8 +179,13 @@ A multi-page app with reactive collections, computed fields, mutations, and cond
                 "type": "Card",
                 "actionId": "mutation:delete_note",
                 "children": [
-                  { "type": "Text", "content": "{{item.title}}", "style": "HeadingS" },
-                  { "type": "Text", "content": "{{item.body}}", "style": "BodyS" }
+                  {
+                    "type": "Column",
+                    "children": [
+                      { "type": "Text", "content": "{{item.title}}", "style": "HeadingS" },
+                      { "type": "Text", "content": "{{item.body}}", "style": "BodyS" }
+                    ]
+                  }
                 ]
               }
             },

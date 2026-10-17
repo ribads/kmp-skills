@@ -44,6 +44,8 @@ interface PermissionsManager {
 expect fun buildPermissionsManager(): PermissionsManager
 ```
 
+On Android `requestPermission` needs a live `ComponentActivity` (`AppContextProvider.currentActivity`, see `/context`) to show the prompt, and **throws `IllegalStateException`** when there is none (for example when called before any `ComponentActivity` has resumed, or after the tracked one is destroyed). iOS needs no activity and never throws.
+
 ### PermissionsRequest
 
 ```kotlin
@@ -109,6 +111,33 @@ Platform details:
 - **Android**: Wraps `ActivityCompat` runtime permissions
 - **iOS**: Wraps AVCaptureDevice, PHPhotoLibrary, CLLocationManager, etc.
 
+### Android manifest
+
+The module ships **no** `AndroidManifest.xml`, so the app must declare every permission it requests.
+Android denies an undeclared permission without showing a prompt, so a missing required entry makes
+the request return `Denied` every time.
+
+| Request | Declare in the app manifest |
+|---------|-----------------------------|
+| `Audio` | `RECORD_AUDIO` |
+| `Camera` | `CAMERA` |
+| `MediaStorage` | nothing |
+| `VideoCall` | `RECORD_AUDIO`, `CAMERA`; optionally `READ_PHONE_STATE` and `BLUETOOTH_SCAN` (API 31+) |
+| `Location` | `ACCESS_COARSE_LOCATION`; add `ACCESS_FINE_LOCATION` to let the user grant precise location |
+
+```xml
+<uses-permission android:name="android.permission.RECORD_AUDIO" />
+<uses-permission android:name="android.permission.CAMERA" />
+<uses-permission android:name="android.permission.READ_PHONE_STATE" />
+<uses-permission
+    android:name="android.permission.BLUETOOTH_SCAN"
+    android:usesPermissionFlags="neverForLocation" />
+<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+```
+
+Declare only the entries for the requests the app makes.
+
 ### Per-request mapping
 
 | Request | Android | iOS |
@@ -116,13 +145,25 @@ Platform details:
 | `Audio` | `RECORD_AUDIO` | microphone (`AVAudioSession`) |
 | `Camera` | `CAMERA` | camera (`AVCaptureDevice`, video) |
 | `MediaStorage` | none (modern photo-picker APIs) | photo library read/write (`PHPhotoLibrary`) |
-| `VideoCall` | required `RECORD_AUDIO` + `CAMERA`; optional `READ_PHONE_STATE` + `BLUETOOTH_SCAN` (API 31+) | camera + microphone |
-| `Location` | `ACCESS_FINE_LOCATION` + `ACCESS_COARSE_LOCATION` (foreground) | when-in-use (`CLLocationManager`) |
+| `VideoCall` | required `RECORD_AUDIO` + `CAMERA`; optional `READ_PHONE_STATE` + `BLUETOOTH_SCAN` (API 31+ only) | camera + microphone |
+| `Location` | required `ACCESS_COARSE_LOCATION`; optional `ACCESS_FINE_LOCATION` (foreground only) | when-in-use (`CLLocationManager`), either accuracy |
 
-`VideoCall` succeeds once the **required** mic + camera are granted. The optional permissions are
-still prompted on Android 12+ but declining them does not fail the request. Declare
-`BLUETOOTH_SCAN` with `android:usesPermissionFlags="neverForLocation"` if the call does not derive
-location from it; otherwise it triggers a runtime prompt.
+A request succeeds once its **required** permissions are granted. Optional permissions are prompted
+together with the required ones, but declining them does not fail the request. Once every required
+permission is held the request returns `Success` straight away, without prompting for the optional
+ones again.
+
+`VideoCall` on API 31+ is the only request with optional call-state and Bluetooth permissions, and the
+only one `neverForLocation` concerns. `BLUETOOTH_SCAN` is a runtime permission (the "Nearby devices"
+prompt) whether or not the flag is set: `android:usesPermissionFlags="neverForLocation"` only asserts
+that the app never derives physical location from scan results, and Android then filters some BLE
+beacons out of those results. Below API 31 `VideoCall` requests only mic + camera.
+
+`Location` returns `Success` when the user grants **approximate** location: on Android 12+ the dialog
+offers precise or approximate, and either grant succeeds, matching iOS, where when-in-use
+authorization succeeds with full or reduced accuracy. An app that needs precise location must check
+`ACCESS_FINE_LOCATION` (Android) or `CLLocationManager.accuracyAuthorization` (iOS) itself; once
+approximate is held, `Location` returns `Success` without prompting again.
 
 `Location` requests **when-in-use** authorization only (no Always/background scope). The host app
 **must** declare `NSLocationWhenInUseUsageDescription` in its `Info.plist`. Without that key iOS
@@ -134,5 +175,5 @@ Required iOS `Info.plist` usage-description keys per request:
 |---------|----------------|
 | `Audio`, `VideoCall` | `NSMicrophoneUsageDescription` |
 | `Camera`, `VideoCall` | `NSCameraUsageDescription` |
-| `MediaStorage` | `NSPhotoLibraryUsageDescription` / `NSPhotoLibraryAddUsageDescription` |
+| `MediaStorage` | `NSPhotoLibraryUsageDescription` (read-write access; `NSPhotoLibraryAddUsageDescription` is not used) |
 | `Location` | `NSLocationWhenInUseUsageDescription` |

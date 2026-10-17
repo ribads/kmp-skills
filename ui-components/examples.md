@@ -19,6 +19,23 @@ LabelTextField(
 )
 ```
 
+## Currency field
+
+```kotlin
+// Contract: a null amount is an empty field, so the placeholder shows until the user types.
+val amount = CurrencyInputModel(
+    label = Text.Localized(Res.string.amount),
+    amount = CurrencyAmount(amount = null, currency = Currency.GBP),
+    placeholder = Text.Localized(Res.string.amount_placeholder),
+)
+
+// Screen
+CurrencyTextField(
+    model = state.amount,
+    onAmountChanged = { minorUnits -> viewModel.emit(Intent.OnAmountChanged(minorUnits)) },   // null when cleared
+)
+```
+
 ## Date Picker
 
 ```kotlin
@@ -28,6 +45,28 @@ DatePickerBottomSheet(
     onDateSelected = { millis -> selectedMs = millis },
     onDismissRequest = { showPicker = false }
 )
+
+// Localized labels, built once in the contract or mapper
+val datePicker = DatePickerModel(
+    selectedDate = null, minDate = null, maxDate = null,
+    monthLabels = listOf(Res.string.january, /* … */ Res.string.december).map { Text.Localized(it) },
+    weekdayLabels = listOf(Res.string.sun, /* … */ Res.string.sat).map { Text.Localized(it) },   // Sunday first
+    resetLabel = Text.Localized(Res.string.reset),
+    doneLabel = Text.Localized(Res.string.done),
+)
+```
+
+## Top Nav Bar
+
+```kotlin
+// The built-in back icon announces "Back"; give it a localized label for other languages
+val topBar = TopNavBarModel.withTitle(
+    title = Text.Localized(Res.string.settings),
+    leadingIconType = NavBarIconType.Back,
+    leadingIconLabel = Text.Localized(Res.string.back),
+)
+
+TopNavBar(model = state.topBar, onLeadingClick = { viewModel.emit(Intent.OnBackClick) })
 ```
 
 ## Scaffold
@@ -187,13 +226,16 @@ RatingInput(
 ## Chips
 
 ```kotlin
-// Single select
+// Single select. Tapping the selected chip again clears it, so the new selection can be empty:
+// read it with firstOrNull(). To keep a selection at all times, ignore the empty set instead:
+// onSelectionChange = { keys -> keys.firstOrNull()?.let { selectedSize = it } }
+// selectedSize: String?
 ChipGroup(
     model = ChipGroupModel(
         options = listOf(ChipOption("s", "Small".asText()), ChipOption("m", "Medium".asText()), ChipOption("l", "Large".asText())),
-        selectedKeys = setOf(selectedSize),
+        selectedKeys = setOfNotNull(selectedSize),
     ),
-    onSelectionChange = { selectedSize = it.first() }
+    onSelectionChange = { selectedSize = it.firstOrNull() }
 )
 
 // Multi select

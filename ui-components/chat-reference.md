@@ -23,12 +23,13 @@ data class ChatTextAreaModel(
     val placeholder: Clause,
     val attachments: List<ChatAttachment> = emptyList(),
     val actions: List<ChatInputAction> = emptyList(),
+    val sendLabel: Clause = "Send".asText(),   // the send button's screen-reader label
 )
 
 @Immutable
 data class ChatInputAction(
     val id: String,
-    val image: Image,
+    val image: Image,                            // its contentDescription is the action's screen-reader label
     val enabled: Boolean = true,
 )
 ```
@@ -63,8 +64,8 @@ sealed interface ChatAttachment {
 - 24dp corner radius container with 0.5dp border
 - `animateContentSize` with spring for smooth height transitions
 - Attachment strip: horizontal scrollable row of 56dp image thumbnails and audio chips, each with an 18dp circle remove button
-- Send button: 34dp circle with Canvas arrow icon, spring bounce scale animation (appears when input has content)
-- Action icons: 22dp; a `Glyph` is tinted with `element.secondary`, an `Artwork` is drawn as authored; disabled actions render at 35% alpha
+- Send button: 34dp circle with Canvas arrow icon, spring bounce scale animation (appears when input has content). While shown it is announced as a button labelled `sendLabel`; while hidden it is neither tappable nor announced.
+- Action icons: 22dp; a `Glyph` is tinted with `element.secondary`, an `Artwork` is drawn as authored. A disabled action ignores taps and dims only its tint (35% alpha), so a disabled `Glyph` fades but a disabled `Artwork` looks the same as an enabled one; use glyphs for actions that can be disabled.
 
 ---
 

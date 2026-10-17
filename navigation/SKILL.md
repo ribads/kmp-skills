@@ -40,6 +40,7 @@ import com.ribads.synapse.ui.compose.presentation.navigation.NavigationResult
 import com.ribads.synapse.ui.compose.presentation.navigation.NavigationResultStore
 import com.ribads.synapse.ui.compose.presentation.navigation.compose.BottomSheetAppearance
 import com.ribads.synapse.ui.compose.presentation.navigation.compose.BottomSheetOptions
+import com.ribads.synapse.ui.compose.presentation.navigation.compose.BottomSheetSceneStrategy
 import com.ribads.synapse.ui.compose.presentation.navigation.compose.LocalBottomSheetAppearance
 import com.ribads.synapse.ui.compose.presentation.navigation.compose.NavContainer
 import com.ribads.synapse.ui.compose.presentation.navigation.compose.PageTransition
@@ -297,7 +298,12 @@ data class BottomSheetAppearance(                     // app-wide, via NavContai
 )
 ```
 
-`bottomSheet()` renders the destination as a Material 3 modal bottom sheet; dismissing it (scrim tap, drag-down, or back) pops the back stack. `contentColor` defaults to Material's pairing for the container (on Android it also decides the sheet's status bar icon colour), and `contentDecoration` wraps every sheet's content, e.g. to provide the app's raised-surface theme context. The parameterless overload keeps callers clear of the `ExperimentalMaterial3Api` opt-in; take the `ModalBottomSheetProperties` overload only when you need to change them. Both overlays host their content with a sheet/dialog-scoped lifecycle, so entry-scoped `viewModel { }` works inside them.
+`bottomSheet()` renders the destination as a Material 3 modal bottom sheet; dismissing it (scrim tap, drag-down, or back) pops the back stack. `contentColor` defaults to Material's pairing for the container (on Android it also decides the sheet's status bar icon colour), and `contentDecoration` wraps every sheet's content, e.g. to provide the app's raised-surface theme context. The parameterless overload keeps callers clear of the `ExperimentalMaterial3Api` opt-in; take the `ModalBottomSheetProperties` overload only when you need to change them.
+
+Lifecycle inside overlays differs by kind:
+
+- **`bottomSheet()`**: Synapse's own scene hosts the sheet and gives its content a sheet-scoped `LocalLifecycleOwner`, so entry-scoped `viewModel { }` and lifecycle-aware collection inside the sheet resolve against the sheet, not the screen beneath it.
+- **`dialog()`**: presented by Navigation 3's `DialogSceneStrategy`, unchanged. Synapse adds no lifecycle owner there, so a dialog's content gets whatever Navigation 3 and the platform `Dialog` provide; entry-scoped `viewModel { }` still comes from the entry's own decorators. Verify lifecycle-dependent behaviour in a dialog destination on each platform rather than assuming it matches a sheet.
 
 **The destination already is the sheet.** Root a `bottomSheet()` screen in `TraySurface` (or `ScrollableTraySurface` for scrolling content, with `BottomSheetOptions(skipPartiallyExpanded = true, isSwipeDismissible = false, showDragHandle = false)`) from `/ui-components`. Never root it in `Tray` or `ScrollableTray`: those draw their own sheet, so the user gets a second sheet behind the first.
 
@@ -306,6 +312,26 @@ data class BottomSheetAppearance(                     // app-wide, via NavContai
 ```kotlin
 val LocalBottomSheetAppearance: ProvidableCompositionLocal<BottomSheetAppearance>
 ```
+
+**Your own `NavDisplay`.** `NavContainer` already registers the sheet strategy (ahead of Navigation 3's `DialogSceneStrategy` and the pane strategies), so most apps never touch it. An app that drives Navigation 3's `NavDisplay` itself registers it to get `bottomSheet()` destinations, first in the list so the sheet overlays the destination beneath it:
+
+```kotlin
+class BottomSheetSceneStrategy<T : Any>(
+    appearance: BottomSheetAppearance = BottomSheetAppearance(),
+) : SceneStrategy<T>                                   // androidx.navigation3.scene.SceneStrategy
+
+NavDisplay(                                            // androidx.navigation3.ui.NavDisplay
+    backStack = backStack,
+    sceneStrategies = listOf(
+        BottomSheetSceneStrategy<NavKey>(appearance = ThemedBottomSheetAppearance),
+        DialogSceneStrategy<NavKey>(),
+        SinglePaneSceneStrategy<NavKey>(),
+    ),
+    entryProvider = entryProvider { /* entries */ },
+)
+```
+
+It returns a scene only when the top entry carries `bottomSheet()` metadata, and the sheet's dismissal calls the `NavDisplay`'s `onBack`. Provide `LocalBottomSheetAppearance` yourself in that setup if in-screen trays should match.
 
 ### List-detail
 

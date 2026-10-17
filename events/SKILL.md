@@ -45,7 +45,7 @@ Use for **cross-cutting signals** that multiple unrelated modules need to react 
 Do **not** use for:
 
 - Feature-scoped communication — repositories, use cases, and MVI contracts are the correct home for that
-- Replacing `core:analytics` — analytics is fire-and-record-for-later; this is fire-and-react-now. Pair them via an interceptor instead
+- Replacing your analytics pipeline: analytics is fire-and-record-for-later, this is fire-and-react-now. Forward a subset of events to it from an interceptor instead
 - Request/response or command patterns — the bus is fan-out and fire-and-forget; pick a repository for those
 
 ---
@@ -252,38 +252,38 @@ subscriber.events
 Interceptors are side-effect observers invoked in parallel with normal subscribers. Registered once at bus construction. Common uses:
 
 - Debug-build logging of every event
-- Forwarding an `AnalyticsEvent : AppEvent` subset to `core:analytics`
+- Forwarding a marked subset of events to the app's analytics or crash reporter
 - Recording crash breadcrumbs
 - Powering a live dev-overlay feed
 
 ```kotlin
-class DebugLogInterceptor(private val log: Logger) : EventInterceptor {
+class DebugLogInterceptor(private val log: (String) -> Unit) : EventInterceptor {
     override suspend fun intercept(event: AppEvent) {
-        log.debug("[bus] $event")
+        log("[bus] $event")
     }
 }
 
-interface AnalyticsEvent : AppEvent {
-    val name: String
-    val params: Map<String, AnalyticsParams>
-}
+class RecentEventsInterceptor(private val capacity: Int) : EventInterceptor {
+    private val _recent = MutableStateFlow<List<AppEvent>>(emptyList())
+    val recent: StateFlow<List<AppEvent>> = _recent.asStateFlow()
 
-class AnalyticsForwardingInterceptor(
-    private val analytics: Analytics,
-) : EventInterceptor {
     override suspend fun intercept(event: AppEvent) {
-        if (event is AnalyticsEvent) analytics.log(event.name, event.params)
+        _recent.update { (it + event).takeLast(capacity) }
     }
 }
+
+val recentEvents = RecentEventsInterceptor(capacity = 50)   // feeds a dev overlay or crash breadcrumbs
 
 val bus = EventBus.create(
     scope = appScope,
     interceptors = listOf(
-        DebugLogInterceptor(logger),
-        AnalyticsForwardingInterceptor(analytics),
+        DebugLogInterceptor(log = ::println),
+        recentEvents,
     ),
 )
 ```
+
+To forward events elsewhere (analytics, a crash reporter), give the events that should leave the app a marker interface extending `AppEvent` and check for it in `intercept`, so the bus never needs to know about the receiving SDK.
 
 Semantics:
 
@@ -346,4 +346,4 @@ Interceptors are contributed from feature modules via a multi-binding (`Set<Even
 
 ## Platforms
 
-JVM, iOS (arm64, x64, simulatorArm64). Pure Kotlin — backed by `kotlinx.coroutines` `MutableSharedFlow` + `MutableStateFlow`.
+JVM (Android apps consume the JVM artifact; there is no separate Android target) and iOS (`iosArm64`, `iosSimulatorArm64`). Pure Kotlin, backed by `kotlinx.coroutines` `MutableSharedFlow` + `MutableStateFlow`.

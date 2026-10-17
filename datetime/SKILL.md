@@ -56,6 +56,12 @@ These pattern characters auto-delegate to platform-native formatters:
 
 Standard numeric patterns (`dd`, `MM`, `yyyy`, `HH`, `mm`, `ss`) work cross-platform via kotlinx.datetime.
 
+On JVM the native formatter is `SimpleDateFormat` with `Locale.getDefault()`; on iOS it is `NSDateFormatter` with the device locale. The browser (wasmJs) has neither, so Synapse renders these fields itself, with fixed output:
+
+- Month and day names are English, whatever the browser locale (`MMM` gives `Mar`, `EEEE` gives `Friday`).
+- `a` is always `AM` / `PM` and `G` is always `AD`.
+- `zzz` and `zzzz` print the time-zone ID (`Europe/London`), not a zone name or abbreviation.
+
 ---
 
 ## Usage
@@ -76,4 +82,4 @@ val time12h = parser.format(millis, "hh:mm")                  // "02:30"
 val london = parser.format(millis, "HH:mm", TimeZone.of("Europe/London"))
 ```
 
-**Platforms**: JVM, iOS (arm64, x64, simulatorArm64). Uses `kotlinx.datetime.TimeZone`.
+**Platforms**: JVM (Android apps consume the JVM artifact; there is no separate Android target), iOS (`iosArm64`, `iosSimulatorArm64`), and wasmJs (browser, with the locale limits above). Uses `kotlinx.datetime.TimeZone`.

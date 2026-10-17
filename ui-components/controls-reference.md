@@ -41,11 +41,15 @@ data class ProgressBarModel(
     val max: Float = 1f,
     val label: Clause? = null,
     val showPercentage: Boolean = false,
-    val color: String? = null,
 ) {
+    @Deprecated("color was never read. Pass overrideColor to ProgressBar to recolour the indicator.")
+    constructor(value: Float = 0f, max: Float = 1f, label: Clause? = null, showPercentage: Boolean = false, color: String?)
+
     val fraction: Float get() = if (max > 0f) (value / max).coerceIn(0f, 1f) else 0f
 }
 ```
+
+The indicator is `surfaceInteractive.enabled` on a `surface.subtle` track; `overrideColor` replaces it. The model has no colour: the old `color: String?` was never read, so the constructor that still takes it is deprecated and ignores it.
 
 ### CircularProgress
 
@@ -65,11 +69,15 @@ data class CircularProgressModel(
     val max: Float = 1f,
     val label: Clause? = null,
     val showPercentage: Boolean = true,
-    val color: String? = null,
 ) {
+    @Deprecated("color was never read. Pass overrideColor to CircularProgress to recolour the arc.")
+    constructor(value: Float = 0f, max: Float = 1f, label: Clause? = null, showPercentage: Boolean = true, color: String?)
+
     val fraction: Float get() = if (max > 0f) (value / max).coerceIn(0f, 1f) else 0f
 }
 ```
+
+The arc is `intents.accent.content` on a `border.secondary` track; `overrideColor` replaces it. The model has no colour: the old `color: String?` was never read, so the constructor that still takes it is deprecated and ignores it.
 
 ### Waveform
 
@@ -166,6 +174,8 @@ data class ChipOption(
 )
 ```
 
+`onSelectionChange` receives the whole new selection. With `multiSelect = false` that is a set of one key, or an **empty set** when the user taps the chip that is already selected: single-select chips can be cleared. Read it with `firstOrNull()`, never `first()`, and ignore the empty set if your screen needs a selection at all times.
+
 ---
 
 ## Tab Layout
@@ -253,7 +263,7 @@ data class RadioOption(
 
 ## Slider
 
-Custom Canvas track + thumb with pointer input for tap/drag and step snapping.
+Custom Canvas track + thumb with pointer input for tap/drag and step snapping. The thumb follows the finger from local state during a drag and reports each change through `onValueChange`; a new `value`, `min` or `max` resets it.
 
 ```kotlin
 @Composable fun Slider(
@@ -302,7 +312,7 @@ data class StepperModel(
 
 ## Timer
 
-Label + formatted time display (`HH:MM:SS`) with Start/Stop and Reset buttons.
+Label + formatted elapsed time with Start/Stop and Reset buttons. The time reads `mm:ss` under an hour and `hh:mm:ss` from an hour on. The component does not tick: the caller advances `elapsedMs`.
 
 ```kotlin
 @Composable fun Timer(
@@ -317,6 +327,9 @@ data class TimerModel(
     val elapsedMs: Long = 0L,
     val running: Boolean = false,
     val label: Clause? = null,
+    val startLabel: Clause = "Start".asText(),   // the toggle while stopped
+    val stopLabel: Clause = "Stop".asText(),     // the toggle while running
+    val resetLabel: Clause = "Reset".asText(),
 )
 ```
 
@@ -330,17 +343,21 @@ Hour/minute spinners with up/down arrows. Supports 12h (AM/PM toggle) and 24h mo
 @Composable fun TimePicker(
     model: TimePickerModel,
     modifier: Modifier = Modifier,
-    onTimeChange: (hour: Int, minute: Int) -> Unit,
+    onTimeChange: (hour: Int, minute: Int) -> Unit,   // hour on a 24-hour clock in both modes
 )
 
 @Stable
 data class TimePickerModel(
-    val hour: Int = 0,
-    val minute: Int = 0,
+    val hour: Int = 0,                   // 0..23 in both modes
+    val minute: Int = 0,                 // 0..59
     val is24Hour: Boolean = true,
     val label: Clause? = null,
+    val amLabel: Clause = "AM".asText(),
+    val pmLabel: Clause = "PM".asText(),
 )
 ```
+
+`hour` is always on a 24-hour clock, so the model needs no AM/PM field and switching mode never changes the time. In 12-hour mode the spinner shows and wraps `1..12` within the half of the day the toggle selects, as Material's time picker does: 12 AM is hour 0 and 12 PM is hour 12, so 11 AM steps up to 12 AM (midnight), not noon. Only the AM/PM toggle changes the half, moving the hour by twelve.
 
 ---
 

@@ -9,19 +9,21 @@ commonMain.dependencies {
 }
 ```
 
-Depends on `ui:renderer` and Compose Runtime.
+Depends only on `ui:renderer-core` (pure Kotlin, no Compose), so it runs in any engine, a browser preview, or a test.
 
-The data layer lets JSON schemas declare typed fields, collections, mutations, and conditions. The renderer binds to this data reactively — no Kotlin code needed for data operations.
+The data layer lets JSON schemas declare typed fields, collections, mutations, and conditions. The renderer binds to this data reactively, with no Kotlin code needed for data operations.
 
 ### Architecture
 
 ```
-Schema types (ui:renderer)          ← serializable declarations
-    ↓
-Runtime (ui:renderer-data)          ← ReactiveDataStore, MutationExecutor, SchemaConditionEvaluator
-    ↓
-Navigation wiring (ui:renderer-navigation)  ← automatic setup in renderedComposable
+Schema types (ui:renderer-core)     <- serializable declarations, RecordConditionEvaluator
+    |
+Runtime (ui:renderer-data)          <- ReactiveDataStore, MutationExecutor, renderedPageActionHandler
+    |
+Navigation wiring (ui:renderer-navigation)  <- automatic setup in renderedEntry / renderedEntries
 ```
+
+Without a `DataSchema` there is no store, so a route's collections are always empty: every `dataSource` binds to an empty list.
 
 ---
 
@@ -81,7 +83,14 @@ enum class SortDirection { asc, desc }
 
 ## ComputedField (sealed, discriminator `"type"`)
 
-Computed fields derive their value from collection data or other fields. They update automatically when underlying data changes.
+Computed fields derive their value from collection data or other fields. They update automatically when underlying data changes. A computed field is a `DataField` whose `computed` holds the operation:
+
+```json
+"total_expenses": {
+  "type": "double",
+  "computed": { "type": "sum", "collection": "expenses", "field": "amount" }
+}
+```
 
 | Variant | SerialName | Key fields |
 |---------|-----------|------------|
@@ -114,8 +123,8 @@ Triggered from UI via `"actionId": "mutation:<name>"`.
 |---------|-----------|--------|-------------|
 | `FieldRef` | `"fieldRef"` | `name: String` | Current value of a declared field |
 | `Literal` | `"literal"` | `value: JsonPrimitive` | Hard-coded value |
-| `Timestamp` | `"timestamp"` | — | Current epoch milliseconds |
-| `UuidRef` | `"uuid"` | — | Random UUID string |
+| `Timestamp` | `"timestamp"` | (none) | Current epoch milliseconds |
+| `UuidRef` | `"uuid"` | (none) | Random UUID string |
 | `ItemRef` | `"itemRef"` | `path: String` | Value from current item context (inside `itemTemplate`) |
 
 ---
@@ -128,7 +137,7 @@ Triggered from UI via `"actionId": "mutation:<name>"`.
 | `SetFieldFromRef` | `"setFieldFromRef"` | `field: String`, `ref: DataValueRef` | Set a field from a resolved value ref |
 | `ClearFields` | `"clearFields"` | `fields: List<String>` | Reset fields to their schema defaults. Computed fields in the list are silently skipped (their value is derived). |
 | `Navigate` | `"navigate"` | `page: String` | Navigate to a rendered page |
-| `Back` | `"back"` | — | Navigate back |
+| `Back` | `"back"` | (none) | Navigate back |
 | `IncrementField` | `"incrementField"` | `field: String`, `by: JsonPrimitive` | Increment a numeric field |
 | `SetSort` | `"setSort"` | `collection: String`, `field: String`, `direction: SortDirection` (default `asc`) | Change collection sort order. JSON encoding remains `"asc"` / `"desc"` (enum names). |
 
@@ -153,7 +162,7 @@ Triggered from UI via `"actionId": "mutation:<name>"`.
 | `DateBefore` | `"dateBefore"` | `field: String`, `reference: String` (default "now") |
 | `DateAfter` | `"dateAfter"` | `field: String`, `reference: String` (default "now") |
 | `DateWithin` | `"dateWithin"` | `field: String`, `days: Int` |
-| `IsToday` | `"isToday"` | `field: String`. Today is computed in the **device's local timezone** (start-of-day inclusive, next day exclusive). |
+| `IsToday` | `"isToday"` | `field: String`. Today is the **device's local calendar day** (start-of-day inclusive, next day exclusive), the same in a named condition, a computed field's `where`, and a node's `filter`. |
 | `And` | `"and"` | `operands: List<DataCondition>` |
 | `Or` | `"or"` | `operands: List<DataCondition>` |
 | `Not` | `"not"` | `operand: DataCondition` |
@@ -164,17 +173,19 @@ Triggered from UI via `"actionId": "mutation:<name>"`.
 
 ### ReactiveDataStore
 
-`@Stable` class that materializes a `DataSchema` into reactive Compose state. Implements `RendererStateHolder`.
+Materialises a `DataSchema` into `StateFlow`-backed state. It is the whole reactive model, so it implements all three renderer contracts at once: `RendererStateHolder` (fields), `CollectionProvider` (collections), and `ConditionEvaluator` (the schema's named conditions). Pass the same instance as `stateHolder`, `collectionProvider`, and `conditionEvaluator`.
 
 ```kotlin
-@Stable
 class ReactiveDataStore(
     val schema: DataSchema,
     // Non-null. Use DataPersistence.NoOp for a purely transient store.
     private val persistence: DataPersistence = DataPersistence.NoOp,
     private val scope: String = "default",
-) : RendererStateHolder {
-    fun getCollection(name: String): State<List<DataRecord>>
+) : RendererStateHolder, CollectionProvider, ConditionEvaluator {
+    override fun getCollection(name: String): StateFlow<List<DataRecord>>
+    override fun conditionFlow(conditionKey: String): StateFlow<Boolean>
+    override fun evaluate(conditionKey: String): Boolean
+
     fun insertRecord(collectionName: String, record: DataRecord)
     fun deleteRecord(collectionName: String, recordId: Any?)
     fun updateRecord(collectionName: String, recordId: Any?, values: Map<String, Any?>)
@@ -186,21 +197,22 @@ class ReactiveDataStore(
     // Throws on unknown fields; silently no-op on computed fields.
     fun resetField(name: String)
 
-    // Group mutations. Persistence + computed recompute fire exactly once on the
-    // outermost flush. Returns [block]'s result so callers can collect outputs
-    // produced during the batch (e.g. MutationExecutor's navigation targets).
+    // Group mutations. Persistence, computed recompute, condition refresh, and the revision
+    // bump fire exactly once on the outermost flush. Returns [block]'s result.
     fun <R> batch(block: ReactiveDataStore.() -> R): R
 
     override fun clear()
-    // + all RendererStateHolder methods (getOrPutString, putString, getString, etc.)
+    // + all RendererStateHolder methods (getOrPutString, putString, getString, revision, etc.)
 }
 ```
 
-> **Threading:** `ReactiveDataStore` is not thread-safe. Drive it from a single thread (the Compose UI thread in practice). Marshal back to the main dispatcher before calling in from a background coroutine.
+Conditions are re-evaluated after every settled change. Field questions inside them go through the core `RecordConditionEvaluator.matchesValues`; only `collectionEmpty`/`collectionNotEmpty` and the `and`/`or`/`not` combinators are answered by the store.
+
+> **Threading:** `ReactiveDataStore` is not thread-safe. Drive it from a single thread (the UI thread in practice). Marshal back to the main dispatcher before calling in from a background coroutine.
 
 ### MutationExecutor
 
-Executes named mutations against a `ReactiveDataStore`. The primary operation and its `then` effects run inside a single [`ReactiveDataStore.batch`] so persistence and computed recompute happen exactly once. Navigation effects (`Navigate`, `Back`) are collected and returned for the navigation layer to act on.
+Executes named mutations against a `ReactiveDataStore`. The primary operation and its `then` effects run inside a single `ReactiveDataStore.batch`, so persistence and computed recompute happen exactly once. Navigation effects (`Navigate`, `Back`) are collected and returned for the navigation layer to act on.
 
 ```kotlin
 class MutationExecutor(
@@ -216,22 +228,22 @@ data class MutationResult(
 )
 ```
 
-### SchemaConditionEvaluator
+### renderedPageActionHandler
 
-Evaluates `DataCondition` trees against live store state. Implements `ConditionEvaluator`.
+Gives the built-in action prefixes their meaning for any host, Nav3 or not, and passes everything else to `fallback`. A `mutation:` action reads its item context from the payload's `_itemContext`.
 
 ```kotlin
-class SchemaConditionEvaluator(
-    private val store: ReactiveDataStore,
-    private val schema: DataSchema,
-) : ConditionEvaluator {
-    override fun evaluate(conditionKey: String): Boolean
-}
+fun renderedPageActionHandler(
+    fallback: ActionHandler,
+    mutationExecutor: MutationExecutor?,          // null: mutation: actions are ignored
+    navigateToPage: (pageId: String) -> Unit,
+    navigateBack: () -> Unit,
+): ActionHandler
 ```
 
 ### DataPersistence (interface)
 
-Optional durable storage backend. Implement with your storage engine of choice.
+Optional durable storage backend. Implement with your storage engine of choice. In the navigation module, pass it as `RenderedPageConfig.dataPersistence`; each route uses its base route as the `scope`. Wrap your implementation to prefix scopes when one base route must hold separate data per user or session.
 
 ```kotlin
 interface DataPersistence {
@@ -250,41 +262,31 @@ interface DataPersistence {
         val NoOp: DataPersistence
     }
 }
-
-typealias DataRecord = Map<String, Any?>
 ```
 
-### CollectionProvider (fun interface)
+## Engine contracts (package `com.ribads.synapse.ui.renderer.engine`, module `ui:renderer-core`)
 
-Provides reactive collection access to the renderer. Automatically wired from `ReactiveDataStore` in `renderedComposable`.
+These are not data-layer types; the store implements the first two, and the renderers read them.
 
 ```kotlin
+typealias DataRecord = Map<String, Any?>
+
 fun interface CollectionProvider {
-    fun getCollection(name: String): State<List<Map<String, Any?>>>
+    fun getCollection(name: String): StateFlow<List<DataRecord>>
     companion object { val Empty: CollectionProvider }
 }
 
-const val ITEM_CONTEXT_PAYLOAD_KEY = "_itemContext"
-```
-
-### ConditionEvaluator (fun interface)
-
-Evaluates named boolean conditions. Automatically wired from `SchemaConditionEvaluator` in `renderedComposable`.
-
-```kotlin
 fun interface ConditionEvaluator {
-    fun evaluate(conditionKey: String): Boolean
+    fun conditionFlow(conditionKey: String): StateFlow<Boolean>
+    fun evaluate(conditionKey: String): Boolean = conditionFlow(conditionKey).value
     companion object { val AlwaysFalse: ConditionEvaluator }
 }
-```
 
-### MediaProvider (fun interface)
+const val ITEM_CONTEXT_PAYLOAD_KEY = "_itemContext"
 
-Abstraction for picking images from the device. The consumer provides the implementation using platform-specific APIs (e.g. `core:file`'s `FilePicker`). Used by the `ImagePicker` node.
-
-```kotlin
+/** Picks an image for an ImagePicker node. Return a stable path or URI, or null when cancelled; never throw. */
 fun interface MediaProvider {
-    suspend fun pickImage(): String?   // returns stable file path/URI, or null if cancelled
+    suspend fun pickImage(): String?
     companion object { val NoOp: MediaProvider }
 }
 ```

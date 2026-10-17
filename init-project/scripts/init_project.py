@@ -16,13 +16,12 @@ import argparse
 import shutil
 import subprocess
 import sys
-import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from typing import Optional
 
 
-SYNAPSE_VERSION_FALLBACK = "0.2.0-alpha7"
 SYNAPSE_METADATA_URL = (
     "https://repo1.maven.org/maven2/com/ribads/synapse/ui-element/maven-metadata.xml"
 )
@@ -30,8 +29,12 @@ SYNAPSE_METADATA_URL = (
 
 # ─── Helpers ───────────────────────────────────────────────────────────────────
 
-def _fetch_metadata_xml() -> str | None:
-    """Return the raw maven-metadata.xml body, or ``None`` if unreachable.
+class SynapseVersionLookupError(Exception):
+    pass
+
+
+def _fetch_metadata_xml() -> str:
+    """Return the raw maven-metadata.xml body.
 
     Tries urllib first; on SSL trust issues (common with python.org builds on
     macOS that never ran ``Install Certificates.command``), falls back to
@@ -44,11 +47,9 @@ def _fetch_metadata_xml() -> str | None:
     try:
         with urllib.request.urlopen(request, timeout=10) as response:
             return response.read().decode("utf-8")
-    except urllib.error.URLError as e:
-        # SSL cert issues or DNS/network — try curl as a fallback.
+    except OSError as urllib_error:
         if not shutil.which("curl"):
-            print(f"warning: urllib failed ({e}) and curl is unavailable", file=sys.stderr)
-            return None
+            raise SynapseVersionLookupError(f"{urllib_error}; curl is unavailable") from urllib_error
         try:
             result = subprocess.run(
                 ["curl", "-fsSL", "--max-time", "10", SYNAPSE_METADATA_URL],
@@ -56,41 +57,44 @@ def _fetch_metadata_xml() -> str | None:
                 text=True,
                 check=True,
             )
-            return result.stdout
-        except subprocess.CalledProcessError as ce:
-            print(f"warning: curl fallback failed ({ce.stderr.strip() or ce})", file=sys.stderr)
-            return None
+        except subprocess.CalledProcessError as curl_error:
+            raise SynapseVersionLookupError(
+                f"{urllib_error}; curl failed: {curl_error.stderr.strip() or curl_error}"
+            ) from curl_error
+        return result.stdout
 
 
 def fetch_latest_synapse_version() -> str:
-    """Fetch the latest released Synapse version from Maven Central.
+    """Return the latest released Synapse version on Maven Central.
 
-    Falls back to ``SYNAPSE_VERSION_FALLBACK`` if the lookup fails (offline,
-    DNS issue, unexpected XML, etc.). Queries the ``ui-element`` artifact
-    since every Synapse release publishes it.
+    Queries the ``ui-element`` artifact, which every Synapse release publishes.
+    Raises ``SynapseVersionLookupError`` when the version cannot be resolved.
     """
     body = _fetch_metadata_xml()
-    if body is None:
-        print(f"warning: using fallback Synapse version {SYNAPSE_VERSION_FALLBACK}", file=sys.stderr)
-        return SYNAPSE_VERSION_FALLBACK
     try:
         root = ET.fromstring(body)
     except ET.ParseError as e:
+        raise SynapseVersionLookupError(f"unparseable maven-metadata.xml ({e})") from e
+    version = root.findtext("versioning/release") or root.findtext("versioning/latest")
+    if not version or not version.strip():
+        raise SynapseVersionLookupError("maven-metadata.xml has no <release> or <latest>")
+    return version.strip()
+
+
+def resolve_synapse_version(requested: Optional[str]) -> str:
+    if requested:
+        return requested
+    print("Resolving latest Synapse version from Maven Central...", flush=True)
+    try:
+        return fetch_latest_synapse_version()
+    except SynapseVersionLookupError as e:
         print(
-            f"warning: could not parse maven-metadata.xml ({e}); "
-            f"falling back to {SYNAPSE_VERSION_FALLBACK}",
+            f"error: could not resolve the latest Synapse release ({e}).\n"
+            "       Re-run with --synapse-version <version>; published versions are listed at\n"
+            f"       {SYNAPSE_METADATA_URL}",
             file=sys.stderr,
         )
-        return SYNAPSE_VERSION_FALLBACK
-    version = root.findtext("versioning/release") or root.findtext("versioning/latest")
-    if version:
-        return version.strip()
-    print(
-        "warning: maven-metadata.xml had no <release>/<latest>; "
-        f"falling back to {SYNAPSE_VERSION_FALLBACK}",
-        file=sys.stderr,
-    )
-    return SYNAPSE_VERSION_FALLBACK
+        sys.exit(1)
 
 
 def to_pascal(name: str) -> str:
@@ -325,6 +329,19 @@ composeCompiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "k
 kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 '''
 
+CONFIGURE_COMMON_MAIN_KSP = '''
+fun KotlinMultiplatformExtension.configureCommonMainKsp() {
+    sourceSets.named("commonMain").configure {
+        kotlin.srcDir("build/generated/ksp/metadata/commonMain/kotlin")
+    }
+    project.tasks.withType(KotlinCompilationTask::class.java).configureEach {
+        if (name != "kspCommonMainKotlinMetadata") {
+            dependsOn("kspCommonMainKotlinMetadata")
+        }
+    }
+}
+'''
+
 # ─── androidApp ───────────────────────────────────────────────────────────────
 
 ANDROID_APP_BUILD_GRADLE = '''plugins {
@@ -536,19 +553,7 @@ __COMPOSE_APP_FEATURE_DEPS__
 dependencies {
     add("kspCommonMainMetadata", libs.kotlin.inject.compiler)
 }
-
-fun KotlinMultiplatformExtension.configureCommonMainKsp() {
-    sourceSets.named("commonMain").configure {
-        kotlin.srcDir("build/generated/ksp/metadata/commonMain/kotlin")
-    }
-
-    project.tasks.withType(KotlinCompilationTask::class.java).configureEach {
-        if (name != "kspCommonMainKotlinMetadata") {
-            dependsOn("kspCommonMainKotlinMetadata")
-        }
-    }
-}
-'''
+''' + CONFIGURE_COMMON_MAIN_KSP
 
 # ── composeApp: AppContext ──
 
@@ -621,50 +626,54 @@ internal actual fun buildErrorLogger(): ErrorLogger {
 CORE_COMPOSE_APP = '''package __APP_PACKAGE__
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.ImageLoader
+import coil3.PlatformContext
 import coil3.compose.setSingletonImageLoaderFactory
 import coil3.memory.MemoryCache
 import coil3.request.CachePolicy
 import coil3.request.crossfade
-import coil3.svg.SvgDecoder
 import __APP_PACKAGE__.di.RootAppBuilder
 import __BASE_PACKAGE__.compose.ui.theme.__PROJECT_NAME__Theme
+import com.ribads.synapse.ui.component.toast.ToastHandler
 import com.ribads.synapse.ui.element.image.ImagePainterFactory
 import com.ribads.synapse.ui.element.image.WithImagePainter
+import com.ribads.synapse.ui.element.image.installSynapseImageComponents
+
+private const val MEMORY_CACHE_MAX_SIZE_PERCENT = 0.3
 
 @Composable
 fun CoreComposeApp(appContext: AppContext) {
-    val app = remember { RootAppBuilder.build(appContext) }
+    val app = RootAppBuilder.obtain(appContext)
 
-    setSingletonImageLoaderFactory { context ->
-        ImageLoader.Builder(context)
-            .components {
-                add(SvgDecoder.Factory())
-            }
-            .memoryCachePolicy(CachePolicy.ENABLED)
-            .memoryCache {
-                MemoryCache.Builder()
-                    .maxSizePercent(context, 0.3)
-                    .strongReferencesEnabled(true)
-                    .build()
-            }
-            .crossfade(true)
-            .build()
-    }
+    setSingletonImageLoaderFactory(::buildImageLoader)
 
     val imagePainterFactory = ImagePainterFactory.createPainterFactory()
 
     WithImagePainter(imagePainterFactory = imagePainterFactory) {
         __PROJECT_NAME__Theme {
-            RootScreen(
-                viewModel = viewModel { app.mainViewModel },
-                features = app.features,
-            )
+            ToastHandler {
+                RootScreen(
+                    viewModel = viewModel { app.mainViewModel() },
+                    features = app.features,
+                )
+            }
         }
     }
 }
+
+private fun buildImageLoader(context: PlatformContext): ImageLoader =
+    ImageLoader.Builder(context)
+        .installSynapseImageComponents()
+        .memoryCachePolicy(CachePolicy.ENABLED)
+        .memoryCache {
+            MemoryCache.Builder()
+                .maxSizePercent(context, MEMORY_CACHE_MAX_SIZE_PERCENT)
+                .strongReferencesEnabled(true)
+                .build()
+        }
+        .crossfade(true)
+        .build()
 '''
 
 # ── composeApp: RootScreen ──
@@ -951,16 +960,20 @@ ROOT_APP_BUILDER_CLASS = '''import com.ribads.synapse.ui.compose.presentation.fe
 
 internal class __PROJECT_NAME__App(
     val features: Collection<FeatureLauncher>,
-    val mainViewModel: MainViewModel,
+    val mainViewModel: () -> MainViewModel,
 )
 
 internal object RootAppBuilder {
 
-    fun build(appContext: AppContext): __PROJECT_NAME__App {
+    private var app: __PROJECT_NAME__App? = null
+
+    fun obtain(appContext: AppContext): __PROJECT_NAME__App = app ?: build(appContext).also { app = it }
+
+    private fun build(appContext: AppContext): __PROJECT_NAME__App {
 
 __DATA_LAYER_TODO__
 __FEATURE_BUILDS__
-        val mainViewModel = MainUiComponent::class.create()
+        val mainUiComponent = MainUiComponent::class.create()
 
         val appComponent = ComposeAppComponent::class.create(
 __FEATURE_PARAMS__
@@ -968,7 +981,7 @@ __FEATURE_PARAMS__
 
         return __PROJECT_NAME__App(
             features = appComponent.features.values,
-            mainViewModel = mainViewModel.viewModel,
+            mainViewModel = { mainUiComponent.viewModel },
         )
     }
 }
@@ -1199,7 +1212,7 @@ private val AppShape = Shape(
 
 # ─── core modules ─────────────────────────────────────────────────────────────
 
-# core:network — Pure KMP (jvm + iOS), no Android plugin
+# core:network: Pure KMP (jvm + iOS), no Android plugin
 CORE_NETWORK_BUILD_GRADLE = '''import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask
 
@@ -1247,20 +1260,9 @@ kotlin {
 dependencies {
     add("kspCommonMainMetadata", libs.kotlin.inject.compiler)
 }
+''' + CONFIGURE_COMMON_MAIN_KSP
 
-fun KotlinMultiplatformExtension.configureCommonMainKsp() {
-    sourceSets.named("commonMain").configure {
-        kotlin.srcDir("build/generated/ksp/metadata/commonMain/kotlin")
-    }
-    project.tasks.withType(KotlinCompilationTask::class.java).configureEach {
-        if (name != "kspCommonMainKotlinMetadata") {
-            dependsOn("kspCommonMainKotlinMetadata")
-        }
-    }
-}
-'''
-
-# core:auth — KMP with KSP
+# core:auth: KMP with KSP
 CORE_AUTH_BUILD_GRADLE = '''import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask
 
@@ -1292,20 +1294,9 @@ kotlin {
 dependencies {
     add("kspCommonMainMetadata", libs.kotlin.inject.compiler)
 }
+''' + CONFIGURE_COMMON_MAIN_KSP
 
-fun KotlinMultiplatformExtension.configureCommonMainKsp() {
-    sourceSets.named("commonMain").configure {
-        kotlin.srcDir("build/generated/ksp/metadata/commonMain/kotlin")
-    }
-    project.tasks.withType(KotlinCompilationTask::class.java).configureEach {
-        if (name != "kspCommonMainKotlinMetadata") {
-            dependsOn("kspCommonMainKotlinMetadata")
-        }
-    }
-}
-'''
-
-# core:config — Plain KMP, no KSP
+# core:config: Plain KMP, no KSP
 CORE_CONFIG_BUILD_GRADLE = '''plugins {
     alias(libs.plugins.kotlinMultiplatform)
 }
@@ -1328,7 +1319,7 @@ kotlin {
 }
 '''
 
-# core:log — KMP with KSP
+# core:log: KMP with KSP
 CORE_LOG_BUILD_GRADLE = '''plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.ksp)
@@ -1375,11 +1366,10 @@ import __BASE_PACKAGE__.core.config.AppConfigurationProvider
 import io.ktor.client.HttpClient
 
 class CoreClientImpl(
-    private val tokenProvider: OauthTokenProvider,
-    private val configProvider: AppConfigurationProvider,
+    tokenProvider: OauthTokenProvider,
+    configProvider: AppConfigurationProvider,
 ) : CoreClient {
-    override val httpClient: HttpClient
-        get() = createHttpClient(tokenProvider, configProvider)
+    override val httpClient: HttpClient = createHttpClient(tokenProvider, configProvider)
 }
 '''
 
@@ -1601,18 +1591,7 @@ dependencies {
     add("kspCommonMainMetadata", libs.kotlin.inject.compiler)
     add("commonMainApi", project(":domain:__DOMAIN__:entities"))
 }
-
-fun KotlinMultiplatformExtension.configureCommonMainKsp() {
-    sourceSets.named("commonMain").configure {
-        kotlin.srcDir("build/generated/ksp/metadata/commonMain/kotlin")
-    }
-    project.tasks.withType(KotlinCompilationTask::class.java).configureEach {
-        if (name != "kspCommonMainKotlinMetadata") {
-            dependsOn("kspCommonMainKotlinMetadata")
-        }
-    }
-}
-'''
+''' + CONFIGURE_COMMON_MAIN_KSP
 
 DOMAIN_REPOSITORY_IMPL = '''package __BASE_PACKAGE__.domain.__DOMAIN__.data
 
@@ -1679,30 +1658,25 @@ __USECASE_DOMAIN_DEPS__
 dependencies {
     add("kspCommonMainMetadata", libs.kotlin.inject.compiler)
 }
-
-fun KotlinMultiplatformExtension.configureCommonMainKsp() {
-    sourceSets.named("commonMain").configure {
-        kotlin.srcDir("build/generated/ksp/metadata/commonMain/kotlin")
-    }
-    project.tasks.withType(KotlinCompilationTask::class.java).configureEach {
-        if (name != "kspCommonMainKotlinMetadata") {
-            dependsOn("kspCommonMainKotlinMetadata")
-        }
-    }
-}
-'''
+''' + CONFIGURE_COMMON_MAIN_KSP
 
 FEATURE_FETCH_USE_CASE = '''package __BASE_PACKAGE__.feature.__FEATURE__.usecase
 
 interface Fetch__FEATURE_PASCAL__UseCase {
-    suspend fun execute(): Result<Unit>
+    suspend fun execute(): __FEATURE_PASCAL__Result
 }
 
 internal class Fetch__FEATURE_PASCAL__UseCaseImpl : Fetch__FEATURE_PASCAL__UseCase {
-    override suspend fun execute(): Result<Unit> {
-        // TODO: implement
-        return Result.success(Unit)
-    }
+    // TODO: map a repository result into __FEATURE_PASCAL__Result
+    override suspend fun execute(): __FEATURE_PASCAL__Result = __FEATURE_PASCAL__Result.Success
+}
+'''
+
+FEATURE_USE_CASE_RESULT = '''package __BASE_PACKAGE__.feature.__FEATURE__.usecase
+
+sealed class __FEATURE_PASCAL__Result {
+    data object Success : __FEATURE_PASCAL__Result()
+    data object Failure : __FEATURE_PASCAL__Result()
 }
 '''
 
@@ -1799,18 +1773,7 @@ kotlin {
 dependencies {
     add("kspCommonMainMetadata", libs.kotlin.inject.compiler)
 }
-
-fun KotlinMultiplatformExtension.configureCommonMainKsp() {
-    sourceSets.named("commonMain").configure {
-        kotlin.srcDir("build/generated/ksp/metadata/commonMain/kotlin")
-    }
-    project.tasks.withType(KotlinCompilationTask::class.java).configureEach {
-        if (name != "kspCommonMainKotlinMetadata") {
-            dependsOn("kspCommonMainKotlinMetadata")
-        }
-    }
-}
-'''
+''' + CONFIGURE_COMMON_MAIN_KSP
 
 # ── Feature UI: FeatureLauncher ──
 
@@ -1930,12 +1893,13 @@ internal abstract class __FEATURE_PASCAL__ViewModelComponent(
 LANDING_CONTRACT = '''package __BASE_PACKAGE__.feature.__FEATURE__.ui.screens.landing
 
 import androidx.compose.runtime.Immutable
+import __BASE_PACKAGE__.feature.__FEATURE__.usecase.__FEATURE_PASCAL__Result
 import com.ribads.synapse.ui.compose.presentation.navigation.NavigationCommand
 
 internal object LandingScreenContract {
 
     interface Mapper {
-        fun toResult(intent: Intent.LoadInitialData): Result.OnInitialDataLoaded
+        fun toResult(result: __FEATURE_PASCAL__Result): Result
         fun toResult(intent: Intent.Navigation): Result.NavigationRequested
     }
 
@@ -1948,6 +1912,7 @@ internal object LandingScreenContract {
 
     sealed class Result {
         data object OnInitialDataLoaded : Result()
+        data object OnInitialDataFailed : Result()
         data class NavigationRequested(val command: NavigationCommand) : Result()
     }
 
@@ -1961,6 +1926,8 @@ internal object LandingScreenContract {
     ) {
         sealed class Content {
             data object Loading : Content()
+            data object Loaded : Content()
+            data object Failed : Content()
         }
 
         companion object {
@@ -1977,23 +1944,34 @@ import __BASE_PACKAGE__.feature.__FEATURE__.ui.screens.landing.LandingScreenCont
 import __BASE_PACKAGE__.feature.__FEATURE__.ui.screens.landing.LandingScreenContract.Mapper
 import __BASE_PACKAGE__.feature.__FEATURE__.ui.screens.landing.LandingScreenContract.Result
 import __BASE_PACKAGE__.feature.__FEATURE__.ui.screens.landing.LandingScreenContract.ViewState
+import __BASE_PACKAGE__.feature.__FEATURE__.usecase.Fetch__FEATURE_PASCAL__UseCase
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import me.tatarka.inject.annotations.Inject
 
 internal class LandingScreenInteractor @Inject constructor(
+    private val fetch__FEATURE_PASCAL__UseCase: Fetch__FEATURE_PASCAL__UseCase,
     private val mapper: Mapper,
 ) : Interactor<Intent, Result, ViewState> {
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun loadInitialDataProcessor(upstream: Flow<Intent.LoadInitialData>): Flow<Result> =
+        upstream.flatMapLatest {
+            flow { emit(fetch__FEATURE_PASCAL__UseCase.execute()) }.map(mapper::toResult)
+        }
 
     override fun process(
         intents: Flow<Intent>,
         state: StateFlow<ViewState>,
     ): Flow<Result> {
         return merge(
-            intents.filterIsInstance<Intent.LoadInitialData>().map(mapper::toResult),
+            intents.filterIsInstance<Intent.LoadInitialData>().let(::loadInitialDataProcessor),
             intents.filterIsInstance<Intent.Navigation>().map(mapper::toResult),
         )
     }
@@ -2014,7 +1992,8 @@ import me.tatarka.inject.annotations.Inject
 internal class LandingScreenReducer @Inject constructor() : Reducer<ViewState, Result, Effect> {
     override fun reduce(state: ViewState, result: Result): Reduction<ViewState, Effect> {
         return when (result) {
-            is Result.OnInitialDataLoaded -> state.noEffects()
+            is Result.OnInitialDataLoaded -> state.copy(content = ViewState.Content.Loaded).noEffects()
+            is Result.OnInitialDataFailed -> state.copy(content = ViewState.Content.Failed).noEffects()
             is Result.NavigationRequested -> state withEffect Effect.Navigate(result.command)
         }
     }
@@ -2027,12 +2006,14 @@ import com.ribads.synapse.ui.compose.presentation.navigation.NavigationCommand
 import __BASE_PACKAGE__.feature.__FEATURE__.ui.screens.landing.LandingScreenContract.Intent
 import __BASE_PACKAGE__.feature.__FEATURE__.ui.screens.landing.LandingScreenContract.Mapper
 import __BASE_PACKAGE__.feature.__FEATURE__.ui.screens.landing.LandingScreenContract.Result
+import __BASE_PACKAGE__.feature.__FEATURE__.usecase.__FEATURE_PASCAL__Result
 import me.tatarka.inject.annotations.Inject
 
 internal class LandingScreenMapper @Inject constructor() : Mapper {
 
-    override fun toResult(intent: Intent.LoadInitialData): Result.OnInitialDataLoaded {
-        return Result.OnInitialDataLoaded
+    override fun toResult(result: __FEATURE_PASCAL__Result): Result = when (result) {
+        __FEATURE_PASCAL__Result.Success -> Result.OnInitialDataLoaded
+        __FEATURE_PASCAL__Result.Failure -> Result.OnInitialDataFailed
     }
 
     override fun toResult(intent: Intent.Navigation): Result.NavigationRequested {
@@ -2154,7 +2135,7 @@ internal abstract class LandingScreenUiComponent(
 '''
 
 # ─── iOS App ───────────────────────────────────────────────────────────────────
-# Templates live in scripts/templates/ios/ — loaded via load_template() at runtime.
+# Templates live in scripts/templates/ios/: loaded via load_template() at runtime.
 
 # ─── Main Generator ───────────────────────────────────────────────────────────
 
@@ -2170,7 +2151,8 @@ def main() -> None:
     parser.add_argument(
         "--synapse-version",
         default=None,
-        help="Synapse library version (defaults to latest from Maven Central)",
+        help="Synapse library version. Defaults to the latest release on Maven Central; "
+        "generation fails if that lookup fails.",
     )
     parser.add_argument("--force", action="store_true", help="Overwrite existing files")
     args = parser.parse_args()
@@ -2180,11 +2162,6 @@ def main() -> None:
     out = Path(args.output).expanduser().resolve()
     domains = [d.strip() for d in args.domains.split(",") if d.strip()]
     features = [f.strip() for f in args.features.split(",") if f.strip()]
-    if args.synapse_version:
-        synapse_version = args.synapse_version
-    else:
-        print("Resolving latest Synapse version from Maven Central...")
-        synapse_version = fetch_latest_synapse_version()
     force = args.force
 
     if not name or not name[0].isupper():
@@ -2194,6 +2171,8 @@ def main() -> None:
     if not force and (out / "settings.gradle.kts").exists():
         print(f"error: {out}/settings.gradle.kts already exists (use --force to overwrite)", file=sys.stderr)
         sys.exit(1)
+
+    synapse_version = resolve_synapse_version(args.synapse_version)
 
     app_pkg = f"{base_pkg}.app"
     app_pkg_path = pkg_to_path(app_pkg)
@@ -2429,6 +2408,7 @@ def main() -> None:
 
         write_file(uc / "build.gradle.kts", render(FEATURE_USECASE_BUILD_GRADLE, fctx), force)
         write_file(uc_src / f"Fetch{fp}UseCase.kt", render(FEATURE_FETCH_USE_CASE, fctx), force)
+        write_file(uc_src / f"{fp}Result.kt", render(FEATURE_USE_CASE_RESULT, fctx), force)
         write_file(uc_src / "di" / f"{fp}UseCaseProvider.kt", render(FEATURE_USE_CASE_PROVIDER, fctx), force)
         write_file(uc_src / "di" / f"{fp}UseCaseModule.kt", render(FEATURE_USE_CASE_MODULE, fctx), force)
 
@@ -2465,13 +2445,13 @@ def main() -> None:
     write_file(ios_src / "ContentView.swift", load_template("ios/ContentView.swift"), force)
     write_file(ios_src / "Info.plist", load_template("ios/Info.plist"), force)
 
-    # Asset catalogs (Xcode complains if AppIcon/AccentColor are missing — empty stubs)
+    # Asset catalogs (Xcode complains if AppIcon/AccentColor are missing: empty stubs)
     write_file(ios_assets / "Contents.json", load_template("ios/Assets.Contents.json"), force)
     write_file(ios_assets / "AccentColor.colorset" / "Contents.json", load_template("ios/AccentColor.Contents.json"), force)
     write_file(ios_assets / "AppIcon.appiconset" / "Contents.json", load_template("ios/AppIcon.Contents.json"), force)
     write_file(ios_preview / "Contents.json", load_template("ios/PreviewAssets.Contents.json"), force)
 
-    # Xcode project + xcconfig — these need PROJECT_NAME/BASE_PACKAGE substitution
+    # Xcode project + xcconfig: these need PROJECT_NAME/BASE_PACKAGE substitution
     write_file(ios_root / "Configuration" / "Config.xcconfig", render(load_template("ios/Config.xcconfig"), ctx), force)
     write_file(ios_xcodeproj / "project.pbxproj", render(load_template("ios/project.pbxproj"), ctx), force)
     write_file(ios_workspace / "contents.xcworkspacedata", load_template("ios/contents.xcworkspacedata"), force)

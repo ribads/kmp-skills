@@ -123,17 +123,17 @@ Seed `ViewState.Default` with `Placeholder`s so the first frame is a skeleton, n
 
 ## Interaction matrix
 
-For each UI event, the changes you need across the 4 files.
+For each UI event, the changes you need across the five files. The Mapper builds every model and `NavigationCommand`; the Reducer only copies what the Result carries.
 
-| UI event | Contract | Interactor | Reducer | Screen |
-|---|---|---|---|---|
-| Text-field change | `Intent.OnXChanged(v: String)`, `Result.XUpdated(v)` | `.filterIsInstance<OnXChanged>().map { Result.XUpdated(it.v) }` | `state.copy(x = state.x.copy(value = result.v)).noEffects()` | `onValueChange = { viewModel.emit(Intent.OnXChanged(it)) }` |
-| Toggle / checkbox | `Intent.OnXToggled(b: Boolean)`, `Result.XToggled(b)` | `.map { Result.XToggled(it.b) }` | `state.copy(x = state.x.copy(checked = result.b)).noEffects()` | `onCheckedChange = { viewModel.emit(Intent.OnXToggled(it)) }` |
-| Click → navigate | `Intent.OnXClick`, `Result.OnNavigate(cmd)`, `Effect.Navigate(cmd)` | `.map { Result.OnNavigate(ScreenCommand(DetailRoute(it.id))) }` | `state withEffect Effect.Navigate(result.command)` | `onClick = { viewModel.emit(Intent.OnXClick) }` |
-| Show toast | `Effect.ShowToast(toast: ToastModel)` | (emit from processor) | `state withEffect Effect.ShowToast(toast)` | `val toaster = Toast.current` (outside effect lambda); `is Effect.ShowToast -> toaster.show(effect.toast)` |
-| Click → async UseCase | `Intent.OnSubmitClick`, `Result.Submitting` / `LoggedIn` / `LoginFailed(toast)` | `submitProcessor(upstream, state)` using `flatMapConcat { flow { emit(useCase.execute(state.value.field)) }.map(mapper::toResult).onStart { emit(Result.Submitting) } }` (`flatMapConcat`: a second tap must not cancel the first submit) | `copy(submitState = ButtonState.Loading / Enabled)` + `withEffect(Effect.Navigate(...))` on success, `withEffect(Effect.ShowToast(...))` on failure | `onClick = { viewModel.emit(Intent.OnSubmitClick) }` |
-| Initial load | (already in scaffold) `Intent.LoadInitialData` | `loadInitialDataProcessor` calling UseCase via `.map(mapper::toResult)` | `copy(items = result.items).noEffects()` | `viewModel.OnFirstComposition(Intent.LoadInitialData)` |
-| Back | `Intent.Navigation.Back` (in scaffold) | (in scaffold — maps via Mapper) | `state withEffect Effect.Navigate(BackCommand())` | Back icon in `TopNavBar` emits the intent |
+| UI event | Contract | Mapper | Interactor | Reducer | Screen |
+|---|---|---|---|---|---|
+| Text-field change | `Intent.OnXChanged(value: String)`, `Result.OnXUpdated(x: TextInputModel)` | `toResult(intent: Intent.OnXChanged, state: ViewState) = Result.OnXUpdated(state.x.copy(value = intent.value))` | `.map { mapper.toResult(it, state.value) }` | `state.copy(x = result.x).noEffects()` | `onValueChange = { viewModel.emit(Intent.OnXChanged(it)) }` |
+| Toggle / checkbox | `Intent.OnXToggled(checked: Boolean)`, `Result.OnXUpdated(x: CheckboxModel)` | `Result.OnXUpdated(state.x.copy(checked = intent.checked))` | `.map { mapper.toResult(it, state.value) }` | `state.copy(x = result.x).noEffects()` | `onCheckedChange = { viewModel.emit(Intent.OnXToggled(it)) }` |
+| Click → navigate | `Intent.OnItemClick(id: String)`, `Result.NavigationRequested(command)`, `Effect.Navigate(command)` | `toResult(intent: Intent.OnItemClick) = Result.NavigationRequested(ScreenCommand(DetailRoute(intent.id)))` | `.map(mapper::toResult)` | `state withEffect Effect.Navigate(result.command)` | `onClick = { viewModel.emit(Intent.OnItemClick(item.id)) }` |
+| Show toast | `Result.OnXFailed(toast: ToastModel)`, `Effect.ShowToast(model: ToastModel)` | builds the `ToastModel` from the typed failure | (emitted by a processor via the Mapper) | `state withEffect Effect.ShowToast(result.toast)` | `val toaster = Toast.current` (outside the effect lambda); `is Effect.ShowToast -> toaster.show(effect.model)` |
+| Click → async UseCase | `Intent.OnSubmitClick`, `Result.OnSubmitStateUpdated(submitState)` / `NavigationRequested(command)` / `OnLoginFailed(toast)` | `toInput(state)` for the UseCase input; `toResult(result: LoginResult)` for the outcome | `submitProcessor(upstream, state)`: `flatMapConcat { flow { emit(useCase.execute(mapper.toInput(state.value))) }.map(mapper::toResult).onStart { emit(Result.OnSubmitStateUpdated(ButtonState.Loading)) }.onCompletion { emit(Result.OnSubmitStateUpdated(ButtonState.Enabled)) } }` (`flatMapConcat`: a second tap must not cancel the first submit) | `state.copy(submitState = result.submitState).noEffects()`, `state withEffect Effect.Navigate(result.command)`, `state withEffect Effect.ShowToast(result.toast)` | `onClick = { viewModel.emit(Intent.OnSubmitClick) }` |
+| Initial load | (scaffold) `Intent.LoadInitialData` | `toResult(result: FeedResult)` builds the section model | `loadInitialDataProcessor` calling the UseCase, then `.map(mapper::toResult)` | `state.copy(feed = result.feed).noEffects()` | `viewModel.OnFirstComposition(Intent.LoadInitialData)` |
+| Back | (scaffold) `Intent.Navigation.Back` | (scaffold) `Result.NavigationRequested(NavigationCommand.BackCommand())` | (scaffold) `.map(mapper::toResult)` | `state withEffect Effect.Navigate(result.command)` | Back icon in `TopNavBar` emits the intent |
 
 **Processor convention:** handlers are named `{verb}Processor` (`submitProcessor`, `loadInitialDataProcessor`), take `Flow<Intent.SpecificType>` (and `StateFlow<ViewState>` only if current state is needed), return `Flow<Result>`, and live **above** `process()`. Never pass state through intents; read `state.value` inside the processor.
 
@@ -141,108 +141,203 @@ For each UI event, the changes you need across the 4 files.
 
 ## Worked example — Login screen
 
-Goal: email field, password field, primary "Log in" button, calls `LoginUseCase`, navigates to `HomeRoute(userId)` on success, shows an error otherwise.
+Goal: in the `auth` feature, an email field, a password field and a primary "Log in" button that call `LoginUseCase`. On success the app enters the `home` feature as the new root, so back does not return to login; on failure a toast says why.
 
-Pick components: `LabelTextField` + `PasswordTextField` + `PrimaryButton`. All three Synapse primitives — no custom composables needed.
+Pick components: `LabelTextField` + `PasswordTextField` + `PrimaryButton`. All three are Synapse primitives, so no custom composables are needed.
 
-**Contract additions** (on top of scaffold):
+**UseCase result** (`features/auth/usecase`). The feature owns it; per `/data-boundaries` a UseCase never returns a domain entity result or `kotlin.Result`:
 
 ```kotlin
-sealed class Intent {
-    data object LoadInitialData : Intent()
-    sealed class Navigation : Intent() { data object Back : Navigation() }
-    data class OnEmailChanged(val v: String) : Intent()
-    data class OnPasswordChanged(val v: String) : Intent()
-    data object OnSubmitClick : Intent()
+interface LoginUseCase {
+    suspend fun execute(input: LoginUseCaseInput): LoginResult
 }
 
-sealed class Result {
-    data object OnInitialDataLoaded : Result()
-    data class NavigationRequested(val command: NavigationCommand) : Result()
-    data class EmailUpdated(val v: String) : Result()
-    data class PasswordUpdated(val v: String) : Result()
-    data object Submitting : Result()
-    data class LoggedIn(val userId: String) : Result()
-    data class LoginFailed(val toast: ToastModel) : Result()
-}
+data class LoginUseCaseInput(val email: String, val password: String)
 
-sealed class Effect {
-    data class Navigate(val command: NavigationCommand) : Effect()
-    data class ShowToast(val model: ToastModel) : Effect()
+sealed class LoginResult {
+    data object Success : LoginResult()
+    data object InvalidCredentials : LoginResult()
+    data object Failure : LoginResult()
 }
+```
 
-@Immutable
-data class ViewState(
-    val email: TextInputModel,
-    val password: TextInputModel,
-    val submit: ButtonModel,
-    val submitState: ButtonState,
-) {
-    companion object {
-        val Default = ViewState(
-            email = TextInputModel(label = "Email".asText(), value = "", placeholder = "you@example.com".asText()),
-            password = TextInputModel(label = "Password".asText(), value = "", placeholder = "••••••".asText()),
-            submit = ButtonModel(title = "Log in".asText()),
-            submitState = ButtonState.Enabled,
-        )
+**Contract** (the scaffold plus the login members):
+
+```kotlin
+internal object LoginContract {
+
+    interface Mapper {
+        fun toResult(intent: Intent.LoadInitialData): Result.OnInitialDataLoaded
+        fun toResult(intent: Intent.Navigation): Result.NavigationRequested
+        fun toResult(intent: Intent.OnEmailChanged, state: ViewState): Result.OnEmailUpdated
+        fun toResult(intent: Intent.OnPasswordChanged, state: ViewState): Result.OnPasswordUpdated
+        fun toResult(result: LoginResult): Result
+        fun toInput(state: ViewState): LoginUseCaseInput
+    }
+
+    sealed class Intent {
+        data object LoadInitialData : Intent()
+        sealed class Navigation : Intent() { data object Back : Navigation() }
+        data class OnEmailChanged(val value: String) : Intent()
+        data class OnPasswordChanged(val value: String) : Intent()
+        data object OnSubmitClick : Intent()
+    }
+
+    sealed class Result {
+        data object OnInitialDataLoaded : Result()
+        data class NavigationRequested(val command: NavigationCommand) : Result()
+        data class OnEmailUpdated(val email: TextInputModel) : Result()
+        data class OnPasswordUpdated(val password: TextInputModel) : Result()
+        data class OnSubmitStateUpdated(val submitState: ButtonState) : Result()
+        data class OnLoginFailed(val toast: ToastModel) : Result()
+    }
+
+    sealed class Effect {
+        data class Navigate(val command: NavigationCommand) : Effect()
+        data class ShowToast(val model: ToastModel) : Effect()
+    }
+
+    @Immutable
+    data class ViewState(
+        val email: TextInputModel,
+        val password: TextInputModel,
+        val submit: ButtonModel,
+        val submitState: ButtonState,
+    ) {
+        companion object {
+            val Default = ViewState(
+                email = TextInputModel(label = "Email".asText(), value = "", placeholder = "you@example.com".asText()),
+                password = TextInputModel(label = "Password".asText(), value = "", placeholder = "••••••".asText()),
+                submit = ButtonModel(title = "Log in".asText()),
+                submitState = ButtonState.Enabled,
+            )
+        }
     }
 }
 ```
 
-**Mapper**: only domain → Result (input Intents are trivial enough to map inline in the Interactor). The failure is typed; the Mapper turns it into user-facing copy:
+**Mapper**: builds every model, toast and navigation command on the screen. The typed failure becomes copy here and nowhere else:
 
 ```kotlin
+private val EnterHome = NavigationCommand.FeatureCommand(featureName = "home", clearStack = true)
+
+private val InvalidCredentialsToast = ToastModel(
+    message = Text.Localized(Res.string.login_invalid_credentials),
+    intent = ToastIntent.Error,
+)
+
 private val LoginFailedToast = ToastModel(
     message = Text.Localized(Res.string.login_failed),
     intent = ToastIntent.Error,
 )
 
-fun toResult(result: LoginEntityResult): Result = when (result) {
-    is LoginEntityResult.Success -> Result.LoggedIn(result.userId)
-    is LoginEntityResult.Failure -> Result.LoginFailed(toast = LoginFailedToast)
+internal class LoginMapper @Inject constructor() : Mapper {
+
+    override fun toResult(intent: Intent.LoadInitialData): Result.OnInitialDataLoaded =
+        Result.OnInitialDataLoaded
+
+    override fun toResult(intent: Intent.Navigation): Result.NavigationRequested = when (intent) {
+        Intent.Navigation.Back -> Result.NavigationRequested(NavigationCommand.BackCommand())
+    }
+
+    override fun toResult(intent: Intent.OnEmailChanged, state: ViewState): Result.OnEmailUpdated =
+        Result.OnEmailUpdated(email = state.email.copy(value = intent.value))
+
+    override fun toResult(intent: Intent.OnPasswordChanged, state: ViewState): Result.OnPasswordUpdated =
+        Result.OnPasswordUpdated(password = state.password.copy(value = intent.value))
+
+    override fun toResult(result: LoginResult): Result = when (result) {
+        LoginResult.Success -> Result.NavigationRequested(EnterHome)
+        LoginResult.InvalidCredentials -> Result.OnLoginFailed(toast = InvalidCredentialsToast)
+        LoginResult.Failure -> Result.OnLoginFailed(toast = LoginFailedToast)
+    }
+
+    override fun toInput(state: ViewState): LoginUseCaseInput =
+        LoginUseCaseInput(email = state.email.value, password = state.password.value)
 }
 ```
 
-**Interactor** — processor for submit, inline for the rest:
+`FeatureCommand` enters a feature by its `featureName`, so `features/auth/ui` never sees home's route types: they are `internal` to `features/home/ui`, and a feature can only share its `ui-api` types with another. `clearStack = true` makes home's start destination the only entry on the back stack. The name must match home's `FeatureLauncher.featureName`; an unknown name throws `IllegalArgumentException` when dispatched. `FeatureCommand` carries no arguments, so home reads the signed-in user from its own use case rather than from the route.
+
+**Interactor**: a processor for submit, the mapper for everything else:
 
 ```kotlin
-private fun submitProcessor(
-    upstream: Flow<Intent.OnSubmitClick>,
-    state: StateFlow<ViewState>,
-): Flow<Result> = upstream.flatMapConcat {
-    val s = state.value
-    flow { emit(loginUseCase.execute(s.email.value, s.password.value)) }
-        .map(mapper::toResult)
-        .onStart { emit(Result.Submitting) }
+@OptIn(ExperimentalCoroutinesApi::class)
+internal class LoginInteractor @Inject constructor(
+    private val loginUseCase: LoginUseCase,
+    private val mapper: Mapper,
+) : Interactor<Intent, Result, ViewState> {
+
+    private fun submitProcessor(
+        upstream: Flow<Intent.OnSubmitClick>,
+        state: StateFlow<ViewState>,
+    ): Flow<Result> = upstream.flatMapConcat {
+        flow { emit(loginUseCase.execute(mapper.toInput(state.value))) }
+            .map(mapper::toResult)
+            .onStart { emit(Result.OnSubmitStateUpdated(ButtonState.Loading)) }
+            .onCompletion { emit(Result.OnSubmitStateUpdated(ButtonState.Enabled)) }
+    }
+
+    override fun process(intents: Flow<Intent>, state: StateFlow<ViewState>): Flow<Result> = merge(
+        intents.filterIsInstance<Intent.LoadInitialData>().map(mapper::toResult),
+        intents.filterIsInstance<Intent.Navigation>().map(mapper::toResult),
+        intents.filterIsInstance<Intent.OnEmailChanged>().map { mapper.toResult(it, state.value) },
+        intents.filterIsInstance<Intent.OnPasswordChanged>().map { mapper.toResult(it, state.value) },
+        intents.filterIsInstance<Intent.OnSubmitClick>().let { submitProcessor(it, state) },
+    )
 }
-
-override fun process(intents: Flow<Intent>, state: StateFlow<ViewState>): Flow<Result> = merge(
-    intents.filterIsInstance<Intent.LoadInitialData>().map(mapper::toResult),
-    intents.filterIsInstance<Intent.Navigation>().map(mapper::toResult),
-    intents.filterIsInstance<Intent.OnEmailChanged>().map { Result.EmailUpdated(it.v) },
-    intents.filterIsInstance<Intent.OnPasswordChanged>().map { Result.PasswordUpdated(it.v) },
-    intents.filterIsInstance<Intent.OnSubmitClick>().let { submitProcessor(it, state) },
-)
 ```
 
-**Reducer**:
+**Reducer**: type dispatch and `state.copy()` only; the effects forward what the Mapper built:
 
 ```kotlin
-is Result.EmailUpdated    -> state.copy(email = state.email.copy(value = result.v)).noEffects()
-is Result.PasswordUpdated -> state.copy(password = state.password.copy(value = result.v)).noEffects()
-is Result.Submitting      -> state.copy(submitState = ButtonState.Loading).noEffects()
-is Result.LoggedIn        -> state.copy(submitState = ButtonState.Enabled) withEffect
-    Effect.Navigate(NavigationCommand.ScreenCommand(HomeRoute(userId = result.userId)))
-is Result.LoginFailed     -> state.copy(submitState = ButtonState.Enabled) withEffect Effect.ShowToast(result.toast)
+internal class LoginReducer @Inject constructor() : Reducer<ViewState, Result, Effect> {
+    override fun reduce(state: ViewState, result: Result): Reduction<ViewState, Effect> =
+        when (result) {
+            is Result.OnInitialDataLoaded -> state.noEffects()
+            is Result.OnEmailUpdated -> state.copy(email = result.email).noEffects()
+            is Result.OnPasswordUpdated -> state.copy(password = result.password).noEffects()
+            is Result.OnSubmitStateUpdated -> state.copy(submitState = result.submitState).noEffects()
+            is Result.OnLoginFailed -> state withEffect Effect.ShowToast(result.toast)
+            is Result.NavigationRequested -> state withEffect Effect.Navigate(result.command)
+        }
+}
 ```
 
-**Screen** body (inside the Scaffold):
+**Screen**:
 
 ```kotlin
-LabelTextField(model = viewState.email,    onValueChange = { viewModel.emit(Intent.OnEmailChanged(it)) })
-PasswordTextField(model = viewState.password, onValueChange = { viewModel.emit(Intent.OnPasswordChanged(it)) })
-PrimaryButton(model = viewState.submit, state = viewState.submitState, onClick = { viewModel.emit(Intent.OnSubmitClick) })
+@Composable
+internal fun LoginScreen(
+    viewModel: LoginViewModel,
+    navigationDispatcher: NavigationDispatcher,
+) {
+    val viewState by viewModel.state
+    val toaster = Toast.current
+
+    viewModel.OnFirstComposition(Intent.LoadInitialData)
+
+    viewModel.effects.CollectAsEffect { effect ->
+        when (effect) {
+            is Effect.Navigate -> navigationDispatcher.navigateTo(effect.command)
+            is Effect.ShowToast -> toaster.show(effect.model)
+        }
+    }
+
+    Scaffold { padding ->
+        Column(
+            modifier = Modifier.padding(padding).padding(horizontal = Theme.spacing.x6),
+            verticalArrangement = Arrangement.spacedBy(Theme.spacing.x4),
+        ) {
+            LabelTextField(model = viewState.email, onValueChange = { viewModel.emit(Intent.OnEmailChanged(it)) })
+            PasswordTextField(model = viewState.password, onValueChange = { viewModel.emit(Intent.OnPasswordChanged(it)) })
+            PrimaryButton(model = viewState.submit, state = viewState.submitState, onClick = { viewModel.emit(Intent.OnSubmitClick) })
+        }
+    }
+}
 ```
+
+`Toast.current` throws unless a `ToastHandler` encloses the screen. Install one once at the app root, inside the theme.
 
 ---
 

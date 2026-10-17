@@ -69,7 +69,7 @@ internal data class ProductItemModel(val id: String, val title: Clause, val pric
 | `ApiResponse`, `Dto` | `internal` | Never leave their module |
 | Entity, repository interface | `public` | The domain's whole purpose is to be consumed |
 | UseCase DTO + interface | `public` | Must cross from `usecase` to `ui` |
-| UI model, Contract, Screen, everything in the 7-file package | `internal` | Only `{Feature}Module` and `{Feature}FeatureLauncher` are public in a feature |
+| UI model, Contract, Screen, everything in the 7-file package, routes, `{Feature}FeatureLauncher` | `internal` | `{Feature}Module` is the only public type in a feature's `ui` module; it hands the launcher to the app as a `FeatureLauncher` through its `features` map |
 
 ---
 
@@ -125,6 +125,8 @@ sealed class ProductsResult {
 **`RepositoryImpl` is the single place that catches.** It logs and returns a failure variant. Above it nothing catches, because above it nothing throws.
 
 ```kotlin
+import kotlin.coroutines.cancellation.CancellationException
+
 internal class ProductRepositoryImpl @Inject constructor(
     private val dataSource: ProductDataSource,
     private val mapper: ProductDtoToEntityMapper,
@@ -134,6 +136,7 @@ internal class ProductRepositoryImpl @Inject constructor(
     override suspend fun fetch(token: String?): ProductsEntityResult = runCatching {
         dataSource.fetchProducts(token).let(mapper::map)
     }.getOrElse {
+        if (it is CancellationException) throw it
         errorLogger.log(it)
         ProductsEntityResult.Failure
     }
@@ -146,6 +149,8 @@ internal class ProductRepositoryImpl @Inject constructor(
     }
 }
 ```
+
+**Rethrow `CancellationException`.** `runCatching` catches it along with everything else, and swallowing it turns a cancelled call (the user left the screen, a `flatMapLatest` superseded the request) into a logged failure while the cancelled coroutine carries on. `Flow.catch` already lets the collector's own cancellation through, so the `observe` example needs no check.
 
 A `try/catch` in a use case, an interactor, or a composable is a smell: it means an exception escaped the boundary, or someone is defending against one that cannot arrive.
 
@@ -262,7 +267,7 @@ The allowlist ratchet is the pattern worth copying: when you adopt a rule on an 
 - **Feature UI never imports `domain.*` or anything named `*Repository`.** It talks to its own use cases and nothing else.
 - **A use case returns a feature-owned sealed result** and exposes one `execute`/`observe*` operation.
 - **Cross-repository joins belong in a use case**, never in a repository or a mapper.
-- **`RepositoryImpl` is the only place that catches.** Log there, return a failure variant, and let every layer above stay exception-free.
+- **`RepositoryImpl` is the only place that catches.** Log there, return a failure variant, rethrow `CancellationException`, and let every layer above stay exception-free.
 - **Failures carry typed reasons, never strings.** Copy is chosen in the screen Mapper.
 - **Money stays in minor units**; dates stay as timestamps. Formatting happens at render time.
 - **Enforce with Konsist**, and ratchet allowlists to empty.

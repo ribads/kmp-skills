@@ -85,9 +85,13 @@ interface Transcriber {
   or after `release()`. It never rewrites text already transcribed.
 - Live streams and file/buffer transcriptions may overlap. They share one engine that works one request
   at a time, so a long file transcription delays live updates.
-- Supported files: WAV (PCM 8/16/24/32-bit, IEEE float 32/64-bit, WAVE_FORMAT_EXTENSIBLE, any channel
-  count) is parsed directly; anything else goes through MediaCodec (Android: M4A/AAC, MP3, FLAC, Ogg, ...)
-  or AVAudioFile (iOS: M4A/AAC, MP3, CAF, AIFF, ...). Multi-channel audio is averaged to mono.
+- Supported files: on Android, WAV (PCM 8/16/24/32-bit, IEEE float 32/64-bit, WAVE_FORMAT_EXTENSIBLE, any
+  channel count) is parsed directly and anything else goes through MediaCodec (M4A/AAC, MP3, FLAC, Ogg, ...).
+  On iOS every format, WAV included, goes through AVAudioFile (WAV, M4A/AAC, MP3, CAF, AIFF, ...).
+  Multi-channel audio is averaged to mono.
+- File windows: `transcribeFile` hands the engine 1,920,000 frames per window (plus 5 s of overlap), counted
+  at the file's own sample rate. That is two minutes only for 16 kHz audio: 40 s at 48 kHz, 4 minutes at
+  8 kHz.
 
 ## TranscriptionStream
 
@@ -368,8 +372,8 @@ https://github.com/ribads/moonshine-bridge-kmp
 ```
 
 Select the `MoonshineVoiceBridge` library product, with the dependency rule **Up to Next Minor Version**
-from `0.1.0`. Bridge `0.1.x` wraps moonshine-swift `0.1.x` and is the only line this module's header
-matches; an older bridge fails to link, a newer minor may fail at runtime.
+from `0.0.2`. Bridge `0.0.2` wraps moonshine-swift `0.1.x` and is the first release this module's
+header matches: `0.0.1` fails to link (`MVBSpeakerSpan` is missing), and a newer minor may fail at runtime.
 
 #### 2. Cinterop (already configured)
 
@@ -418,8 +422,9 @@ In `Info.plist`:
   `loadTranscriber` or transcribes badly.
 - **Errors**: every call returns `Result`; cancellation of the caller is rethrown, never reported as a
   failure. A live stream's failure surfaces in `state` and `stop()`, never in the caller's scope.
-- **Speakers in files**: `transcribeFile` transcribes in two-minute windows, and each window identifies
-  speakers on its own. In files longer than one window, the same voice can come back under a new
+- **Speakers in files**: `transcribeFile` transcribes in windows of 1,920,000 frames (two minutes at 16 kHz,
+  shorter for higher sample rates), and each window identifies speakers on its own. In files longer than
+  one window, the same voice can come back under a new
   `speakerId` (and so a new `speakerIndex`) in each window. Live streams keep voices consistent for the
   whole stream.
 - **Speaker cost**: identification runs inside every transcription pass and its cost grows with session

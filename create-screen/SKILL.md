@@ -26,7 +26,7 @@ The scaffold ships with the baseline intents every Synapse screen needs:
 
 ## Script
 
-`scripts/create_screen.py` — Python 3, stdlib only.
+`scripts/create_screen.py`: Python 3.9 or newer, stdlib only (macOS's bundled `/usr/bin/python3` is enough).
 
 ```
 python3 .claude/skills/create-screen/scripts/create_screen.py \

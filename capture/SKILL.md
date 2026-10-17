@@ -87,7 +87,7 @@ interface CaptureController {
     val events: Flow<CaptureEvent>
     val previewSurface: CapturePreviewSurface
 
-    suspend fun start(): Result<Unit>      // exactly once per instance
+    suspend fun start(): Result<Unit>      // from Idle; again only to retry from Error
     suspend fun release()                   // suspends through encoder flush + photo settle
 
     suspend fun setMode(mode: CaptureMode): Result<Unit>
@@ -104,12 +104,15 @@ interface CaptureController {
 
 ### Contracts that matter
 
-- **Start gating**: `start()` is valid from `Idle` (initial) and from `Error` (retry after a failed previous attempt). It is rejected with `CaptureError.InvalidState` from `Initializing` / `Ready` (already in progress / already started) and from `Released` (terminally torn down — build a new controller via `createCaptureController`).
+- **Start gating**: `start()` is valid from `Idle` (initial) and from `Error` (retry after a failed start or a runtime fault). It is rejected with `CaptureError.InvalidState` from `Initializing` / `Ready` (already in progress / already started) and from `Released` (terminally torn down: build a new controller via `createCaptureController`). Any `start()` failure moves `lifecycle` to `Error(cause)`.
+- **Permission check**: `start()` checks `requiredPermissions(config)` without prompting, camera first, then microphone when `audioEnabled`. The first missing one is returned as `Result.failure(CaptureError.PermissionDenied(permission))` (lifecycle `Error`); request it and call `start()` again. On iOS a permission the user has not been asked for yet (`notDetermined`) counts as missing, so request permissions before the first `start()`.
+- **While `Error`**: device commands (`setFacing`, `setFlash`, `setZoom`, `focus`, `capturePhoto`, `startRecording`) return `InvalidState`; `setMode` only records the mode; `release()` works from any state.
 - **`release()`** suspends until in-flight recording flushes and in-flight photo capture completes. Safe to call from any state, including `Released`.
 - **`setZoom`** returns the actually-applied (clamped) ratio so pinch gestures can match resistance to engine state without an extra read of `session`.
 - **`focus`** suspends through the camera's focus + metering pass. `Result.success(Unit)` means the request was issued; whether the device achieved lock is delivered via `events` as `CaptureEvent.FocusCompleted(locked)`.
 - **`setMode` / `setFacing`** are rejected during active recording (`InvalidState`). Consult `session.capabilities.canChangeMode` / `canChangeFacing` to render disabled state.
-- **`setFlash`** accepts `FlashMode.Off` unconditionally. On iOS, any non-`Off` mode outside `session.capabilities.supportedFlashModes` is rejected with `CaptureError.Unsupported`; Android forwards the request straight to CameraX without that guard. Front cameras with no flash unit typically expose only `FlashMode.Off` in `supportedFlashModes`.
+- **`setFlash`** accepts `FlashMode.Off` unconditionally. On both platforms, any other mode on a camera without a flash unit is rejected with `CaptureError.Unsupported` and `session.flash` is left unchanged (Android checks `CameraInfo.hasFlashUnit()`, iOS checks the mode against `session.capabilities.supportedFlashModes`). Cameras with no flash unit expose only `FlashMode.Off` in `supportedFlashModes`.
+- **`setMode`** on iOS reconfigures a running session for the new mode's quality preset (`photoQuality` in photo mode, `videoQuality` in video mode), which briefly interrupts the preview. Android binds photo and video together, so a mode switch changes nothing on the camera.
 - **Concurrent commands** serialize on the controller's internal mutex. State updates are atomic across every dimension of `CaptureSession`.
 - **`stopRecording` returns `InvalidState`** if no recording is active — including when an OS interrupt or auto-stop already finalized the recording (the outcome of those exits is delivered via `events`).
 - **Out-of-band recording ends**: OS interrupts → `CaptureEvent.RecordingInterrupted(outcome?, reason)`. Duration / file-size limit → `CaptureEvent.RecordingAutoStopped(outcome)`. `outcome` carries whatever the encoder finalized.
@@ -145,7 +148,7 @@ data class CaptureConfig(
 
 Quality settings, `audioEnabled`, and `outputDirectory` are fixed for the controller's lifetime. Mode, facing, flash, and zoom can be changed at runtime.
 
-`outputDirectory` controls where the engine writes captures when no explicit destination is passed. `null` (the default) uses the platform's app-private cache directory; the engine creates the directory if it doesn't exist and generates a fresh `IMG_<timestamp>.jpg` / `VID_<timestamp>.mp4` filename per capture.
+`outputDirectory` controls where the engine writes captures when no explicit destination is passed. `null` (the default) uses a `capture` folder inside the app's cache directory on Android (`<cacheDir>/capture`) and inside the temporary directory on iOS (`NSTemporaryDirectory()` + `capture`). The engine creates the directory if it doesn't exist and generates a fresh `IMG_<timestamp>.jpg` / `VID_<timestamp>.mp4` filename per capture.
 
 `maxVideoDuration` triggers `CaptureEvent.RecordingAutoStopped` on hit.
 
@@ -185,7 +188,14 @@ enum class VideoQuality {
 }
 ```
 
-Mapped per-platform to the closest available configuration. Inspect `CaptureSession` after `start()` to know what was negotiated.
+Mapped per platform to the closest available configuration. `CaptureSession` does not report the negotiated resolution.
+
+| | Android | iOS |
+|---|---|---|
+| `PhotoQuality` | CameraX `ImageCapture` resolution target: Low 640x480, Medium 1280x960, High 2560x1440, Max 4096x3072 (closest lower, then higher, size) | Session preset in photo mode: Low `640x480`, Medium `1280x720`, High `High`, Max `Photo` |
+| `VideoQuality` | CameraX `QualitySelector` (SD, HD, FHD, UHD) with lower-then-higher fallback | Session preset in video mode: SD `640x480`, HD `1280x720`, FullHD `1920x1080`, UltraHD `3840x2160` |
+
+On iOS the preset for the current mode is applied at `start()` and on every `setMode`, and falls back to the `High` preset when the camera or the attached outputs refuse it (for example 4K on a front camera).
 
 ### CaptureSession
 
@@ -206,8 +216,8 @@ data class CaptureSession(
 ```kotlin
 data class CaptureCapabilities(
     val supportedFacings: Set<CameraFacing> = emptySet(),
-    val supportedFlashModes: Set<FlashMode> = emptySet(),
-    val zoomRange: ClosedFloatingPointRange<Float> = 1f..1f,
+    val supportedFlashModes: Set<FlashMode> = emptySet(),   // all modes with a flash unit, {Off} without, empty before start
+    val zoomRange: ClosedFloatingPointRange<Float> = 1f..1f, // iOS caps the upper bound at 10x
     val supportsTapToFocus: Boolean = false,
     val canChangeMode: Boolean = true,    // false during recording
     val canChangeFacing: Boolean = true,  // false during recording
@@ -228,7 +238,7 @@ sealed class CaptureLifecycle {
 }
 ```
 
-Transition graph: `Idle -> Initializing -> Ready -> Released`. `Error` is reachable from any non-terminal state. It is recoverable: `start()` may be re-invoked from `Error` to retry initialization. (`release` then rebuild is also fine.)
+Transition graph: `Idle -> Initializing -> Ready -> Released`. `Error` is reachable from any non-terminal state (a failed `start()`, including `PermissionDenied`, or a runtime session fault). It is recoverable: `start()` may be re-invoked from `Error` to retry initialization, while device commands return `InvalidState` until it succeeds. (`release` then rebuild is also fine.)
 
 ### RecordingProgress
 
@@ -317,7 +327,7 @@ sealed class CaptureError(message: String, cause: Throwable? = null) : Exception
 }
 ```
 
-Returned inside `Result.failure` from suspending operations and surfaced via `CaptureLifecycle.Error` for unrecoverable engine faults.
+Returned inside `Result.failure` from suspending operations and surfaced via `CaptureLifecycle.Error` for start failures and runtime session faults.
 
 ### CapturePermission
 
@@ -333,7 +343,7 @@ The engine does **not** request permissions. Use `requiredPermissions(config)` t
 
 `ui:capture` ships flat, composable building blocks plus one opinionated assembly (`CaptureScreen`). There are no slots: customize by composing the parts yourself rather than overriding hooks.
 
-Most controls subscribe to `session.capabilities` and **render nothing** when their action is unavailable — recording hides the mode + flip controls, a single-facing device hides the flip control. Hiding controls makes the failing action impossible to invoke, which is the cleanest error handling there is. (`CaptureFlashButton` is the deliberate exception — it always renders; see its section below.)
+Every control subscribes to `session.capabilities` and **renders nothing** when its action is unavailable: recording hides the mode and flip controls, a single-facing device hides the flip control, and a camera without a flash unit hides the flash control. Hiding controls makes the failing action impossible to invoke, which is the cleanest error handling there is.
 
 ### CapturePreview
 
@@ -408,7 +418,7 @@ Opinionated default visual. Extension on `CaptureShutterScope` so it's callable 
 fun CaptureFlashButton(controller: CaptureController, modifier: Modifier = Modifier)
 ```
 
-Flash-mode toggle. Cycles through the natural sequence for the **currently active** capture mode: Off → Auto → On → Off for photo, Off → Torch → Off for video. **Always renders** — the cycle is not gated by `session.capabilities.supportedFlashModes`, because `hasFlashUnit()`-style signals are unreliable across emulators and some hardware. On a camera that genuinely can't honor a mode, `setFlash` leaves `session.flash` unchanged and the label reflects the real engine state.
+Flash-mode toggle. Cycles through the natural sequence for the **currently active** capture mode: Off → Auto → On → Off for photo, Off → Torch → Off for video. **Renders nothing** when the active camera has no flash unit, that is when `session.capabilities.supportedFlashModes` offers nothing besides `FlashMode.Off` (including before `start()` completes). The signal is `CameraInfo.hasFlashUnit()` on Android and `AVCaptureDevice.hasTorch` on iOS, so emulators and simulators without a flash hide the button.
 
 ### CaptureFlipButton
 
@@ -484,7 +494,7 @@ Add these to the consuming app's manifest / Info.plist.
 
 The last two keys are required even though `core:capture` writes only to app-private storage — iOS frameworks along the `AVCapturePhotoOutput` path probe photo-library metadata internally, and the privacy check crashes the app at runtime if the strings are absent.
 
-The engine surfaces missing runtime permissions as `Result.failure(CaptureError.PermissionDenied)` from `start()`.
+The engine checks, but never requests, the runtime permissions in `start()` and returns the first missing one as `Result.failure(CaptureError.PermissionDenied(permission))`. On iOS a permission that has not been requested yet counts as missing, so request permissions before calling `start()`.
 
 ---
 
@@ -636,6 +646,8 @@ Box {
 - `RecordingProgress.elapsedMs` is polled every 100 ms from `AVCaptureMovieFileOutput.recordedDuration` (AVFoundation does not emit periodic progress events natively).
 - Photo files are written as JPEG. `PhotoOutcome.rotationDegrees` is `0` — `UIImage` decodes upright pixels.
 - `setFacing()` reconfigures the session in place. Brief preview interruption is expected during the swap.
-- A session interruption (app backgrounded, incoming call, another app claiming the camera) does **not** move the controller off `Ready`: AVFoundation pauses and then resumes the session itself, and the controller keeps accepting commands across the gap (a command issued mid-interruption fails with a typed `CaptureError`, not a misleading "not started"). An unrecoverable session fault (hardware error, media-services reset), reported via `AVCaptureSessionRuntimeErrorNotification`, transitions `lifecycle` to `CaptureLifecycle.Error` — release and rebuild.
+- A session interruption (app backgrounded, incoming call, another app claiming the camera) does **not** move the controller off `Ready`: AVFoundation pauses and then resumes the session itself, and the controller keeps accepting commands across the gap (a command issued mid-interruption fails with a typed `CaptureError`, not a misleading "not started"). An unrecoverable session fault (hardware error, media-services reset), reported via `AVCaptureSessionRuntimeErrorNotification`, transitions `lifecycle` to `CaptureLifecycle.Error`: call `start()` to retry, or release and rebuild.
+- Session presets follow the current mode (see the quality table above); `setFacing` re-applies the preset for the new camera, falling back to `High` when the new camera refuses it.
+- Zoom: `CaptureCapabilities.zoomRange` caps the upper bound at 10x even when `maxAvailableVideoZoomFactor` reports more.
 - `CaptureEvent.FocusCompleted.locked` reflects *request acceptance*, not actual lock acquisition — KVO on `AVCaptureDevice.adjustingFocus` is on the roadmap.
 - `CaptureCapabilities.supportedFlashModes` uses `device.hasTorch` as the proxy for "this lens has an illuminator." Most current devices ship flash + torch together; treating them as one signal keeps the model simple and matches what user-facing UIs care about.

@@ -1,10 +1,21 @@
 ---
 name: payments
-description: "Use when implementing payment processing in a KMP project: Paystack card payments, mobile money, the Paystack payment sheet, or transaction handling. Also use when asked for Stripe, because Synapse has no Stripe API yet (its module is an empty scaffold)."
+description: "Use when implementing payment processing in a KMP project: Paystack card payments, mobile money (M-Pesa), the Paystack payment sheet, or transaction handling. Also use when asked for Stripe, because Synapse has no Stripe support: there is no Stripe artifact to depend on."
 user-invocable: true
 ---
 
-# Payment Modules: Paystack, plus a Stripe scaffold
+# Payment Modules: Paystack
+
+## Dependencies
+
+```kotlin
+commonMain.dependencies {
+    implementation("com.ribads.synapse:paystack-core:<version>")  // SDK: services, models, errors
+    implementation("com.ribads.synapse:paystack-ui:<version>")    // payment sheet; exposes paystack-core as api
+}
+```
+
+`paystack-core` declares `android.permission.INTERNET` in its Android manifest (and `paystack-ui` depends on it), so the app inherits the permission through manifest merging.
 
 ## Imports
 
@@ -23,7 +34,7 @@ Import each type from its package below.
 
 ## Paystack (KMP)
 
-### core:paystack:core — SDK Core
+### core:paystack:core: SDK Core
 
 **Package**: `com.ribads.synapse.paystack.core`; see [Imports](#imports) for the rest
 
@@ -32,13 +43,16 @@ Import each type from its package below.
 
 // DSL (returns the singleton and stores it)
 val paystack = paystack {
-    publicKey = "pk_live_..."      // required, non-blank
-    enableLogging = false           // default false
-    sdkVersion = "0.0.1"            // default "0.0.1"
+    publicKey = "pk_test_xxxxxxxxxxxxxxxx"  // required, non-blank; use your test key in development
+    enableLogging = false                   // default false
+    sdkVersion = "0.0.1"                    // default "0.0.1"
 }
 // Or factory overloads
-val paystack = Paystack.create(publicKey = "pk_live_...", enableLogging = false)
-val paystack = Paystack.create(config = PaystackConfig(publicKey = "pk_live_..."))
+val paystack = Paystack.create(publicKey = "pk_test_xxxxxxxxxxxxxxxx", enableLogging = false)
+val paystack = Paystack.create(config = PaystackConfig(publicKey = "pk_test_xxxxxxxxxxxxxxxx"))
+
+// Every entry point validates the key: a blank publicKey throws PaystackError.InvalidKey
+// and leaves the SDK uninitialized.
 
 data class PaystackConfig(
     val publicKey: String,
@@ -54,9 +68,9 @@ class Paystack /* private constructor */ {
     val mobileMoney: MobileMoneyService
 
     companion object {
-        val instance: Paystack                 // throws if not initialized
+        val instance: Paystack                 // throws PaystackError.NotInitialized before create()/paystack {}
         val isInitialized: Boolean
-        fun create(config: PaystackConfig): Paystack
+        fun create(config: PaystackConfig): Paystack   // throws PaystackError.InvalidKey for a blank key
         fun create(publicKey: String, enableLogging: Boolean = false): Paystack
         fun reset()
     }
@@ -121,7 +135,9 @@ sealed class PaystackError(
     override val message: String,
     override val cause: Throwable? = null,
 ) : Exception(message, cause) {
-    class NotInitialized(message: String = "Paystack SDK has not been initialized.") : PaystackError(message)
+    class NotInitialized(
+        message: String = "Paystack SDK has not been initialized. Call paystack { } or Paystack.create() first.",
+    ) : PaystackError(message)
     class InvalidKey(message: String = "Invalid or missing Paystack API Key.") : PaystackError(message)
     class Network(message: String, cause: Throwable? = null) : PaystackError(message, cause)
     class Api(message: String, val statusCode: Int? = null) : PaystackError(message)
@@ -132,6 +148,22 @@ sealed class PaystackError(
 
 fun Throwable.asPaystackError(): PaystackError
 ```
+
+**When each error is raised**:
+
+| Error | Raised when |
+|---|---|
+| `NotInitialized` | `Paystack.instance` is read before `paystack { }` / `Paystack.create()`. The payment sheet reports it as `PaymentSheetResult.Failed` instead of crashing. |
+| `InvalidKey` | The public key is blank at configuration (thrown), or the API answers HTTP 401 (returned as a `Result` failure). |
+| `Network` | Connection, DNS, TLS or timeout failure (any `kotlinx.io.IOException`, which includes Ktor's request, connect and socket timeouts), or a lost realtime connection. |
+| `Api` | Any other non-2xx response; `statusCode` is the HTTP status. |
+| `NoResponseBody` | A 2xx response without a `data` payload. |
+| `Authentication` | A card authentication step was rejected locally (an invalid date of birth). |
+| `Unknown` | Anything else, including an undecodable payload; the original throwable is the `cause`. |
+
+`asPaystackError()` applies this mapping and rethrows `CancellationException`, so a cancelled call cancels its caller instead of surfacing as a payment error. Every `Result` failure and every failed event from the services below is a `PaystackError`.
+
+**Realtime flows** (`transactionEvents`, `redirectAuthResults`): cold flows that subscribe on collection and unsubscribe when collection stops. A payload that fails to decode is emitted as `Result.failure(PaystackError.Unknown)` and the stream continues. A lost connection is emitted as one final `Result.failure(PaystackError.Network)` and the flow completes, so `first()` always returns. On Android the Pusher client first retries a dropped connection on its own, so the failure arrives once it gives up; on iOS there is no retry and the first socket error ends the flow.
 
 **Models** (package `com.ribads.synapse.paystack.core.api.models`, all `@Serializable`):
 
@@ -161,7 +193,18 @@ data class ChargeResponse(
 data class MobileMoneyChargeResponse(
     val channelName: String, val displayParams: DisplayParams,
     val phone: String? = null, val provider: String, val transactionId: String,
-) // nested: DisplayParams, enum DisplayType { ENTER_NUMBER, POP, ... }
+) {
+    data class DisplayParams(
+        val message: String, val timer: Int, val type: DisplayType,
+        val paybillNumber: String? = null, val accountNumber: String? = null,
+    )
+    enum class DisplayType {
+        ENTER_NUMBER,                        // "enter_number": ask for the phone number
+        POP,                                 // "pop": push sent to the phone; show message, wait timer seconds
+        MPESA_OFFLINE_PAYMENT_INSTRUCTIONS,  // "mpesa_offline_payment_instructions": paybill + account number
+        UNSUPPORTED,                         // any other value the server sends
+    }
+}
 
 data class TransactionEvent(val status: TransactionStatus, val message: String? = null)
 
@@ -171,10 +214,17 @@ data class RedirectAuthResponse(
 ) { val reference: String? }
 
 data class AddressState(val name: String, val slug: String, val abbreviation: String)
-data class Customer(/* firstName, lastName, email, customerCode, phone, metadata, riskAction — all String? */)
+data class Customer(/* firstName, lastName, email, customerCode, phone, metadata, riskAction, all String? */)
 data class ChannelOptions(/* bankTransfer, ussd, qr, card: List<String>?; mobileMoney: List<MobileMoneyChannelOption>? */)
-data class ChargeAuthorization(/* code, bin, last4, expiryMonth, expiryYear, cardType, countryCode, bank — all String? */)
-data class MobileMoneyChannelOption(/* ... */)
+data class ChargeAuthorization(
+    val code: String? = null, val bin: String? = null, val last4: String? = null,
+    val expiryMonth: String? = null, val expiryYear: String? = null, val cardType: String? = null,
+    val countryCode: String? = null, val bank: String? = null, val brand: String? = null,
+    val reusable: Boolean? = null, val signature: String? = null,
+)
+data class MobileMoneyChannelOption(
+    val key: String, val value: String, val isNew: Boolean, val phoneNumberRegex: String,
+)
 
 enum class PaymentChannel { CARD, MOBILE_MONEY, UNKNOWN }   // companion.supported = [CARD, MOBILE_MONEY]
 enum class PaystackDomain { LIVE, TEST }
@@ -184,14 +234,14 @@ enum class TransactionStatus {
 }
 ```
 
-**Architecture**: Suspend functions returning `Result<T>`, Flow-based events, sealed error hierarchy, no callbacks. `EventManager`, `EncryptionManager`, `PaystackApi`, and the HTTP/encryption/event factory functions are `internal` — not part of the public surface.
+**Architecture**: Suspend functions returning `Result<T>`, Flow-based events, sealed error hierarchy, no callbacks. `EventManager`, `EncryptionManager`, `PaystackApi`, and the HTTP/encryption/event factory functions are `internal`, not part of the public surface.
 
 **Platform details**:
 - Android: OkHttp + Pusher Java client
 - iOS: Darwin HTTP engine + URLSessionWebSocketTask
 - Encryption: RSA-OAEP (javax.crypto on Android, Security framework on iOS)
 
-### core:paystack:ui — Payment Screens
+### core:paystack:ui: Payment Screens
 
 **Package**: `com.ribads.synapse.paystack.ui`
 
@@ -203,10 +253,10 @@ fun rememberPaystackPaymentSheetState(): PaystackPaymentSheetState
 
 @Stable
 class PaystackPaymentSheetState {
-    // constructor is internal — obtain via rememberPaystackPaymentSheetState()
+    // constructor is internal; obtain via rememberPaystackPaymentSheetState()
     val isPresented: Boolean
     fun present(accessCode: String)
-    // dismiss() is internal — sheet manages its own lifecycle
+    // dismiss() is internal; the sheet manages its own lifecycle
 }
 
 @Composable
@@ -231,7 +281,7 @@ fun PaymentSheetContent(
 sealed class PaymentSheetResult {
     data class Completed(val details: PaymentCompletionDetails) : PaymentSheetResult()
     data object Cancelled : PaymentSheetResult()
-    data class Failed(val error: Throwable, val reference: String?) : PaymentSheetResult()
+    data class Failed(val error: PaystackError, val reference: String?) : PaymentSheetResult()
 }
 
 data class PaymentCompletionDetails(val reference: String)
@@ -254,7 +304,7 @@ fun PaymentSheetViewController(
 **Usage**:
 ```kotlin
 // 1. Initialize once at app startup
-paystack { publicKey = "pk_live_..." }
+paystack { publicKey = "pk_test_xxxxxxxxxxxxxxxx" }
 
 // 2. In a composable
 val state = rememberPaystackPaymentSheetState()
@@ -266,14 +316,16 @@ PaystackPaymentSheet(
     onResult = { result ->
         when (result) {
             is PaymentSheetResult.Completed -> { /* result.details.reference */ }
-            is PaymentSheetResult.Failed    -> { /* result.error */ }
+            is PaymentSheetResult.Failed    -> { /* result.error is a PaystackError */ }
             is PaymentSheetResult.Cancelled -> { /* user dismissed */ }
         }
     },
 )
 ```
 
-**Screens**: Card payments (number/expiry/CVV, PIN, OTP, phone, address, DOB, 3DS), M-Pesa (online/offline)
+**Screens**: Card payments (number/expiry/CVV, PIN, OTP, phone, address, DOB, 3DS) and mobile money. The sheet supports **M-Pesa only** for mobile money (online STK push and offline paybill); choosing any other mobile money provider on the transaction shows "This payment channel is not supported". For other providers, build your own flow on `MobileMoneyService` and `TransactionService.transactionEvents`.
+
+**Errors from the sheet**: `Failed.error` is always a `PaystackError` (see the table above). Missing initialization arrives as `Failed(PaystackError.NotInitialized(), reference = null)` rather than a crash. On Android, `PaymentSheet` runs the flow in its own activity, so the error keeps its subtype, message and `Api.statusCode` but not its `cause`. A network failure while charging a card or waiting for M-Pesa stays in the flow with retry options; a failure loading the transaction, a timed-out charge, `InvalidKey` and `NotInitialized` end the sheet with `Failed`.
 
 **Appearance**: the flow has its own light and dark Paystack palettes and never reads the host's Synapse theme. `darkTheme` picks one and defaults to the platform's appearance. Inside a Synapse app, pass `darkTheme = Theme.isDark` so the sheet follows an appearance the app sets itself (an in-app light/dark switch). The platform entry points follow the platform: `PaymentSheet` runs its own activity with a DayNight window, which follows the app's night mode on Android 12+ (set by `WithAppTheme`) and the device below that, and `PaymentSheetViewController` follows the presenting window's `overrideUserInterfaceStyle`.
 
@@ -281,18 +333,4 @@ PaystackPaymentSheet(
 
 ## Stripe
 
-### core:payment:stripe — Stripe SDK Wrapper (scaffold only)
-
-**Package / namespace**: `com.ribads.synapse.core.payment.stripe`
-**Gradle path**: `:core:payment:stripe`
-
-> Status: the module is registered in `settings.gradle.kts` and has a Gradle build
-> configured, but it currently contains **no source code** (no `src/`). There is no
-> public API to consume yet.
-
-Build configuration (`build.gradle.kts`):
-- KMP targets: Android + iOS (iosX64, iosArm64, iosSimulatorArm64)
-- iOS framework: `baseName = "CorePayment"`, `isStatic = true`
-- Dependencies — androidMain: `stripe-android-sdk`, `androidx-appcompat`; commonMain: `coroutines-core`
-
-When implementation lands, document the public surface here.
+Synapse does not support Stripe. The repository has an empty `:core:payment:stripe` Gradle module with no source code, and nothing is published for it, so there is no artifact to depend on and no API to call. Use Stripe's own SDKs directly if a project needs Stripe.

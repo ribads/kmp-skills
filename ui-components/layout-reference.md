@@ -17,8 +17,20 @@
 )
 
 @Immutable
-data class DatePickerModel(val selectedDate: Long?, val minDate: Long?, val maxDate: Long?)
+data class DatePickerModel(
+    val selectedDate: Long?,                              // epoch millis
+    val minDate: Long?,
+    val maxDate: Long?,
+    val monthLabels: List<Clause> = /* "January" … "December" */,   // exactly 12, January first
+    val weekdayLabels: List<Clause> = /* "Su" … "Sa" */,            // exactly 7, Sunday first
+    val resetLabel: Clause = "Reset".asText(),
+    val doneLabel: Clause = "Done".asText(),
+)
 ```
+
+The labels default to English; pass localized clauses for other languages. A label list of the wrong size throws `IllegalArgumentException` when the model is built. The year and day numbers are drawn as plain digits.
+
+The picker keeps the month on screen and whether the calendar, month grid or year grid is showing as its own state, starting from `selectedDate` (or today); a new model resets them. Days are converted with the device's time zone: `onDateSelected` receives the start of the chosen day there.
 
 ---
 
@@ -73,16 +85,18 @@ data class TopNavBarModel(
     val leadingIcon: Image? = null,
     val title: Clause? = null,
     val trailing: TopNavBarTrailingContentModel? = null,
+    val leadingIconLabel: Clause? = null,     // screen-reader label; null uses leadingIcon.contentDescription
 ) {
     companion object {
-        val BackIcon: Image    // Image.Glyph(Res.drawable.sc_icon_chevron_left)
-        val CloseIcon: Image   // Image.Glyph(Res.drawable.sc_icon_close)
-        val MenuIcon: Image    // Image.Glyph(Res.drawable.sc_icon_menu)
+        val BackIcon: Image.Glyph    // Image.Glyph(Res.drawable.sc_icon_chevron_left, contentDescription = "Back")
+        val CloseIcon: Image.Glyph   // Image.Glyph(Res.drawable.sc_icon_close, contentDescription = "Close")
+        val MenuIcon: Image.Glyph    // Image.Glyph(Res.drawable.sc_icon_menu, contentDescription = "Menu")
 
         fun withTitle(
             title: Clause,
             leadingIconType: NavBarIconType? = null,
             trailing: TopNavBarTrailingContentModel? = null,
+            leadingIconLabel: Clause? = null,
         ): TopNavBarModel
     }
 }
@@ -93,6 +107,7 @@ enum class NavBarIconType { Back, Close, Menu }
 data class TrailingIconModel(
     val id: String,
     val icon: Image,
+    val label: Clause? = null,                // screen-reader label; null uses icon.contentDescription
 )
 
 @Stable
@@ -113,6 +128,7 @@ sealed class TopNavBarTrailingContentModel {
 - `TopNavBarModel.withTitle(...)` is the convenient factory: pass a `NavBarIconType` and it resolves the matching `BackIcon`/`CloseIcon`/`MenuIcon` for the leading slot.
 - `TopNavBarTrailingContentModel.Title` renders a tappable text action on the trailing edge; when `enabled = false` it draws at `0.38` alpha and ignores taps. Its tap invokes `onTrailingTitleClick`.
 - `TopNavBarTrailingContentModel.Icons` renders one 48dp icon button per `TrailingIconModel`; each tap invokes `onTrailingIconClick(id)`.
+- The built-in icons are `Image.Glyph`s, tinted with the bar's content colour, and carry English content descriptions. Every icon button is announced as a button with its label: `leadingIconLabel` / `TrailingIconModel.label` when set (pass `Text.Localized(...)` to localize), the image's `contentDescription` otherwise. A button with no click handler is announced as disabled.
 
 **Colors** (via `Theme.colors`):
 - Container: `surface.primary`

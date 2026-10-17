@@ -1,6 +1,6 @@
 ---
 name: context
-description: Use when you need Android Context or Activity access in shared KMP code. Required dependency for core:file, core:permissions, core:record, core:sharedpref.
+description: Use when you need Android Context or Activity access in shared KMP code. Dependency of core:capture, core:connectivity, core:file, core:moonshine, core:paystack:ui, core:permissions, core:playback, core:record, core:share and core:sharedpref.
 user-invocable: true
 ---
 
@@ -46,4 +46,19 @@ val context = AppContextProvider.applicationContext as Context
 val activity = AppContextProvider.currentActivity as? ComponentActivity
 ```
 
-This module is a transitive dependency of `core:file`, `core:permissions`, `core:record`, and `core:sharedpref`. You rarely need to depend on it directly.
+Every Synapse module that needs a `Context` or the current activity depends on it, so you rarely need to depend on it directly:
+
+| Module | Artifact | Source set | Exposed to your code |
+|--------|----------|------------|----------------------|
+| `core:capture` | `core-capture` | `androidMain`, `iosMain` | no (`implementation`) |
+| `core:connectivity` | `core-connectivity` | `androidMain` | no (`implementation`) |
+| `core:file` | `core-file` | `commonMain` | yes (`api`) |
+| `core:moonshine` | `core-moonshine` | `androidMain` | no (`implementation`) |
+| `core:paystack:ui` | `paystack-ui` | `androidMain` | no (`implementation`) |
+| `core:permissions` | `core-permissions` | `commonMain` | yes (`api`) |
+| `core:playback` | `core-playback` | `androidMain` | no (`implementation`) |
+| `core:record` | `core-record` | `androidMain` | no (`implementation`) |
+| `core:share` | `core-share` | `androidMain` | no (`implementation`) |
+| `core:sharedpref` | `core-sharedpref` | `androidMain` | Android source sets only (`api`) |
+
+The `ContentProvider` initializer runs whenever any of them is in the app. To reference `AppContextProvider` from your own code without one of the `api` modules, declare `core-context` yourself.

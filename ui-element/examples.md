@@ -48,12 +48,12 @@ fun MyAppTheme(appearance: Appearance = Appearance.System, content: @Composable 
         colorSchemes = ColorSchemes(light = LightColors, dark = DarkColors),
         typography = typography,
         shape = shape,
-    ) {
-        WithImagePainter(imagePainterFactory = ImagePainterFactory.createPainterFactory()) {
-            content()
-        }
-    }
+        content = content,
+    )
 }
+
+// Image painting needs no wrapper: ImagePainterFactory.Default is already installed. Wrap content in
+// WithImagePainter only to replace it (a test double, custom request headers).
 
 // Access tokens anywhere inside the theme; the role resolves for the current appearance
 Text(clause = state.title, style = Theme.typography.h1.copy(color = Theme.colors.element.secondary))
@@ -95,8 +95,12 @@ data class ViewState(
     val errorLabel: Clause = "Error occurred".asText(format = TextFormat.Error),
     val styledLabel: Clause = "Bold + italic".asText(format = TextFormat.Bold + TextFormat.Italic),
     val mention: Clause = "@john".asMention(textActionId = "user_123"),
-    val price: Clause = Text.Money(amount = 1999, currency = Currency.GBP),  // £19.99
-    val date: Clause = Text.Timestamp(date = 1718000000000L, pattern = "dd MMM yyyy"),
+    val price: Clause = Text.Money(amount = 1999, currency = Currency.GBP),  // "£19.99" in en-GB, "19,99 £" in de-DE
+    val date: Clause = Text.Timestamp(
+        date = 1718000000000L,
+        pattern = "dd MMM yyyy",
+        timeZone = TimeZone.currentSystemDefault(),                          // omitted, the date renders in UTC
+    ),
     val featured: Clause = Text.listOf(
         Graphics(image = Image.Glyph(Res.drawable.ic_star), intent = TextIntent.Emphasis),
         " Featured".asText(format = TextFormat.Bold),
@@ -134,6 +138,14 @@ WithTextIntentPalette(
 ```
 
 ## Image & Icon
+
+Remote URLs need no setup. For `Image.LocalIdentifier` on iOS, install Synapse's Coil components where the app sets its image loader (see [Loading remote and device images](SKILL.md#image--icon-system)):
+
+```kotlin
+setSingletonImageLoaderFactory { context ->
+    ImageLoader.Builder(context).installSynapseImageComponents().build()
+}
+```
 
 ```kotlin
 // — Contract / State —

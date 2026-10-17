@@ -22,7 +22,7 @@ All fields optional.
 | `height` | `UIDimension?` | Explicit height |
 | `fillMaxWidth` | `Boolean?` | Expand to fill available width |
 | `fillMaxHeight` | `Boolean?` | Expand to fill available height |
-| `weight` | `Float?` | Flex weight within Row or Column |
+| `weight` | `Float?` | Share of the free space along a `Row` or `Column`, as Compose's `weight`. Applies to a direct child of a `Row` or `Column` (a `Conditional` branch counts as its position); ignored elsewhere. Must be > 0. |
 | `aspectRatio` | `Float?` | Width-to-height ratio (e.g. 1.78 for 16:9) |
 
 ### Positioning
@@ -40,7 +40,7 @@ All fields optional.
 | Field | Type | Description |
 |-------|------|-------------|
 | `backgroundColor` | `String?` | Background color as hex (e.g. `"#FF0000"`) |
-| `gradient` | `UIGradient?` | Gradient background (applied over backgroundColor) |
+| `gradient` | `UIGradient?` | Gradient background sized to the node (applied over backgroundColor) |
 | `cornerRadius` | `Float?` | Corner radius in dp |
 | `borderWidth` | `Float?` | Border stroke width in dp |
 | `borderColor` | `String?` | Border color as hex |
@@ -49,13 +49,17 @@ All fields optional.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `verticalScroll` | `Boolean?` | Enable vertical scrolling |
+| `verticalScroll` | `Boolean?` | Makes a `Column` scroll vertically; every other node type ignores it |
 
 ### Interaction
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `clickActionId` | `String?` | Action fired when element is clicked |
+| `clickActionId` | `String?` | Action fired when element is clicked (empty payload) |
+
+### Values Compose cannot build
+
+A negative padding, a non-positive `aspectRatio` or `weight`, or a radial gradient without a positive `radius` is reported through `RenderDiagnostics.onNodeRenderError`; the node still draws, without its modifier (or without its weight).
 
 ---
 
@@ -71,12 +75,14 @@ All fields optional.
 
 ## UIGradient (sealed, type-discriminated)
 
-**Linear**: `colors` (List\<String\>), `stops` (List\<Float\>?), `angle` (Float, default 0)
+Laid out over the node it paints. One colour paints solid, no colours paint nothing, and `stops` apply only when there is one per colour.
+
+**Linear**: `colors` (List\<String\>), `stops` (List\<Float\>?), `angle` (Float degrees, default 0: left to right; 90: top to bottom). Runs through the node's centre, edge to edge.
 ```json
 { "type": "linear", "colors": ["#FF0000", "#0000FF"], "angle": 90 }
 ```
 
-**Radial**: `colors` (List\<String\>), `stops` (List\<Float\>?), `centerX` (Float, default 0.5), `centerY` (Float, default 0.5), `radius` (Float, default 0.5)
+**Radial**: `colors` (List\<String\>), `stops` (List\<Float\>?), `centerX` (Float, default 0.5), `centerY` (Float, default 0.5), `radius` (Float, default 0.5). Centre in fractions of the node's width and height; `radius` a fraction of its longer side, > 0.
 ```json
 { "type": "radial", "colors": ["#FFFFFF", "#000000"], "centerX": 0.5, "centerY": 0.5, "radius": 0.7 }
 ```

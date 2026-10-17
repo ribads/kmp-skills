@@ -15,7 +15,7 @@ commonMain.dependencies {
 }
 ```
 
-Depends on `ui:element`.
+Depends on `ui:element` and `ui:compose-presentation`, both exposed as API: `ThemedBottomSheetAppearance` is a `BottomSheetAppearance` from `/navigation`.
 
 ## Imports
 
@@ -28,7 +28,7 @@ Import each type from its package below.
 | `com.ribads.synapse.ui.component.bottomnavbar` | `BottomNavigationBar`, `LiquidGlassBottomNavigationBar` |
 | `com.ribads.synapse.ui.component.bottomnavbar.model` | `BottomNavigationBadge`, `BottomNavigationBarModel`, `BottomNavigationItem` |
 | `com.ribads.synapse.ui.component.button` | `BaseButton`, `OutlineButton`, `PrimaryButton`, `SmallButton`, `SmallOutlineButton` |
-| `com.ribads.synapse.ui.component.button.model` | `ButtonModel`, `ButtonState`, `ButtonStyle`, `asButton` |
+| `com.ribads.synapse.ui.component.button.model` | `BaseButtonColors`, `ButtonModel`, `ButtonState`, `ButtonStyle`, `asButton` |
 | `com.ribads.synapse.ui.component.calendar` | `DatePicker`, `DatePickerBottomSheet` |
 | `com.ribads.synapse.ui.component.calendar.model` | `DatePickerModel` |
 | `com.ribads.synapse.ui.component.card` | `Card` |
@@ -134,14 +134,16 @@ PrimaryButton(model: ButtonModel, modifier: Modifier = Modifier, state: ButtonSt
               onClick: (() -> Unit)?)
 ```
 
-Required callbacks deliberately sit *after* defaulted config parameters, so callbacks are passed as named arguments. Containers (`Scaffold`, `Card`, `Tray`, `ToastHandler`) have no `model`, lead with `modifier`, and end with a trailing `content` slot. A few components predate the rule: `Divider` leads with `color`, and the text-field family buries `modifier` mid-list.
+Required callbacks deliberately sit *after* defaulted config parameters, so callbacks are passed as named arguments. Containers (`Scaffold`, `Card`, `TraySurface`, `ToastHandler`) have no `model`, lead with `modifier`, and end with a trailing `content` slot. A few components predate the rule: `Divider` leads with `color`, the text-field family buries `modifier` mid-list, and `Tray` and `ScrollableTray` lead with `onDismissRequest` and take no `modifier` at all (the sheet fills the window's width; size what you put inside it).
 
 **Everything else that holds across the catalog:**
 
 - **One `model` parameter, not a parameter list.** Models are `@Immutable` or `@Stable` data classes in `component.<family>.model`. Only atomic controls take primitives.
-- **All text is a `Clause`.** No component accepts a `String` for user-visible copy, and no model stores one. Images are `Image`, never a URL string.
+- **All text is a `Clause`.** No component accepts a `String` for user-visible copy, and no model stores one. Images are `Image`, never a URL string. The one exception is `ChartEntry.label`, a `String` because charts draw it on a canvas; resolve localized axis labels in the Mapper.
+- **Built-in copy is a model field with an English default.** The words a component draws itself are overridable through its model: `DatePickerModel` month, weekday, reset and done labels; `TimerModel` start, stop and reset; `TimePickerModel` AM and PM; `SelectionFieldModel.placeholder`. Pass `Text.Localized(...)` for a localized app; leave them for English.
+- **Icon-only controls carry screen-reader labels.** The built-in nav-bar icons (`TopNavBarModel.BackIcon`, `CloseIcon`, `MenuIcon`) carry English content descriptions, overridable with `TopNavBarModel.leadingIconLabel` and `TrailingIconModel.label`; the chat send button announces `ChatTextAreaModel.sendLabel`; caller-supplied icons are announced by their `Image.contentDescription`. Not yet labelled: the password visibility toggle, the time picker's arrows, and the chat attachment-remove and audio play buttons.
 - **Build models outside composables**, in `ViewState.Default`, the Mapper, or the Reducer. Never inline in a `@Composable`.
-- **Components are stateless.** They render what you pass and report events upward; there are no stateful/stateless pairs and no public `rememberXState()` factories. Hoist state into `ViewState`.
+- **Components are stateless for anything that matters to the screen.** They render what you pass and report events upward; there are no stateful/stateless pairs and no public `rememberXState()` factories. Hoist state into `ViewState`. A few keep local UI state that the screen never needs, and it resets when they leave the composition: `PasswordTextField` (whether the password is visible; it still reports toggles through `onPasswordToggleChange`), `DropdownSelectionField` (whether the menu is open), `DatePicker` (the month on screen and whether the month or year grid is showing; a new model resets them), and `Slider` (the thumb position while dragging, reset by a new `value`).
 - **Components never accept domain models or use-case DTOs.** Translate in the Mapper first.
 - **`ButtonState` is a separate `ViewState` field**, not a field on `ButtonModel`. Pass it as the `state =` argument so loading and disabled states are driven by the reducer.
 - **Components read theme roles and never branch on the appearance.** They are correct in light and dark with no arguments; a region that must stay dark (a camera, controls over a photo) is wrapped in `WithAppearance(Appearance.Dark)` by the caller (see `/ui-element`).

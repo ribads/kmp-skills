@@ -104,15 +104,29 @@ enum class Transport { WIFI, CELLULAR, ETHERNET, VPN, OTHER }
 
 ## Usage
 
+### Building a monitor
+
+```kotlin
+val monitor: ConnectivityMonitor = buildConnectivityMonitor()
+```
+
+Call it from common code; it takes no `Context`. On Android it reads the application context from `core:context`, which its ContentProvider sets before `Application.onCreate`, so building a monitor any earlier throws `IllegalStateException`. In an app with DI, provide one from the graph (see [DI wiring](#di-wiring-kotlin-inject)) and inject `ConnectivityMonitor` where it is needed. The examples below take that instance as `monitor`.
+
 ### One-shot check
 
 ```kotlin
-suspend fun upload(file: PlatformFile) {
-    if (monitor.current() is ConnectivityStatus.Disconnected) {
-        queueForLater(file)
-        return
+class Uploader(
+    private val monitor: ConnectivityMonitor,
+    private val queue: UploadQueue,
+    private val client: UploadClient,
+) {
+    suspend fun upload(file: PlatformFile) {
+        if (monitor.current() is ConnectivityStatus.Disconnected) {
+            queue.add(file)
+            return
+        }
+        client.send(file)
     }
-    uploader.send(file)
 }
 ```
 
@@ -182,6 +196,7 @@ import com.ribads.synapse.core.connectivity.ConnectivityConfig
 import com.ribads.synapse.core.connectivity.ConnectivityMonitor
 import com.ribads.synapse.core.connectivity.buildConnectivityMonitor
 import com.ribads.synapse.core.discopes.SingletonScope
+import kotlin.time.Duration.Companion.milliseconds
 import me.tatarka.inject.annotations.Provides
 
 interface ConnectivityComponent {

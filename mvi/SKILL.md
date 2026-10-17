@@ -15,6 +15,8 @@ commonMain.dependencies {
 }
 ```
 
+The lifecycle `ViewModel` that `LifecycleViewModel` extends (`org.jetbrains.androidx.lifecycle:lifecycle-viewmodel`) and the Compose runtime behind `state` are `api` dependencies of `ui:mvi`, so a module that declares a ViewModel needs neither of them separately.
+
 ## Imports
 
 Import them from exactly these paths:
@@ -247,7 +249,11 @@ The distinction that trips people up:
 
 ```kotlin
 viewState.confirmDialog?.let {
-    ConfirmDialog(model = it, onDismiss = { viewModel.emit(Intent.OnDismissDialog) })
+    ConfirmDialog(
+        model = it,
+        onConfirm = { viewModel.emit(Intent.OnConfirmDialog) },
+        onCancel = { viewModel.emit(Intent.OnDismissDialog) },
+    )
 }
 ```
 
@@ -290,7 +296,7 @@ internal class LoginMapper @Inject constructor() : Mapper {
     }
 
     override fun toResult(result: LoginResult): Result = when (result) {
-        is LoginResult.Success -> Result.NavigationRequested(ScreenCommand(HomeRoute(result.userId)))
+        is LoginResult.Success -> Result.NavigationRequested(NavigationCommand.FeatureCommand(featureName = "home", clearStack = true))
         is LoginResult.InvalidCredentials -> Result.OnLoginFailed(
             toast = ToastModel(
                 message = Text.Localized(Res.string.login_invalid_credentials),
@@ -567,7 +573,14 @@ Both are further reasons that anything which must stay visible belongs in `ViewS
 
 ## Error Handling
 
-`FlowViewModelArgs` accepts an `onPipelineError: (Throwable) -> Unit` callback that fires whenever the upstream `Interactor` flow throws OR whenever the `Reducer` throws. The pipeline **recovers automatically** — subsequent intents continue to flow — and the previous state is preserved if the reducer throws.
+`FlowViewModelArgs` accepts an `onPipelineError: (Throwable) -> Unit` callback that fires whenever the upstream `Interactor` flow throws OR whenever the `Reducer` throws. The pipeline **recovers automatically**: subsequent intents continue to flow, and the current state is kept in both cases.
+
+The two recoveries cost different things:
+
+- **The reducer throws**: only that `Result` is lost. The state stays as it was and the pipeline carries on.
+- **The interactor's flow throws**: the whole flow `process()` returns, every processor merged into it, is collected again from the start. That restarts all of them, not just the one that failed: in-flight work in the other processors (a load, an upload) is cancelled and is not resumed, observers that start on collection (a repository's `observe…()` flow, an `onStart { }`) subscribe again and re-emit, and intents sent while it resubscribes are dropped. The retry is immediate and has no limit, so a flow that throws every time it is collected retries in a tight loop, reporting each failure to `onPipelineError`.
+
+So `onPipelineError` is a last line of defence for bugs, not error handling. Expected failures never reach it: the repository catches and returns a failure variant (see `/data-boundaries`), the use case passes it up as a value, and the processor maps it to a `Result` like any other outcome. A throw that does reach the interactor costs the whole screen its in-flight work, which is one more reason nothing above the repository should throw.
 
 ```kotlin
 FlowViewModelArgs(
@@ -604,7 +617,7 @@ LoginViewModel  Intent  OnEmailChanged(value=a@b.co)
 LoginViewModel  Result  OnEmailUpdated(email=..., submitState=Enabled)
 LoginViewModel  Intent  OnSubmitClick
 LoginViewModel  Result  OnSubmitStateUpdated(submitState=Loading)
-LoginViewModel  Effect  Navigate(command=ScreenCommand(...))
+LoginViewModel  Effect  Navigate(command=FeatureCommand(featureName=home, clearStack=true))
 LoginViewModel  Error   java.lang.IllegalStateException: boom
 ```
 

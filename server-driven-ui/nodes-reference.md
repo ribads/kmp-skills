@@ -21,7 +21,7 @@
 | `LazyRow` | Compose `LazyRow` | `children`, `horizontalArrangement`, `verticalAlignment` |
 | `LazyGrid` | Compose `LazyVerticalGrid` | `columns` (Int, default 2), `children`, `verticalArrangement`, `horizontalArrangement` |
 | `Spacer` | Compose `Spacer` | (modifier only) |
-| `Card` | Elevated container | `children`, `actionId` |
+| `Card` | Surface container; children stack like a `Box`, so wrap several in a `Column` | `children`, `actionId` |
 | `Expandable` | Collapsible section | `header` (UINode, required), `content` (List\<UINode\>), `initiallyExpanded` (Boolean), `stateKey` |
 
 ---
@@ -30,11 +30,11 @@
 
 | Type | Key fields |
 |------|-----------|
-| `Text` | `content`, `style` (UITypographyToken), `textFormat` (UITextFormat), `conditionalTextFormat` (Map\<String, UITextFormat\>), `actionId`, `maxLines` |
-| `MoneyText` | `amount` (Long, minor units), `currency` (ISO 4217), `style`, `textFormat` (UITextFormat), `stateKey` |
-| `Image` | `url`, `contentDescription`, `actionId` |
+| `Text` | `content` (templates), `style` (UITypographyToken), `textFormat` (UITextFormat), `conditionalTextFormat` (Map\<String, UITextFormat\>), `actionId`, `maxLines` |
+| `MoneyText` | `amount` (Long, minor units), `currency` (ISO 4217, matched ignoring case; one of NGN, GBP, USD, EUR, JPY, CHF, CAD, AUD, NZD, CNY, HKD, any other draws nothing and is reported through `onNodeRenderError`), `style`, `textFormat` (UITextFormat), `stateKey` |
+| `Image` | `url` (templates), `contentDescription`, `actionId` |
 | `Icon` | `url`, `adaptive` (Boolean: tint the icon with the surrounding content colour, `element.primary` by default), `actionId` |
-| `RichText` | `content`, `style` (UITypographyToken) |
+| `RichText` | `content` (markdown, templates), `style` (UITypographyToken) |
 
 ---
 
@@ -59,18 +59,18 @@ Shared fields: `title`, `leadingImageUrl`, `trailingImageUrl`, `state`, `stateCo
 |------|-----------|
 | `TextField` | `label`, `placeholder`, `initialValue`, `isError`, `footerText`, `stateKey`, `bind`, `onValueChangeActionId` |
 | `PasswordField` | Same as TextField |
-| `CurrencyField` | `label`, `placeholder`, `initialAmount` (Long), `currency` (String, default "GBP"), `stateKey`, `bind`, `onAmountChangeActionId` |
+| `CurrencyField` | `label`, `placeholder`, `initialAmount` (Long), `currency` (String, default "GBP"; same supported set as `MoneyText`, any other draws nothing and is reported), `stateKey`, `bind`, `onAmountChangeActionId` |
 | `SelectionField` | `label`, `placeholder`, `value`, `isError`, `actionId` |
 | `DropdownField` | `label`, `placeholder`, `options` (List\<UISelectionOption\>), `isError`, `footerText`, `stateKey`, `bind`, `onSelectionChangeActionId` |
 | `TextArea` | `label`, `placeholder`, `initialValue`, `isError`, `footerText`, `stateKey`, `bind`, `onValueChangeActionId`, `minLines` (Int, default 4), `maxLines` (Int, default 4) |
 | `ImagePicker` | `bind`, `placeholder` |
-| `DatePicker` | `selectedDate` (Long?), `minDate` (Long?), `maxDate` (Long?), `stateKey`, `onDateSelectedActionId` |
-| `NumberField` | `label`, `placeholder`, `min` (Double?), `max` (Double?), `step` (Double, default 1.0), `decimals` (Int, default 0), `stateKey`, `bind`, `onValueChangeActionId` |
+| `DatePicker` | `selectedDate` (Long?), `minDate` (Long?), `maxDate` (Long?), `stateKey` (no `bind`), `onDateSelectedActionId` |
+| `NumberField` | `label`, `placeholder`, `min` (Double?), `max` (Double?), `step` (Double?, default null: on leaving the field the value snaps to the nearest multiple of `step` from `min` or zero, staying in range; see `committedValue`), `decimals` (Int, default 0), `stateKey`, `bind`, `onValueChangeActionId` |
 | `SearchBar` | `placeholder` (default "Search..."), `stateKey`, `bind` |
 | `RatingInput` | `maxStars` (Int, default 5), `stateKey`, `bind`, `onRatingChangeActionId` |
 | `ChipGroup` | `options` (List\<UISelectionOption\>), `multiSelect` (Boolean), `stateKey`, `bind`, `onSelectionChangeActionId` |
 | `Slider` | `min` (Float, default 0), `max` (Float, default 1), `step` (Float), `showValue` (Boolean), `label`, `stateKey`, `bind`, `onValueChangeActionId` |
-| `Stepper` | `min` (Int, default 0), `max` (Int), `step` (Int, default 1), `label`, `stateKey`, `bind`, `onValueChangeActionId` |
+| `Stepper` | `min` (Int, default 0), `max` (Int, default `Int.MAX_VALUE`), `step` (Int, default 1), `label`, `stateKey`, `bind`, `onValueChangeActionId` |
 | `TimePicker` | `label`, `is24Hour` (Boolean, default true), `stateKey`, `bind`, `onTimeChangeActionId` |
 | `Timer` | `label`, `autoStart` (Boolean, default false), `stateKey`, `bind` |
 
@@ -82,10 +82,10 @@ Shared fields: `title`, `leadingImageUrl`, `trailingImageUrl`, `state`, `stateCo
 
 | Type | Key fields |
 |------|-----------|
-| `Checkbox` | `label`, `bind`, `stateKey`, `onToggleActionId` |
+| `Checkbox` | `label` (templates), `bind`, `stateKey`, `onToggleActionId` |
 | `RadioGroup` | `options` (List\<UISelectionOption\>), `orientation` (UIOrientation, default Vertical), `stateKey`, `bind`, `onSelectionChangeActionId` |
-| `ProgressBar` | `value` (String, default "0"), `max` (String, default "1"), `label`, `showPercentage` (Boolean), `color` (hex), `animate` (Boolean, default true) |
-| `CircularProgress` | `value` (String, default "0"), `max` (String, default "1"), `label`, `showPercentage` (Boolean, default true), `color` (hex), `animate` (Boolean, default true) |
+| `ProgressBar` | `value` (String, default "0", templates), `max` (String, default "1", templates), `label` (templates), `showPercentage` (Boolean), `color` (hex), `animate` (Boolean, default true) |
+| `CircularProgress` | `value` (String, default "0", templates), `max` (String, default "1", templates), `label` (templates), `showPercentage` (Boolean, default true), `color` (hex), `animate` (Boolean, default true) |
 
 ---
 
@@ -99,7 +99,7 @@ Shared fields: `title`, `leadingImageUrl`, `trailingImageUrl`, `state`, `stateCo
 | `Tray` | `content` (List\<UINode\>), `dismissActionId`, `isSwipeDismissible` (Boolean, default true) |
 | `TabLayout` | `tabs` (List\<UITab\>), `stateKey` |
 | `ConfirmDialog` | `title`, `message`, `confirmLabel` (default "Confirm"), `cancelLabel` (default "Cancel"), `confirmActionId`, `stateKey` |
-| `EmptyState` | `iconUrl`, `title`, `subtitle`, `actionLabel`, `actionId` |
+| `EmptyState` | `iconUrl`, `title` (templates), `subtitle` (templates), `actionLabel`, `actionId` |
 
 **UITab**: `label` (String), `content` (List\<UINode\>)
 
@@ -107,7 +107,7 @@ Shared fields: `title`, `leadingImageUrl`, `trailingImageUrl`, `state`, `stateCo
 
 ## Navigation Nodes
 
-**TopNavBar** — top navigation bar with optional leading icon, title, and trailing actions. Designed for the `Scaffold.topBar` slot.
+**TopNavBar**: top navigation bar with optional leading icon, title, and trailing actions. Designed for the `Scaffold.topBar` slot.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -132,7 +132,12 @@ Shared fields: `title`, `leadingImageUrl`, `trailingImageUrl`, `state`, `stateCo
 | `iconUrl` | `String?` | `null` | Icon URL (renders as icon button) |
 | `actionId` | `String` | `""` | Action dispatched on tap |
 
-When both `iconUrl` and `label` are set, the icon is rendered and the label is used as content-description.
+The bar shows either a row of icons or one text action, never both:
+
+- An action with an icon draws the icon; its `label`, when set, is the icon's accessibility description.
+- When every drawable action has an icon, all of them render as icons.
+- Otherwise only the first action with a `label` renders, as text; the others are not shown.
+- An action with neither `iconUrl` nor `label` draws nothing (blank strings count as absent).
 
 ---
 
@@ -155,7 +160,7 @@ When both `iconUrl` and `label` are set, the icon is rendered and the label is u
 | Type | Key fields |
 |------|-----------|
 | `Conditional` | `conditionKey` (String, required), `thenNode` (UINode, required), `elseNode` (UINode?) |
-| `Unknown` | (renders nothing — forward-compatible fallback) |
+| `Unknown` | (renders nothing; forward-compatible fallback, reported through `onUnknownNode` under its original `type`, kept in `typeName`) |
 
 ---
 
@@ -167,11 +172,11 @@ These fields were added to existing node types for data layer integration.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `dataSource` | `String?` | Collection name to bind to. When set, children are ignored and `itemTemplate` is rendered per record. |
-| `itemTemplate` | `UINode?` | Node tree rendered for each record. Supports `{{item.field}}` template interpolation. |
+| `dataSource` | `String?` | Collection name to bind to. When set with an `itemTemplate`, the template renders per record and `children` still render first, as leading items. Without a data layer (no `CollectionProvider`) the collection is empty. |
+| `itemTemplate` | `UINode?` | Node tree rendered for each record. Supports `{{item.field}}` and the 1-based `{{item._index}}`. |
 | `filter` | `DataCondition?` | Optional condition to filter which records are displayed. |
 | `groupBy` | `String?` | Field name to group records by. |
-| `groupHeader` | `UINode?` | Template for group headers. Supports `{{group.key}}` interpolation. |
+| `groupHeader` | `UINode?` | Template for group headers. Reads `{{item.group.key}}` and `{{item.group.count}}`; a bare `{{group.key}}` does not resolve. |
 | `searchKey` | `String?` | State key for a search query. |
 | `searchFields` | `List<String>` | Record fields to match against the search query. |
 
@@ -179,7 +184,7 @@ These fields were added to existing node types for data layer integration.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `dataSource` | `String?` | Collection name to bind to. |
+| `dataSource` | `String?` | Collection name to bind to. `children` still render first, as leading items. |
 | `itemTemplate` | `UINode?` | Node tree rendered for each record. |
 | `filter` | `DataCondition?` | Optional condition to filter records. |
 | `searchKey` | `String?` | State key for a search query. |
@@ -189,8 +194,8 @@ These fields were added to existing node types for data layer integration.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `columns` | `Int` | Number of grid columns (default 2). |
-| `dataSource` | `String?` | Collection name to bind to. |
+| `columns` | `Int` | Number of grid columns (default 2). Fewer than 1 is reported and drawn with one. |
+| `dataSource` | `String?` | Collection name to bind to. `children` still render first, as leading items. |
 | `itemTemplate` | `UINode?` | Node tree rendered for each record. |
 | `filter` | `DataCondition?` | Optional condition to filter records. |
 | `searchKey` | `String?` | State key for a search query. |
@@ -202,11 +207,13 @@ These fields were added to existing node types for data layer integration.
 |-------|------|-------------|
 | `stateCondition` | `String?` | Named condition key. When set, button is `Enabled` when condition is true, `Disabled` when false. Overrides `state`. |
 
-### Input Nodes (TextField, PasswordField, CurrencyField, TextArea)
+### Input Nodes
+
+Every stateful input takes `bind`: TextField, PasswordField, CurrencyField, DropdownField, TextArea, ImagePicker, NumberField, SearchBar, RatingInput, ChipGroup, Slider, Stepper, Timer, TimePicker, Checkbox, and RadioGroup. DatePicker, TabLayout, Expandable, and ConfirmDialog take `stateKey` only.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `bind` | `String?` | Declared field name to bind to. Preferred over `stateKey` when using the data layer. |
+| `bind` | `String?` | Declared field name to bind to. Wins over `stateKey`; preferred when using the data layer. |
 
 ### Chart Nodes (data-bound mode)
 
@@ -214,11 +221,11 @@ All three chart types (BarChart, LineChart, PieChart) support data binding:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `dataSource` | `String?` | Collection name to pull entries from. When set, `series`/`slices` are ignored. |
-| `valueField` | `String?` | Record field for the numeric value. |
-| `labelField` | `String?` | Record field for the entry label. |
+| `dataSource` | `String?` | Collection name to pull entries from. Takes effect only together with `labelField`; then `series`/`slices` are ignored. |
+| `valueField` | `String?` | Record field summed per label. Unset: each entry counts the records with that label. |
+| `labelField` | `String?` | Record field to group by; one entry per distinct label, in first-seen order. Required for data binding. |
 | `filter` | `DataCondition?` | Optional condition to filter records. |
 
 ### Template Interpolation
 
-Inside `itemTemplate` nodes, text content supports `{{item.field}}` patterns that resolve to the current record's field value at render time.
+Templated fields are marked "(templates)" above. They resolve `{{key}}` from state (long, then double, then string lane), `{{item.field}}` from the current record inside an `itemTemplate`, and `{{name.count}}` from a collection's size, with pipes such as `{{total | number:2}}`. Every templated field re-resolves when the state or the counted collection changes.

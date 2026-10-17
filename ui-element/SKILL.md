@@ -15,6 +15,8 @@ commonMain.dependencies {
 }
 ```
 
+Compose runtime, foundation and UI, Coil's `coil-compose` and `kotlinx-datetime` (the `TimeZone` on `Text.Timestamp`) are `api` dependencies, so a consumer needs none of them declared to use the types this module exposes.
+
 ## Imports
 
 Import each type from its package below.
@@ -23,7 +25,7 @@ Import each type from its package below.
 |---|---|
 | `com.ribads.synapse.ui.element.brush` | `shimmer` |
 | `com.ribads.synapse.ui.element.image` | `AsyncImagePainterFactory`, `Icon`, `Image`, `ImagePainterFactory`, `OptionalClickCallback`, `WithImagePainter`, `installSynapseImageComponents`, `isEnabled`, `withContentDescription` |
-| `com.ribads.synapse.ui.element.text` | `Clause`, `CompositeClause`, `Currency`, `Graphics`, `LocalTextIntentPalette`, `MoneyParser`, `Text`, `TextFormat`, `TextIntent`, `TextIntentPalette`, `TextLink`, `WithTextClickHandler`, `WithTextIntentPalette`, `asClickable`, `asMention`, `asText`, `getMoneyParser`, `localizedClause`, `textIntentPalette`, `toBackgroundColor`, `toColor`, `toComposite`, `withFormat` |
+| `com.ribads.synapse.ui.element.text` | `Clause`, `CompositeClause`, `Currency`, `Graphics`, `LocalTextIntentPalette`, `MoneyParser`, `Text`, `TextFormat`, `TextIntent`, `TextIntentPalette`, `TextLink`, `WithTextClickHandler`, `WithTextIntentPalette`, `asClickable`, `asMention`, `asText`, `getMoneyParser`, `localizedClause`, `rememberPlainText`, `textIntentPalette`, `toBackgroundColor`, `toColor`, `toComposite`, `withFormat` |
 | `com.ribads.synapse.ui.element.text.markdown` | `asMarkdown` |
 | `com.ribads.synapse.ui.element.theme` | `Appearance`, `Border`, `ColorSchemes`, `Colors`, `Element`, `ElementInteractive`, `IntentPalette`, `Intents`, `LocalContentColor`, `Overlay`, `Shadow`, `Shape`, `Spacing`, `Surface`, `SurfaceInteractive`, `Theme`, `ThemedSystemBars`, `Typography`, `WithAppTheme`, `WithAppearance`, `WithRaisedSurface`, `WithTheme` |
 
@@ -66,7 +68,10 @@ fun WithTheme(
 @Composable
 fun WithAppearance(appearance: Appearance, content: @Composable () -> Unit)
 
-/** Makes surface.primary resolve to surface.raised for [content]. Applying it twice changes nothing. */
+/**
+ * Makes surface.primary resolve to surface.raised for [content]. Only the colour roles change: the locals
+ * below (LocalContentColor included) keep the values the container provided. Applying it twice changes nothing.
+ */
 @Composable
 fun WithRaisedSurface(content: @Composable () -> Unit)
 
@@ -92,7 +97,7 @@ object Theme {
 val LocalContentColor: ProvidableCompositionLocal<Color>
 ```
 
-Besides the tokens, `WithTheme` (and so `WithAppTheme`) provides these for the resolved scheme. `WithAppearance` and `WithRaisedSurface` re-provide them for their region.
+Besides the tokens, `WithTheme` (and so `WithAppTheme`) provides these for the resolved scheme. `WithAppearance` re-provides them for its region. `WithRaisedSurface` does not: it swaps only the colour roles, so a container that paints `surface.raised` still provides its own `LocalContentColor` (Synapse's sheets, dialogs and menus do).
 
 | Local | Value |
 |---|---|
@@ -322,6 +327,7 @@ fun Icon(
 typealias AsyncImagePainterFactory =
     @Composable (String, ConstraintsSizeResolver, DrawableResource?) -> Painter
 
+/** Optional: overrides the painter factory for [content]. ImagePainterFactory.Default is already installed. */
 @Composable
 fun WithImagePainter(
     imagePainterFactory: AsyncImagePainterFactory,
@@ -329,15 +335,45 @@ fun WithImagePainter(
 )
 
 object ImagePainterFactory {
-    val Default: AsyncImagePainterFactory
-    fun createPainterFactory(): AsyncImagePainterFactory
+    val Default: AsyncImagePainterFactory                 // what Image and Icon use when nothing overrides it
+    fun createPainterFactory(): AsyncImagePainterFactory  // returns Default
 }
 
 /**
- * Install Synapse's platform Coil components (iOS: PHAsset fetcher; Android: no-op).
+ * Install Synapse's platform Coil components (iOS: PHAsset fetcher; Android and web: no-op).
  * Call on your ImageLoader.Builder before build().
  */
 expect fun ImageLoader.Builder.installSynapseImageComponents(): ImageLoader.Builder
+```
+
+**Loading remote and device images.** `Image.Bitmap` URLs load through Coil's Ktor network fetcher, and `ui:element` brings the Ktor engine for each platform (OkHttp on Android, Darwin on iOS, the JS engine on web), so an app needs no extra dependency for them. `WithImagePainter` is only for replacing the request pipeline (a test double, custom headers); the default works without it.
+
+`Image.LocalIdentifier` (a Photos asset id from `/file-system`) loads on iOS only once the app's `ImageLoader` has Synapse's components. Install them once, where the app sets Coil's singleton loader, before the first image is drawn. Calling it from the shared root composable covers every platform:
+
+```kotlin
+// composeApp/commonMain, the root composable
+@Composable
+fun App() {
+    setSingletonImageLoaderFactory { context ->      // coil3.compose
+        ImageLoader.Builder(context)                 // coil3.ImageLoader
+            .installSynapseImageComponents()         // registers the phasset:// fetcher on iOS
+            .crossfade(true)                         // coil3.request.crossfade, optional
+            .build()
+    }
+    MyAppTheme { /* NavContainer, screens */ }
+}
+```
+
+An app whose iOS entry point builds the loader itself does the same before creating its view controller:
+
+```kotlin
+// composeApp/iosMain
+fun MainViewController(): UIViewController {
+    SingletonImageLoader.setSafe { context ->        // coil3.SingletonImageLoader
+        ImageLoader.Builder(context).installSynapseImageComponents().build()
+    }
+    return ComposeUIViewController { App() }
+}
 ```
 
 The image type decides how a drawable is coloured. Pick it when you build the model:
@@ -429,11 +465,16 @@ WithAppearance(Appearance.Dark) {
 
 2. **User-visible text is a `Clause`, never a `String`.** `Text` composables accept `Clause` only, by design. Use `Text.Localized(Res.string.foo)` for shipped copy and `"…".asText()` for prototypes and tests. A `String` field on a UI model is a bug waiting to happen: it cannot be localized, styled, or composed with an inline icon.
 
-3. **`Text.Money` and `Text.Timestamp` are declarations, not formatted strings.** Carry money as `Long` minor units and dates as `Long` epoch millis all the way to the model, then emit `Text.Money(amount, currency)` / `Text.Timestamp(date, pattern)` and let the renderer format at composition time with the right locale and time zone.
+3. **`Text.Money` and `Text.Timestamp` are declarations, not formatted strings.** Carry money as `Long` minor units and dates as `Long` epoch millis all the way to the model, then emit `Text.Money(amount, currency)` / `Text.Timestamp(date, pattern, timeZone = ...)` and let the renderer format at composition time.
+
+   Money renders in the **device's current locale** on every platform: the reader's locale decides the decimal and grouping separators and where the symbol sits, and the `Currency` decides the code, the symbol (`Currency.symbol`, so `CAD` shows `$`, not `CA$`) and the fraction digits (`decimalPlaces`).
 
    ```kotlin
-   Text.Money(amount = 249_900, currency = Currency.GBP)   // renders "£2,499.00"
+   Text.Money(amount = 249_900, currency = Currency.GBP)   // "£2,499.00" in en-GB or en-US, "2.499,00 £" in de-DE
+   Text.Money(amount = 1_500, currency = Currency.JPY)     // "¥1,500" in en-US: JPY has no minor unit
    ```
+
+   A timestamp renders in UTC unless the clause says otherwise, so pass `timeZone = TimeZone.currentSystemDefault()` for the reader's local time; a `null` pattern renders ISO 8601 (`yyyy-MM-dd'T'HH:mm:ss.SSS'Z'`).
 
    Pre-formatting into a `String` anywhere upstream (in a mapper, a use case, or worst of all a DTO) bakes in a locale and a currency symbol that the rendering context has not agreed to. Compose money and copy with `Text.listOf(...)`, `Text.whiteSpace`, and `Graphics(...)` rather than string templates.
 

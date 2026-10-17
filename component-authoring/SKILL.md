@@ -63,7 +63,7 @@ fun ProductCard(
     modifier: Modifier = Modifier,                    // 2. modifier, always second
     style: CardStyle = CardStyle.Regular,             // 3. config with defaults
     onClick: OptionalClickCallback,                   // 4. callbacks
-    onFavouriteClick: (id: String) -> Unit,
+    onTrailingIconClick: (id: String) -> Unit,
 )
 ```
 
@@ -90,9 +90,10 @@ Synapse's own module holds this at roughly 80%. The known deviations are `Divide
 | Exactly one action | `onClick` |
 | Several actions | name by **slot**, not by intent: `onLeadingClick`, `onTrailingIconClick`, `onItemSelected` |
 | Value edits | `onValueChange`, `onCheckedChange`, `on<Thing>Changed` |
-| Sheet / dialog dismissal | `onDismissRequest`, always |
+| Sheet dismissal (scrim tap, drag-down, back) | `onDismissRequest`, as on `Tray`, `ScrollableTray`, `DatePickerBottomSheet` |
+| Dialog with explicit choices | one callback per button, named for the button: `onConfirm` / `onCancel`, as on `ConfirmDialog`. Route outside dismissal (a scrim tap) to the cancel callback rather than adding a separate `onDismissRequest` |
 
-Name callbacks for the widget, not the consequence: `onTrailingIconClick`, not `onShareClick`. The component does not know it is sharing, and the next screen that reuses it will not be.
+Name callbacks for the widget, not the consequence: `onTrailingIconClick`, not `onShareClick` or `onFavouriteClick`. The component does not know it is sharing, and the next screen that reuses it will not be. `TopNavBar` follows this with `onLeadingClick`, `onTrailingTitleClick` and `onTrailingIconClick(id)`.
 
 Optional click handlers use the `ui:element` typealias so the disabled state is expressible:
 
@@ -291,7 +292,7 @@ Promoting into `ui:component` means it is Synapse public API: update `/ui-compon
 - **Check `/ui-components` first.** Compose primitives before writing anything new.
 - **One public composable per file**, private sub-composables beside it, models in `model/`, internals in `internal/`.
 - **`model`, `modifier`, config, callbacks, `content`.** Containers drop `model` and lead with `modifier`.
-- **Name callbacks for the slot, not the consequence.** `onDismissRequest` for every dismissal.
+- **Name callbacks for the slot, not the consequence.** `onDismissRequest` for a sheet's dismissal; a dialog with explicit choices takes one callback per button (`onConfirm` / `onCancel`) and routes outside dismissal to its cancel callback.
 - **Slots for containers only.** Leaf components take a model.
 - **Stateless.** No stateful/stateless pairs, no `rememberSaveable`, no public `rememberXState()`.
 - **Never accept a domain model or use-case DTO.**

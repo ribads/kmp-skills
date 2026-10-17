@@ -4,7 +4,7 @@ description: Use when implementing server-driven UI, rendering UI from JSON sche
 user-invocable: true
 ---
 
-# ui:renderer — Server-Driven UI
+# ui:renderer: Server-Driven UI
 
 **Module**: `ui:renderer` | **Artifact**: `com.ribads.synapse:ui-renderer`
 **Packages**: 8 packages under `com.ribads.synapse.ui.renderer`; see [Imports](#imports)
@@ -37,13 +37,13 @@ Import each type from its package below.
 | Package | Types |
 |---|---|
 | `com.ribads.synapse.ui.renderer.action` | `ActionDispatcher`, `ActionHandler`, `ActionPayload`, `bridgedActionHandler`, `onAction` |
-| `com.ribads.synapse.ui.renderer.data` | `DataPersistence`, `MutationExecutor`, `MutationResult`, `ReactiveDataStore` |
+| `com.ribads.synapse.ui.renderer.data` | `DataPersistence`, `MutationExecutor`, `MutationResult`, `ReactiveDataStore`, `renderedPageActionHandler` |
 | `com.ribads.synapse.ui.renderer.diagnostics` | `RenderDiagnostics`, `RenderPassSummary`, `callbackRenderDiagnostics`, `children`, `reportNodeRenderError`, `summarizeTree` |
-| `com.ribads.synapse.ui.renderer.engine` | `BoundRecordGroups`, `BoundRecords`, `CollectionProvider`, `ConditionEvaluator`, `DataRecord`, `DataRecordView`, `ITEM_CONTEXT_PAYLOAD_KEY`, `MediaProvider`, `NodeRendererRegistry`, `SynapseRenderer`, `TemplateEngine`, `boundRecords`, `dispatchWithRecord`, `effectiveTextFormat`, `hasConditionalFormat`, `narrowRecords`, `recordFieldReader`, `watchBoundRecords` |
-| `com.ribads.synapse.ui.renderer.navigation` | `RenderedPageConfig`, `RenderedPageKey`, `RenderedRoutesBuilder`, `SchemaStore`, `ScreenParseResult`, `UIPage`, `UIScreen`, `navigateToRenderedPage`, `parseUIScreen`, `renderedEntries`, `renderedEntry`, `rendererNavigationSerializers`, `toUIScreen` |
+| `com.ribads.synapse.ui.renderer.engine` | `BoundRecordGroups`, `BoundRecords`, `CollectionProvider`, `ConditionEvaluator`, `DataRecord`, `DataRecordView`, `ITEM_CONTEXT_PAYLOAD_KEY`, `MediaProvider`, `NodeRenderer`, `NodeRendererRegistry`, `RecordConditionEvaluator`, `RenderNode`, `SynapseRenderer`, `TemplateEngine`, `boundRecords`, `committedValue`, `dispatchWithRecord`, `effectiveTextFormat`, `hasConditionalFormat`, `narrowRecords`, `recordFieldReader`, `watchBoundRecords` |
+| `com.ribads.synapse.ui.renderer.navigation` | `InMemorySchemaStore`, `RenderedPageConfig`, `RenderedPageKey`, `RenderedRoutesBuilder`, `SchemaStore`, `ScreenParseResult`, `UIPage`, `UIScreen`, `load`, `navigateToRenderedPage`, `parseUIScreen`, `renderedEntries`, `renderedEntry`, `rendererNavigationSerializers`, `toUIScreen` |
 | `com.ribads.synapse.ui.renderer.schema` | `ComputedField`, `DataCollection`, `DataCondition`, `DataEffect`, `DataField`, `DataFieldType`, `DataMutation`, `DataOrderBy`, `DataSchema`, `DataValueRef`, `SchemaParseResult`, `SortDirection`, `UIButtonState`, `UIDimension`, `UIGradient`, `UIModifier`, `UINavBarAction`, `UINavBarLeadingIcon`, `UINode`, `UITextFormat`, `UITextIntent`, `UITheme`, `UIThemeBorder`, `UIThemeColors`, `UIThemeElement`, `UIThemeElementInteractive`, `UIThemeIntentPalette`, `UIThemeIntents`, `UIThemeShadow`, `UIThemeShape`, `UIThemeSpacing`, `UIThemeSurface`, `UIThemeSurfaceInteractive`, `UIThemeTextStyle`, `UIThemeTypography`, `UIVisibility`, `parseUINode`, `schemaType`, `toUINode`, `toUINodes` |
 | `com.ribads.synapse.ui.renderer.state` | `InMemoryRendererStateHolder`, `RendererStateHolder`, `WatchHandle`, `watchBoolean`, `watchDouble`, `watchLong`, `watchRevision`, `watchString` |
-| `com.ribads.synapse.ui.renderer.theme` | `FontResolver`, `resolve` |
+| `com.ribads.synapse.ui.renderer.theme` | `FontResolver`, `ResolvedShape`, `ResolvedTheme`, `WithRenderedTheme`, `resolve` |
 
 ---
 
@@ -104,7 +104,42 @@ fun SynapseRenderer(
 )
 ```
 
-Extensible via `NodeRendererRegistry` for custom node types.
+Extensible via `NodeRendererRegistry` for custom node types:
+
+```kotlin
+fun interface NodeRenderer<N : UINode> {
+    @Composable fun Render(node: N)
+}
+
+class NodeRendererRegistry {
+    fun <N : UINode> get(nodeClass: KClass<out N>): NodeRenderer<N>?
+    fun mergeWith(other: NodeRendererRegistry): NodeRendererRegistry   // entries in `other` win
+    class Builder {
+        fun <N : UINode> register(nodeClass: KClass<N>, renderer: NodeRenderer<N>): Builder
+        fun build(): NodeRendererRegistry
+    }
+    companion object { fun defaults(): NodeRendererRegistry }
+}
+
+/** Renders one child node through the registry, with visibility, diagnostics, and layout-parent handling. */
+@Composable
+fun RenderNode(node: UINode)
+```
+
+A `Builder` starts empty: merge it over `defaults()` to keep the built-in renderers. Custom renderers receive only the node; the built-in modifier mapping (including `weight`) is internal, so apply `node.modifier` yourself when you need it.
+
+### Theme
+
+```kotlin
+@Composable
+fun WithRenderedTheme(
+    theme: UITheme?,
+    fontResolver: FontResolver = FontResolver.Default,
+    content: @Composable () -> Unit,
+)
+```
+
+Wrap `SynapseRenderer` in it to apply a payload theme. A null theme leaves the host theme untouched; see [theme-reference.md](theme-reference.md) for how a non-null theme merges.
 
 ---
 
@@ -167,7 +202,7 @@ boundary, so payloads and collection records stay Kotlin references and are read
 Kotlin engines keep using the raw maps; these types exist for the bridge.
 
 ```kotlin
-// action/ — payloads arriving in a host's handler
+// action/: payloads arriving in a host's handler
 class ActionPayload internal constructor(/* wraps Map<String, Any?> */) {
     val keys: Set<String>
     fun getString(key: String): String?
@@ -179,7 +214,7 @@ class ActionPayload internal constructor(/* wraps Map<String, Any?> */) {
 }
 fun bridgedActionHandler(onAction: (actionId: String, payload: ActionPayload) -> Unit): ActionHandler
 
-// engine/ — collection rows and the lazy-binding pipeline
+// engine/: collection rows and the lazy-binding pipeline
 class DataRecordView internal constructor(/* wraps DataRecord */) {
     val keys: Set<String>
     fun getString(key: String): String?      // + getLong/getDouble/getBoolean/isNull as above
@@ -259,6 +294,35 @@ fun UINode.schemaType(): String
 
 `toUINode()` and `toUIScreen()` still throw; use these where an exception is not an option.
 
+A `type` this build does not know decodes to `UINode.Unknown`, which keeps what the payload sent:
+
+```kotlin
+data class Unknown(
+    override val id: String? = null,
+    override val modifier: UIModifier? = null,
+    override val visibility: UIVisibility? = null,
+    @Transient val typeName: String = "Unknown",   // e.g. "Hologram"; not serialised
+) : UINode()
+```
+
+---
+
+## Node semantics shared by every engine
+
+```kotlin
+// engine/
+object RecordConditionEvaluator {
+    fun matches(record: Map<String, Any?>, condition: DataCondition, fieldReader: ((String) -> Any?)? = null): Boolean
+    /** matches over values read one field at a time, such as a data store's live fields. */
+    fun matchesValues(valueOf: (String) -> Any?, condition: DataCondition, fieldReader: ((String) -> Any?)? = null): Boolean
+}
+
+/** The value a NumberField keeps once the user finishes editing: in range, on the step grid, at `decimals` precision. */
+fun UINode.NumberField.committedValue(value: Double): Double
+```
+
+Node filters, computed fields' `where`, and the data layer's named conditions all answer field questions through `RecordConditionEvaluator`, so they agree; dates compare in the device's time zone (`isToday` is the user's calendar day).
+
 ---
 
 ## Render diagnostics
@@ -283,7 +347,8 @@ data class RenderPassSummary(
     val renderedNodes: Int,
     val unknownNodes: Int,
     val unregisteredNodes: Int,
-    val errorNodes: Int,
+    @Deprecated("Always 0: summarizeTree walks the schema without rendering it. Count onNodeRenderError reports instead.")
+    val errorNodes: Int = 0,
 )
 
 /** Counts what an engine could draw, without rendering. Validates a payload before it ships. */
@@ -296,8 +361,16 @@ fun UINode.children(): List<UINode>
 `path` is a slash-separated trail of node types from the root, such as
 `Scaffold/Column/LazyColumn/Text`.
 
-Implementations must not throw. `onNodeRenderError` only fires for non-composable work in the
-Compose engine, because a composable call cannot be wrapped in `try`.
+`onUnknownNode` receives the `type` the payload sent (`UINode.Unknown.typeName`), and the path ends
+in it, for example `Column/Hologram`.
+
+Implementations must not throw. `onNodeRenderError` means a node could not be rendered as its
+payload describes. The SwiftUI engine reports any renderer that throws. The Compose engine cannot
+catch an exception thrown while composing, so it reports what it checks before composing: a
+modifier Compose refuses to build (negative padding, non-positive `aspectRatio`, `weight`, or
+radial-gradient `radius`; the node draws without it), an unsupported currency (the node draws
+nothing), and a `LazyGrid` with fewer than one column (drawn with one). An exception inside a
+Compose renderer still propagates. `RenderPassSummary.errorNodes` is deprecated and always 0.
 
 Hosts that cannot implement a Kotlin interface (Swift, notably: the bridge generates SAM
 adapters only for single-method interfaces) build one from callbacks; errors arrive as messages:
@@ -320,7 +393,7 @@ fun RenderDiagnostics.reportNodeRenderError(nodeType: String, nodeId: String?, p
 
 ## Node Type Catalog
 
-Type-discriminated via `"type"` field. Unknown types → `UINode.Unknown` (renders nothing — forward compatible).
+Type-discriminated via `"type"` field. Unknown types decode to `UINode.Unknown`, which renders nothing and is reported through diagnostics under its original `type` (forward compatible).
 
 | Category | Types |
 |----------|-------|
@@ -372,7 +445,20 @@ data class RenderedPageKey(val baseRoute: String, val pageId: String) : NavKey
 val rendererNavigationSerializers: SerializersModule
 ```
 
-Register rendered pages inside a feature's `EntryProviderScope<NavKey>.register(dispatcher)` block. When `config.dataSchema` is provided, a `ReactiveDataStore` and a `MutationExecutor` are created automatically, and the store answers state, collections, and conditions. The `mutation:` action prefix is intercepted and routed to the executor.
+Register rendered pages inside a feature's `EntryProviderScope<NavKey>.register(dispatcher)` block. When `config.dataSchema` is provided, a `ReactiveDataStore` and a `MutationExecutor` are created once per base route, the store answers state, collections, and conditions, and it persists through `config.dataPersistence` with the base route as its scope. The `mutation:` action prefix is intercepted and routed to the executor. Without a `dataSchema` the route has no collections: every `dataSource` binds to an empty list.
+
+`UIScreen` is the payload as it arrives; nothing applies its `theme` or `data` on its own. Load its pages into the `SchemaStore` and pass the rest through the config:
+
+```kotlin
+val store = InMemorySchemaStore().apply { load(screen) }
+renderedEntry(
+    baseRoute = "onboarding",
+    schemaStore = store,
+    actionHandler = handler,
+    navigationDispatcher = dispatcher,
+    config = RenderedPageConfig(dataSchema = screen.data, dataPersistence = persistence, theme = screen.theme),
+)
+```
 
 ```kotlin
 // One base route (convenience):
@@ -396,6 +482,7 @@ data class RenderedPageConfig(
     val conditionEvaluator: ConditionEvaluator = ConditionEvaluator.AlwaysFalse,
     val stateHolder: RendererStateHolder = RendererStateHolder(),
     val dataSchema: DataSchema? = null,
+    val dataPersistence: DataPersistence = DataPersistence.NoOp,   // ignored without dataSchema
     val theme: UITheme? = null,
     val fontResolver: FontResolver = FontResolver.Default,
     val mediaProvider: MediaProvider = MediaProvider.NoOp,
@@ -403,19 +490,19 @@ data class RenderedPageConfig(
 )
 ```
 
-`stateHolder` and `conditionEvaluator` are ignored when `dataSchema` is set — the `ReactiveDataStore` takes over both roles.
+`stateHolder` and `conditionEvaluator` are ignored when `dataSchema` is set: the `ReactiveDataStore` takes over both roles.
 
 **Built-in action prefixes:**
-- `renderer:navigate:<pageId>` — navigates to another rendered page
-- `renderer:back` — pops the back stack
-- `mutation:<name>` — executes a declared data mutation
+- `renderer:navigate:<pageId>`: navigates to another rendered page
+- `renderer:back`: pops the back stack
+- `mutation:<name>`: executes a declared data mutation
 
 ---
 
 ## Detailed Reference
 
-- [Node Types](nodes-reference.md) — All node fields, base fields, data-bound extensions
-- [Modifiers & Enums](modifier-enums.md) — UIModifier, UIDimension, UIGradient, all enums
-- [Data Layer](data-layer.md) — DataSchema, fields, collections, mutations, conditions, runtime classes
-- [Theme](theme-reference.md) — UITheme, colors, typography, spacing, shape
-- [Examples](examples.md) — JSON examples for all features
+- [Node Types](nodes-reference.md): all node fields, base fields, data-bound extensions
+- [Modifiers & Enums](modifier-enums.md): UIModifier, UIDimension, UIGradient, all enums
+- [Data Layer](data-layer.md): DataSchema, fields, collections, mutations, conditions, runtime classes
+- [Theme](theme-reference.md): UITheme, colors, typography, spacing, shape
+- [Examples](examples.md): JSON examples for all features

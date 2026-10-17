@@ -17,7 +17,7 @@ commonMain.dependencies {
 }
 ```
 
-`core:playback` depends on `core:context`. `ui:playback` depends on `core:playback` (api) and Compose.
+`core:playback` depends on `core:context` (Android) and `core:audio-session` (iOS, see `/audio-session`). `ui:playback` depends on `core:playback` (api) and Compose.
 
 Supports local files (WAV, MP3, AAC/M4A, OGG, FLAC, MP4, MOV) and remote media (progressive HTTP, HLS, DASH). Format is detected automatically — no explicit format selection.
 
@@ -54,7 +54,7 @@ import com.ribads.synapse.ui.playback.VideoResizeMode
 ## Entry Points
 
 ```kotlin
-// In-app audio player — does NOT survive backgrounding. Use for sound effects,
+// In-app audio player. Does NOT survive backgrounding. Use for sound effects,
 // notification previews, short clips.
 expect fun buildAudioPlayer(config: PlayerConfig = PlayerConfig()): AudioPlayer
 
@@ -67,17 +67,33 @@ expect fun buildPersistentAudioPlayer(
 ): AudioPlayer
 
 // In-app video player. Must be called from the main thread (the rendering output
-// is a view-layer object). Does NOT survive backgrounding; no persistent video
-// variant yet (Picture-in-Picture is a planned follow-up).
+// is a view-layer object). No persistent video variant yet (Picture-in-Picture is
+// a planned follow-up). Nothing in this module pauses it on backgrounding: pause or
+// release it from your lifecycle handling (see Platform Notes).
 expect fun buildVideoPlayer(config: PlayerConfig = PlayerConfig()): VideoPlayer
 ```
 
 **Platform requirements for `buildPersistentAudioPlayer`:**
-- **Android**: Nothing to register. Foreground-service entry and the
+- **Android**: Nothing to register. The service entry and the
   `FOREGROUND_SERVICE` / `FOREGROUND_SERVICE_MEDIA_PLAYBACK` permissions are
-  declared in this library's manifest.
+  declared in this library's manifest. Media-session notifications are exempt
+  from the `POST_NOTIFICATIONS` runtime permission.
 - **iOS**: The consuming app must add `audio` to `UIBackgroundModes` in its
   `Info.plist`.
+
+**Android persistent lifecycle:** building the player only binds to the
+`MediaSessionService`; it does not start a foreground service. Media3 posts the
+media notification (play/pause/seek) once a loaded source is prepared, keeps the
+service in the foreground while playback runs, and drops it back to the background
+up to 10 minutes after playback pauses or ends. Only one persistent player at a
+time: the service owns a single engine, so a second `buildPersistentAudioPlayer`
+shares it and releasing either one stops the service.
+
+**iOS audio session:** every iOS player (audio, persistent, video) activates the
+shared `AVAudioSession` when it is built and holds it until `release()`, not only
+while playing. With `Standard`/`Exclusive` focus, other apps' audio stops as soon
+as the player is constructed. Build players when you are about to play and release
+them when done.
 
 ---
 
@@ -114,14 +130,20 @@ deterministically sequence shutdown. Call it from a coroutine.
 - Observation → the hot flows drive UI (scrubber, level meter, play/pause button)
 
 Runtime errors (network, decode) surface on `state` as `PlaybackState.Error`.
-`CommandResult.Failure` is reserved for command-acceptance rejection (bad ranges, released player).
+`CommandResult.Failure` is reserved for command-acceptance rejection:
+- `dispatch` rejects only an out-of-range value (`SetVolume` outside `0.0..1.0`,
+  `SetPlaybackRate` outside `0.25..4.0`) or a released player. It does not check
+  whether a source is loaded.
+- `load` rejects a released player and, on iOS, a remote URL that cannot be parsed
+  (Android reports an unusable URL as `PlaybackState.Error` instead).
 
 ## AudioPlayer
 
 ```kotlin
 interface AudioPlayer : MediaPlayer {
     // Hot flow of amplitude samples for visualization. Only emits when
-    // PlayerConfig.amplitude is set and audio is playing.
+    // PlayerConfig.amplitude is set and audio is playing. Android only:
+    // never emits on iOS.
     val amplitudes: SharedFlow<AmplitudeInfo>
 }
 ```
@@ -177,9 +199,9 @@ enum class VideoResizeMode {
 
 ```kotlin
 sealed class PlaybackCommand {
-    data object Play : PlaybackCommand()
+    data object Play : PlaybackCommand()                       // from Ended, restarts from the beginning
     data object Pause : PlaybackCommand()
-    data object Stop : PlaybackCommand()                       // resets position to 0, keeps source loaded
+    data object Stop : PlaybackCommand()                       // pauses, resets position to 0, state -> Ready
     data class SeekTo(val positionMs: Long) : PlaybackCommand()
     data class SetVolume(val volume: Float) : PlaybackCommand()       // 0.0..1.0
     data class SetPlaybackRate(val rate: Float) : PlaybackCommand()   // 0.25..4.0
@@ -192,13 +214,13 @@ sealed class PlaybackCommand {
 
 ```kotlin
 sealed class PlaybackState {
-    data object Idle : PlaybackState()           // no source loaded
+    data object Idle : PlaybackState()           // no source loaded (initial state)
     data object Loading : PlaybackState()        // initial buffering
-    data object Ready : PlaybackState()          // prepared, not yet playing
+    data object Ready : PlaybackState()          // prepared, not yet playing; also the state after Stop
     data object Playing : PlaybackState()
     data object Paused : PlaybackState()
     data object Buffering : PlaybackState()      // stalled mid-stream (remote only)
-    data object Ended : PlaybackState()          // reached end; replayable via Play
+    data object Ended : PlaybackState()          // reached end; Play restarts from 0, SeekTo/Stop also leave it
     data class Error(val cause: Throwable) : PlaybackState()
 }
 ```
@@ -234,9 +256,14 @@ sealed class CommandResult {
 data class PositionInfo(
     val currentMs: Long = 0L,
     val durationMs: Long = -1L,      // -1 when unknown (live streams, still preparing)
-    val bufferedMs: Long = 0L,        // for "buffer ahead" scrubber indicator
+    val bufferedMs: Long = 0L,        // position buffered up to (absolute, >= currentMs)
 )
 ```
+
+`bufferedMs` is a position from the start, not a length ahead of `currentMs`. It
+equals `durationMs` once the whole source is loaded. On iOS it is the end of the
+`AVPlayerItem.loadedTimeRanges` range that contains the playhead, refreshed with
+each position tick (so it does not advance while paused).
 
 ### VideoSize
 
@@ -244,11 +271,16 @@ data class PositionInfo(
 data class VideoSize(
     val width: Int,                    // frame width in pixels
     val height: Int,                   // frame height in pixels
-    val pixelAspectRatio: Float = 1f,  // non-1 for anamorphic streams
+    val pixelAspectRatio: Float = 1f,  // non-1 for anamorphic streams (Android only)
 ) {
     val aspectRatio: Float             // display ratio (width * par / height); 0 when degenerate
 }
 ```
+
+Lay out with `aspectRatio`, which is correct on both platforms. Android reports
+the decoded frame size plus the stream's pixel aspect ratio. iOS reports
+`AVPlayerItem.presentationSize`, which already has the pixel aspect ratio applied,
+so `pixelAspectRatio` is always `1` there.
 
 ### AmplitudeInfo
 
@@ -256,9 +288,11 @@ data class VideoSize(
 data class AmplitudeInfo(
     val rms: Float,            // 0.0..1.0, perceptual loudness
     val peak: Float,           // 0.0..1.0, for clipping indicators
-    val timestampMs: Long,     // playback position at sample time
+    val timestampMs: Long,     // wall-clock epoch ms when computed (not a playback position)
 )
 ```
+
+Samples are computed as audio is decoded, slightly ahead of when it is heard.
 
 ### MediaMetadata
 
@@ -267,14 +301,15 @@ data class MediaMetadata(
     val title: String? = null,
     val artist: String? = null,
     val album: String? = null,
-    val artworkUrl: String? = null,
+    val artworkUrl: String? = null,        // http, https or file URL; fetched in the background
     val artworkBytes: ByteArray? = null,   // takes precedence over artworkUrl
     val durationMs: Long? = null,
 )
 ```
 
 Used by `buildPersistentAudioPlayer` for lock-screen / Now Playing / notification.
-Ignored by the in-app players.
+Ignored by the in-app players. `artworkUrl` is fetched after `load` on both
+platforms; a failed fetch leaves the lock screen or notification without artwork.
 
 ### PlayerConfig
 
@@ -297,19 +332,30 @@ data class AmplitudeConfig(
 ```
 
 Presence on `PlayerConfig.amplitude` enables the audio-output tap; `null` leaves
-the pipeline untouched. Video players ignore it.
+the pipeline untouched. Video players ignore it, and iOS players never emit
+samples (see Platform Notes).
 
 ### AudioFocusStrategy
 
 ```kotlin
 enum class AudioFocusStrategy {
-    Standard,     // cooperative: request exclusive focus while playing (default for media)
-    Exclusive,    // take and hold focus (alarms, navigation prompts)
+    Standard,     // cooperative focus; other apps' audio stops (default for media)
+    Exclusive,    // currently identical to Standard on both platforms
     Mixed,        // no focus request; audio mixes with other apps (UI SFX, ambient)
 }
 ```
 
-Applies to video players too — a video's audio track competes for focus the same
+- **Standard**: Android requests `AUDIOFOCUS_GAIN` when playback starts and keeps
+  it while paused. The player pauses when another app takes focus, pauses and
+  resumes around a transient interruption, and ducks for notification sounds. iOS
+  holds a non-mixable `Playback` session from construction until `release()`;
+  interruptions such as calls pause playback, which does not resume on its own.
+- **Exclusive**: behaves exactly like `Standard`. Neither platform lets an app keep
+  audio against calls, alarms or other apps taking focus, so there is no stronger
+  guarantee to map it to. Do not rely on it for alarms or navigation prompts.
+- **Mixed**: Android makes no focus request; iOS sets `MixWithOthers`.
+
+Applies to video players too: a video's audio track competes for focus the same
 way music does.
 
 ### PlaybackNotification
@@ -328,7 +374,9 @@ data class PlaybackNotification(
 ```
 
 Only used on Android (accepted but ignored on iOS, where Control Center is driven
-by `MediaMetadata`).
+by `MediaMetadata`). If no channel with `channelId` exists, the service creates it
+with `IMPORTANCE_LOW` and `channelName`; create the channel yourself first to choose
+a different importance or add a description.
 
 ---
 
@@ -435,14 +483,20 @@ VideoPlayerSurface(
 - **iOS engine**: `AVPlayer` + `AVURLAsset`; periodic time observer for
   position, state polling + `NSNotificationCenter` for terminal events. Video
   renders through an `AVPlayerLayer` hosted in the player-owned view.
-- **Video backgrounding**: in-app only. Playback does not continue when the app
-  backgrounds; Picture-in-Picture and persistent video are follow-ups.
+- **Video backgrounding**: nothing in this module pauses video when the app
+  backgrounds. Pause or release the player from your lifecycle handling (for
+  example `ON_STOP`); otherwise, on Android, the audio track keeps playing. iOS
+  pauses a player whose video is on screen when the app backgrounds.
+  Picture-in-Picture and persistent video are follow-ups.
 - **Android amplitude**: implemented via an `AudioProcessor` tap on
   `DefaultAudioSink` (pass-through, computes RMS + peak per window).
-- **iOS amplitude**: deferred. Reading AVPlayer PCM requires
-  `MTAudioProcessingTap` which needs an Objective-C bridge. `amplitudes` is a
-  live flow on iOS but never emits. UI code must handle "no amplitude samples"
-  as a valid state (e.g. draw a flat line). Tracked for a follow-up.
+- **iOS amplitude**: not implemented. Reading AVPlayer PCM requires an
+  `MTAudioProcessingTap` (unavailable for HLS sources). `amplitudes` is a live
+  flow on iOS but never emits. UI code must handle "no amplitude samples" as a
+  valid state (e.g. draw a flat line).
+- **iOS Now Playing**: the persistent player reports a playback rate of `0` to
+  `MPNowPlayingInfoCenter` while not playing, so the lock-screen scrubber stops
+  while paused.
 - **iOS video size**: AVFoundation exposes no notification for
   presentation-size resolution, so `videoSize` rides the engine's 100 ms state
   poll; expect it to resolve within a tick of `Ready`.

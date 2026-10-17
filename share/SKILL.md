@@ -285,7 +285,7 @@ The sharer is stateless and cheap to construct; a singleton is a convenience, no
 
 ## Platforms
 
-- **Android**: minSdk 24. Zero consumer setup — the module manifest ships the Android 11+ `<queries>` package-visibility block for all six apps and its own FileProvider (`${applicationId}.synapse.share.fileprovider`). Local paths outside app storage and foreign `content://` URIs are copied into a provider-served cache (cleaned after 24h) before sharing; remote http(s) media downloads land in the same cache. Android 9+ blocks cleartext http downloads by default, and http-to-https redirects are not followed: use https URLs. Requires `core:context` (auto-initialized).
+- **Android**: minSdk 24. Zero consumer setup: the module manifest ships the Android 11+ `<queries>` package-visibility block for all six apps, its own FileProvider (`${applicationId}.synapse.share.fileprovider`), and `android.permission.INTERNET` for remote media downloads, all merged into the app's manifest. Local paths outside app storage and foreign `content://` URIs are copied into a provider-served cache (cleaned after 24h) before sharing; remote http(s) media downloads land in the same cache. Android 9+ blocks cleartext http downloads by default, and http-to-https redirects are not followed: use https URLs. Requires `core:context` (auto-initialized).
 - **iOS** (arm64, simulatorArm64): the host app must declare the query schemes in `Info.plist`, or `isAvailable`/direct shares report `AppNotInstalled`:
 
 ```xml

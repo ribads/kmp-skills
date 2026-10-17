@@ -153,9 +153,9 @@ Defaults map each intent's palette from `Theme.colors.intents.{accent,success,wa
 
 ## Usage
 
-**Root setup:**
+**Root setup**, inside the app's theme (its `WithAppTheme` call, see `/ui-element`), because the default style reads `Theme.colors`:
 ```kotlin
-SynapseTheme {
+WithAppTheme(appearance = appearance, colorSchemes = colorSchemes, typography = typography, shape = shape) {
     ToastHandler(position = ToastPosition.Top) {
         MainNavigatorHost(...)
     }

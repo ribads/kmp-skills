@@ -23,7 +23,7 @@ sealed class Text(
         override val format: TextFormat? = null,
     ) : Text()
 
-    data class Money(
+    data class Money(                            // device locale for separators and symbol position; Currency for code, symbol, fraction digits
         val amount: Long,                        // Minor units (cents/pence)
         val currency: Currency = Currency.GBP,
         override val textActionId: String? = null,
@@ -32,16 +32,16 @@ sealed class Text(
 
     data class Timestamp(
         val date: Long,                           // Unix timestamp millis
-        val pattern: String? = null,              // Format pattern
+        val pattern: String? = null,              // Unicode pattern; null renders ISO 8601 (yyyy-MM-dd'T'HH:mm:ss.SSS'Z')
         override val textActionId: String? = null,
-        val timeZone: TimeZone? = null,
+        val timeZone: TimeZone? = null,           // kotlinx.datetime.TimeZone; null renders in UTC, not the device's zone
         override val format: TextFormat? = null,
     ) : Text()
 
     companion object {
-        val empty: Text = Text.Simple("")
-        val whiteSpace: Text = Text.Simple(" ")
-        val newLine: Text = Text.Simple("\n")
+        val empty: Text.Simple = Text.Simple("")
+        val whiteSpace: Text.Simple = Text.Simple(" ")
+        val newLine: Text.Simple = Text.Simple("\n")
         fun listOf(vararg items: Clause): Clause
     }
 }
@@ -145,13 +145,15 @@ enum class Currency(val symbol: String, val hasDecimals: Boolean = true, val dec
 
 ```kotlin
 interface MoneyParser {
-    fun parseMoney(input: String): Long
-    fun formatDisplay(amount: Long, currency: Currency): String
-    fun formatAmount(amount: Double, currency: Currency): String
+    fun parseMoney(input: String): Long                             // digits only, as minor units; "" is 0; throws NumberFormatException past Long.MAX_VALUE
+    fun formatDisplay(amount: Long, currency: Currency): String     // minor units, with the symbol: "€1,234.56" in en-US, "1.234,56 €" in de-DE
+    fun formatAmount(amount: Double, currency: Currency): String    // major units, no symbol: "1,234.56" in en-US, "1.234,56" in de-DE
 }
 
 fun getMoneyParser(): MoneyParser
 ```
+
+Both format functions use the device's current locale on every platform (`Locale.getDefault(Locale.Category.FORMAT)` on Android, `NSLocale.currentLocale` on iOS, the browser's locale on web), read on each call. The locale decides the separators, grouping and the symbol's position and spacing; the `Currency` decides the ISO code, the symbol (`Currency.symbol`) and the fraction digits (`Currency.decimalPlaces`). `Text.Money` renders through `formatDisplay`.
 
 ---
 
@@ -177,6 +179,14 @@ fun TextLink(
 )
 // Colour: the clause's intent colour, else style.color, else LocalContentColor.
 // Disabled links use Theme.colors.elementInteractive.disabled.
+
+/**
+ * The plain text Text would render for [clause], for String-only APIs: a content description, a click label.
+ * Formatting and links are dropped; a Graphics contributes its contentDescription, or nothing when decorative.
+ * Reads no theme, so it works outside WithTheme.
+ */
+@Composable
+fun rememberPlainText(clause: Clause): String
 
 @Composable
 fun WithTextClickHandler(
