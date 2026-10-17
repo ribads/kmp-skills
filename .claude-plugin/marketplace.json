@@ -1,0 +1,16 @@
+{
+  "name": "kmp-skills",
+  "owner": {
+    "name": "Kehinde Yinusa",
+    "url": "https://github.com/ribads"
+  },
+  "description": "Claude Code plugins for building Kotlin Multiplatform apps with the Synapse libraries.",
+  "plugins": [
+    {
+      "name": "synapse",
+      "source": "./plugins/synapse",
+      "category": "development",
+      "tags": ["kotlin-multiplatform", "compose-multiplatform", "android", "ios"]
+    }
+  ]
+}

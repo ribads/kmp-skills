@@ -1,0 +1,12 @@
+{
+  "name": "synapse",
+  "description": "Skills for the Synapse Kotlin Multiplatform libraries (com.ribads.synapse): design system, UI components, IRSE-MVI, navigation, server-driven UI, platform modules, and project and screen scaffolding.",
+  "author": {
+    "name": "Kehinde Yinusa",
+    "url": "https://github.com/ribads"
+  },
+  "homepage": "https://github.com/ribads/kmp-skills",
+  "repository": "https://github.com/ribads/kmp-skills",
+  "license": "Apache-2.0",
+  "keywords": ["kotlin-multiplatform", "compose-multiplatform", "kmp", "android", "ios", "synapse"]
+}
