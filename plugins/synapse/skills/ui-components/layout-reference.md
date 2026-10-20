@@ -138,12 +138,13 @@ sealed class TopNavBarTrailingContentModel {
 
 ## BottomNavigationBar
 
-Fixed-height row of icon/label items along the bottom of a screen, intended for top-level destination switching in a `Scaffold.bottomBar` slot. Each item is a `Modifier.selectable(role = Role.Tab)` inside a `selectableGroup()`, spring-free `animateColorAsState` drives icon tint and label color between selected/unselected, and disabled items are rendered at `38%` alpha with ignored clicks. A 1dp hairline divider sits above the bar using `border.secondary`. Label is optional per item (pass `null` for an icon-only bar). When `items` is empty the composable renders nothing. Selection is tracked by `String` id so callers can map directly to routes.
+The app's top-level destinations, docked along the bottom of the screen. Made for `Scaffold.bottomBar`. Items share the width equally and selection is tracked by `String` id, so ids can be route names. When `items` is empty the composable renders nothing.
 
 ```kotlin
 @Composable fun BottomNavigationBar(
     model: BottomNavigationBarModel,
     modifier: Modifier = Modifier,
+    windowInsets: WindowInsets = WindowInsets.navigationBars,
     onItemSelected: (id: String) -> Unit,
 )
 
@@ -170,52 +171,64 @@ sealed class BottomNavigationBadge {
 }
 ```
 
-**Dimensions**: bar height `64dp`, icon size `24dp`, dot badge `8dp`, count badge min `16dp` (widens for `99+`).
+**Anatomy**: a `surface.primary` bar with a 1dp `border.secondary` hairline along its top. Each item is an icon in a 56×32dp capsule, with an optional one-line label under it. The selected item's capsule fills with `intents.accent.surface` and its icon turns `intents.accent.content`. The capsule grows sideways out from behind the icon as it fades in. Icon tint, label colour and capsule are all driven by one selection animation, so they move together.
+
+**Interaction**: the whole cell is the touch target, but there is no ripple. Feedback is drawn in the item's capsule, the same place the selection lands. Pressing tints the capsule with `element.primary` at 8% and squeezes the icon to 90%, then springs it back with a slight overshoot on release. A tap shorter than the squeeze still plays it out. Keyboard focus and pointer hover tint the capsule without squeezing. `onItemSelected` fires for the already-selected item too, so a screen can scroll back to its top or pop to its root on reselect.
+
+**Insets**: the bar paints behind `windowInsets` (the system navigation bar or home indicator by default) and keeps its items above them, so it sits flush with the bottom of an edge-to-edge screen. Pass `WindowInsets(0)` when an ancestor already handles them, or when the bar is not at the bottom of the window (a preview inside a scrolling page). Insets an ancestor has already consumed are not applied twice.
+
+**Dimensions**: at least `64dp` tall above the insets, and taller when the label's font scale needs it; icon `24dp`; capsule `56×32dp`; label `4dp` below the capsule, one line, ellipsized.
 
 **Colors** (via `Theme.colors`):
-- Container: `surface.primary`
-- Divider: `border.secondary`
-- Active icon/label: `surfaceInteractive.enabled`
-- Inactive icon/label: `element.secondary`
-- Disabled: `elementInteractive.disabled` @ `0.38` alpha
-- Badge fill: `intents.error.surface`
-- Badge text: `intents.error.content`
+- Bar: `surface.primary`, hairline `border.secondary`
+- Selected: capsule `intents.accent.surface`, icon `intents.accent.content`, label `element.primary`
+- Unselected icon and label: `element.secondary`
+- Press, focus and hover tint: `element.primary` at 8%
+- Disabled: the whole item at `0.38` alpha, in the colours of its state. It is not clickable and is announced as disabled.
+- Badge fill: `intents.error.content`. The ring around the badge and the count's text are cut out in the bar colour (`surface.primary`), so the count is light on a saturated fill and dark on the pastel fill of a dark theme.
 
 **Behavior**:
-- Selected label uses `Theme.typography.labelXs` at `FontWeight.SemiBold`; unselected at `FontWeight.Normal`.
-- Icon tinting: the image type decides. An `Image.Glyph` is tinted with the item's state colour (active, inactive or disabled), whether it is the `icon` or the `selectedIcon`, so an outline/filled glyph pair still follows the theme. An `Image.Artwork` is drawn as authored in every state; use it for icons that ship their own colours.
-- `BottomNavigationBadge.Count` clamps display to `"99+"` when `value > 99`.
+- Labels use `Theme.typography.labelS` at a constant weight in both states, so the selected label does not reflow.
+- Icon tinting: the image type decides. An `Image.Glyph` takes the item's state colour, whether it is the `icon` or the `selectedIcon`, so an outline/filled glyph pair still follows the theme. An `Image.Artwork` is drawn as authored in every state; use it for icons that ship their own colours.
+- Badges sit on the icon's top-end shoulder, outside its centre, so a three-character count leaves the glyph recognisable. `BottomNavigationBadge.Count` shows `"99+"` when `value > 99`.
+- Screen readers hear each item once, as its label (or, without one, the icon's `contentDescription`) followed by the badge count, plus its tab role, position and selected state. Give icon-only items a `contentDescription`. A `Dot` badge is not announced.
 
 ---
 
 ## LiquidGlassBottomNavigationBar
 
-Drop-in replacement for `BottomNavigationBar` with a pill-shaped track and a floating capsule that springs between items. Same `BottomNavigationBarModel` — identical call shape. Selection is communicated by the pill's position (not by a bright accent tint), so labels/icons only shift between `element.primary` and `element.secondary`. Fixed 64dp bar height; 4dp inset around the pill; 6dp shadow elevation; 1dp hairline border for the glass edge. When `selectedId` doesn't match any item, the pill is rendered at `alpha=0` — the bar itself stays visible.
+The same destinations on a floating island, for apps where the bar is a centrepiece. Same `BottomNavigationBarModel` and call shape as `BottomNavigationBar`.
 
 ```kotlin
 @Composable fun LiquidGlassBottomNavigationBar(
     model: BottomNavigationBarModel,
     modifier: Modifier = Modifier,
+    windowInsets: WindowInsets = WindowInsets.navigationBars,
     onItemSelected: (id: String) -> Unit,
 )
 ```
 
-Shares `BottomNavigationBarModel`, `BottomNavigationItem`, and `BottomNavigationBadge` with `BottomNavigationBar` — see above.
+Shares `BottomNavigationBarModel`, `BottomNavigationItem`, and `BottomNavigationBadge` with `BottomNavigationBar` (see above).
+
+**Anatomy**: a fully rounded `surface.raised` island with an 8dp shadow and a 1dp `border.secondary` edge. Inside it, one `intents.accent.surface` capsule, inset 4dp and concentric with the island, marks the selected item. The selected item's icon and label are both `intents.accent.content`, since both sit inside the capsule.
+
+**Motion**: the capsule travels between items like a drop of liquid. Its leading edge springs ahead to the new item (`spring(DampingRatioLowBouncy, StiffnessMediumLow)`) and lands with a slight wobble. Its trailing edge follows more softly (`spring(DampingRatioNoBouncy, StiffnessLow)`). So the capsule stretches in flight, more on a long jump than a short one, and settles back into shape. When `selectedId` matches no item, the capsule fades out where it is. When a selection returns, the capsule fades back in on that item instead of sliding from the old one.
+
+**Interaction**: as for `BottomNavigationBar`, with the cell itself as the capsule. Pressing an item tints a capsule of exactly the shape the indicator takes when it lands there, and squeezes the icon and label inside it.
+
+**Insets**: the island lifts itself above `windowInsets`, but spans the width it is given and adds no margins of its own. Pad it from the screen's edges for the floating look (see the example below). Pass `WindowInsets(0)` when an ancestor already handles the insets.
+
+**Dimensions**: at least `64dp` tall; capsule inset `4dp`; icon `24dp`; label `2dp` below the icon.
 
 **Colors** (via `Theme.colors`):
-- Track: `surface.subtle`
-- Pill fill: `surface.primary`
-- Pill hairline: `border.secondary`
-- Active icon/label: `element.primary` @ `FontWeight.SemiBold`
-- Inactive icon/label: `element.secondary` @ `FontWeight.Normal`
-- Disabled: `elementInteractive.disabled` @ `0.38` alpha
-- Badge fill / text: `intents.error.surface` / `intents.error.content`
-
-**Animation**: `animateDpAsState` with `spring(DampingRatioLowBouncy, StiffnessMediumLow)` drives the pill's x-offset; item tint animates via `animateColorAsState` inside the shared item renderer.
+- Island: `surface.raised`, edge `border.secondary`
+- Selected: capsule `intents.accent.surface`, icon and label `intents.accent.content`
+- Unselected icon and label: `element.secondary`
+- Press, focus, hover, disabled and badges: as for `BottomNavigationBar`, with badge cut-outs in `surface.raised`
 
 **When to pick which**:
-- `BottomNavigationBar` — standard material-style bar that sits flush against content, communicates selection via a bright accent color on the icon/label. Best for productivity apps, dense interfaces, or when the bar competes with colorful content.
-- `LiquidGlassBottomNavigationBar` — free-standing, prominent, expressive. Best for consumer apps where the nav bar is a showpiece, or when you want a floating chip feel. Wrap it in `.padding(horizontal = Theme.spacing.x4, vertical = Theme.spacing.x2)` inside `Scaffold.bottomBar` for the "floating island" look.
+- `BottomNavigationBar`: flush with the bottom of the screen and quiet. Best for productivity apps and dense interfaces, or when content is colourful and the bar should recede.
+- `LiquidGlassBottomNavigationBar`: free-standing and expressive. Best for consumer apps where the bar is a showpiece. Inside `Scaffold.bottomBar`, give it `Modifier.padding(horizontal = Theme.spacing.x4, vertical = Theme.spacing.x2)` so it floats as an island.
 
 ---
 

@@ -80,6 +80,7 @@ Scaffold(topBar = { /* toolbar */ }) { padding ->
 ## Bottom Navigation Bar
 
 ```kotlin
+// The bar paints behind the system navigation bar and keeps its items above it: no navigationBarsPadding() needed.
 Scaffold(
     bottomBar = {
         BottomNavigationBar(
@@ -122,7 +123,8 @@ Scaffold(
 ## Liquid Glass Bottom Navigation Bar
 
 ```kotlin
-// Floating-island placement: horizontal padding lifts the pill off the edges.
+// Floating-island placement: the padding lifts the island off the screen's edges. It keeps clear of the system
+// navigation bar by itself.
 Scaffold(
     bottomBar = {
         LiquidGlassBottomNavigationBar(
