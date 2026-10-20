@@ -40,7 +40,7 @@
 
 ## Button Nodes
 
-Shared fields: `title`, `leadingImageUrl`, `trailingImageUrl`, `state`, `stateCondition`, `actionId`
+Shared fields: `title`, `leadingImageUrl`, `trailingImageUrl`, `state`, `stateCondition`, `loadingCondition`, `actionId`
 
 | Type | Style |
 |------|-------|
@@ -160,6 +160,7 @@ The bar shows either a row of icons or one text action, never both:
 | Type | Key fields |
 |------|-----------|
 | `Conditional` | `conditionKey` (String, required), `thenNode` (UINode, required), `elseNode` (UINode?) |
+| `OnAppear` | `actionIds` (List<String>). Draws nothing and takes no layout slot; dispatches each action, with its item context, every time it enters composition (each time its page is shown, or its `Conditional` branch or list item appears). Use it to load data: `"actionIds": ["operation:list_orders"]` |
 | `Unknown` | (renders nothing; forward-compatible fallback, reported through `onUnknownNode` under its original `type`, kept in `typeName`) |
 
 ---
@@ -206,6 +207,7 @@ These fields were added to existing node types for data layer integration.
 | Field | Type | Description |
 |-------|------|-------------|
 | `stateCondition` | `String?` | Named condition key. When set, button is `Enabled` when condition is true, `Disabled` when false. Overrides `state`. |
+| `loadingCondition` | `String?` | Named condition key. While true, the button shows `Loading` (a spinner, taps ignored), taking precedence over `stateCondition` and `state`. Pair it with an operation's `pendingField`: `{ "type": "isTrue", "field": "submitting" }`. |
 
 ### Input Nodes
 

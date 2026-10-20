@@ -228,3 +228,97 @@ A multi-page app with reactive collections, computed fields, mutations, and cond
   ]
 }
 ```
+
+---
+
+## Operations: Load on Appear, Submit with Loading and Failure
+
+The list page loads through `OnAppear`; the form page submits with a loading button and shows copy chosen from the failure code. The same schema ships as `operations_demo_schema.json` in the demo apps.
+
+```json
+{
+  "requires": { "minSchemaVersion": 2 },
+  "data": {
+    "fields": {
+      "loading_tasks": { "type": "boolean" },
+      "new_task_title": { "type": "string" },
+      "saving": { "type": "boolean" },
+      "save_error": { "type": "string" }
+    },
+    "collections": { "tasks": { "schema": { "id": "string", "title": "string" } } },
+    "conditions": {
+      "is_loading": { "type": "isTrue", "field": "loading_tasks" },
+      "is_saving": { "type": "isTrue", "field": "saving" },
+      "can_save": { "type": "fieldNotEmpty", "field": "new_task_title" },
+      "save_failed_offline": { "type": "equals", "field": "save_error", "value": "offline" }
+    },
+    "operations": {
+      "list_tasks": {
+        "pendingField": "loading_tasks",
+        "result": { "type": "replaceCollection", "collection": "tasks" }
+      },
+      "add_task": {
+        "input": { "title": { "type": "fieldRef", "name": "new_task_title" } },
+        "pendingField": "saving",
+        "failureField": "save_error",
+        "result": { "type": "replaceCollection", "collection": "tasks" },
+        "onSuccess": [ { "type": "clearFields", "fields": ["new_task_title"] }, { "type": "back" } ]
+      }
+    }
+  },
+  "pages": [
+    { "id": "tasks", "root": { "type": "Column", "children": [
+      { "type": "OnAppear", "actionIds": ["operation:list_tasks"] },
+      { "type": "Conditional", "conditionKey": "is_loading",
+        "thenNode": { "type": "Text", "content": "Loading tasks…" },
+        "elseNode": { "type": "LazyColumn", "dataSource": "tasks",
+          "itemTemplate": { "type": "Text", "content": "{{item.title}}" } } },
+      { "type": "PrimaryButton", "title": "Add task", "actionId": "renderer:navigate:add_task" }
+    ] } },
+    { "id": "add_task", "root": { "type": "Column", "children": [
+      { "type": "TextField", "label": "Title", "bind": "new_task_title" },
+      { "type": "PrimaryButton", "title": "Save", "actionId": "operation:add_task",
+        "stateCondition": "can_save", "loadingCondition": "is_saving" },
+      { "type": "Conditional", "conditionKey": "save_failed_offline",
+        "thenNode": { "type": "Text", "content": "You're offline. Try again." } }
+    ] } }
+  ]
+}
+```
+
+Host side, with `renderedEntries`:
+
+```kotlin
+renderedEntry(
+    baseRoute = "tasks",
+    schemaStore = InMemorySchemaStore().apply { load(screen) },
+    actionHandler = handler,
+    navigationDispatcher = dispatcher,
+    config = RenderedPageConfig(dataSchema = screen.data, operationHandler = tasksOperationHandler),
+)
+```
+
+---
+
+## Gateway Operation Handler
+
+One handler that forwards every operation to your backend, so new operations ship without an app release. It lives in the feature's `ui` module and goes through a use case, so the request goes through the app's single `HttpClient` (`/synapse:network`) with its base URL and auth, and failures are classified in the repository like any other call (`/synapse:data-boundaries`). The domain sees the payload as opaque JSON text; parsing the returned records is a UI-layer concern, like `parseUIScreen`.
+
+```kotlin
+// features/<name>/ui
+internal class GatewayOperationHandler(
+    private val runOperation: RunSduiOperationUseCase,   // POST sdui/operations/{name} with the JSON body
+) : OperationHandler {
+
+    override suspend fun execute(name: String, input: ActionPayload): OperationOutcome =
+        when (val result = runOperation.execute(name, input.toJsonObject().toString())) {
+            is SduiOperationResult.Success -> OperationOutcome.Success(result.recordsJson.toRecords())
+            is SduiOperationResult.Failure -> OperationOutcome.Failure(result.code)   // "offline", "unauthorized", or a server code
+        }
+
+    private fun String.toRecords(): List<DataRecord> =
+        Json.decodeFromString<List<Map<String, JsonPrimitive>>>(this)
+}
+```
+
+Keep native bindings for operations that are not HTTP calls (purchase, restore, share) by matching their names before falling through to the gateway, and list those names in `RendererCapabilities(operations = …)`.

@@ -4,5 +4,9 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<key>ApiBaseUrl</key>
+	<string>$(API_BASE_URL)</string>
+	<key>VerboseNetworkLogging</key>
+	<string>$(VERBOSE_NETWORK_LOGGING)</string>
 </dict>
 </plist>

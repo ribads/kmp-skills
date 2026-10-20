@@ -36,12 +36,13 @@ Import each type from its package below.
 
 | Package | Types |
 |---|---|
-| `com.ribads.synapse.ui.renderer.action` | `ActionDispatcher`, `ActionHandler`, `ActionPayload`, `bridgedActionHandler`, `onAction` |
-| `com.ribads.synapse.ui.renderer.data` | `DataPersistence`, `MutationExecutor`, `MutationResult`, `ReactiveDataStore`, `renderedPageActionHandler` |
+| `com.ribads.synapse.ui.renderer.action` | `ActionDispatcher`, `ActionHandler`, `ActionPayload`, `OperationHandler`, `OperationOutcome`, `bridgedActionHandler`, `onAction` |
+| `com.ribads.synapse.ui.renderer.capability` | `IncompatibilityReason`, `RendererCapabilities`, `SchemaElementKind`, `ScreenCompatibility`, `SynapseSchemaVersion`, `compatibilityWith` |
+| `com.ribads.synapse.ui.renderer.data` | `DataPersistence`, `MutationExecutor`, `MutationResult`, `OperationExecutor`, `PageOperations`, `ReactiveDataStore`, `renderedPageActionHandler` |
 | `com.ribads.synapse.ui.renderer.diagnostics` | `RenderDiagnostics`, `RenderPassSummary`, `callbackRenderDiagnostics`, `children`, `reportNodeRenderError`, `summarizeTree` |
 | `com.ribads.synapse.ui.renderer.engine` | `BoundRecordGroups`, `BoundRecords`, `CollectionProvider`, `ConditionEvaluator`, `DataRecord`, `DataRecordView`, `ITEM_CONTEXT_PAYLOAD_KEY`, `MediaProvider`, `NodeRenderer`, `NodeRendererRegistry`, `RecordConditionEvaluator`, `RenderNode`, `SynapseRenderer`, `TemplateEngine`, `boundRecords`, `committedValue`, `dispatchWithRecord`, `effectiveTextFormat`, `hasConditionalFormat`, `narrowRecords`, `recordFieldReader`, `watchBoundRecords` |
-| `com.ribads.synapse.ui.renderer.navigation` | `InMemorySchemaStore`, `RenderedPageConfig`, `RenderedPageKey`, `RenderedRoutesBuilder`, `SchemaStore`, `ScreenParseResult`, `UIPage`, `UIScreen`, `load`, `navigateToRenderedPage`, `parseUIScreen`, `renderedEntries`, `renderedEntry`, `rendererNavigationSerializers`, `toUIScreen` |
-| `com.ribads.synapse.ui.renderer.schema` | `ComputedField`, `DataCollection`, `DataCondition`, `DataEffect`, `DataField`, `DataFieldType`, `DataMutation`, `DataOrderBy`, `DataSchema`, `DataValueRef`, `SchemaParseResult`, `SortDirection`, `UIButtonState`, `UIDimension`, `UIGradient`, `UIModifier`, `UINavBarAction`, `UINavBarLeadingIcon`, `UINode`, `UITextFormat`, `UITextIntent`, `UITheme`, `UIThemeBorder`, `UIThemeColors`, `UIThemeElement`, `UIThemeElementInteractive`, `UIThemeIntentPalette`, `UIThemeIntents`, `UIThemeShadow`, `UIThemeShape`, `UIThemeSpacing`, `UIThemeSurface`, `UIThemeSurfaceInteractive`, `UIThemeTextStyle`, `UIThemeTypography`, `UIVisibility`, `parseUINode`, `schemaType`, `toUINode`, `toUINodes` |
+| `com.ribads.synapse.ui.renderer.navigation` | `InMemorySchemaStore`, `RenderedPageAction`, `RenderedPageConfig`, `RenderedPageKey`, `RenderedRoutesBuilder`, `SchemaStore`, `ScreenParseResult`, `ScreenRequirements`, `UIPage`, `UIScreen`, `load`, `navigateToRenderedPage`, `parseUIScreen`, `renderedEntries`, `renderedEntry`, `rendererNavigationSerializers`, `toUIScreen` |
+| `com.ribads.synapse.ui.renderer.schema` | `ComputedField`, `DataCollection`, `DataCondition`, `DataEffect`, `DataField`, `DataFieldType`, `DataMutation`, `DataOperation`, `DataOperationResult`, `DataOrderBy`, `DataSchema`, `DataValueRef`, `OperationConcurrency`, `SchemaParseResult`, `SortDirection`, `UIButtonState`, `UIDimension`, `UIGradient`, `UIModifier`, `UINavBarAction`, `UINavBarLeadingIcon`, `UINode`, `UITextFormat`, `UITextIntent`, `UITheme`, `UIThemeBorder`, `UIThemeColors`, `UIThemeElement`, `UIThemeElementInteractive`, `UIThemeIntentPalette`, `UIThemeIntents`, `UIThemeShadow`, `UIThemeShape`, `UIThemeSpacing`, `UIThemeSurface`, `UIThemeSurfaceInteractive`, `UIThemeTextStyle`, `UIThemeTypography`, `UIVisibility`, `containsUnsupported`, `parseUINode`, `schemaType`, `toUINode`, `toUINodes` |
 | `com.ribads.synapse.ui.renderer.state` | `InMemoryRendererStateHolder`, `RendererStateHolder`, `WatchHandle`, `watchBoolean`, `watchDouble`, `watchLong`, `watchRevision`, `watchString` |
 | `com.ribads.synapse.ui.renderer.theme` | `FontResolver`, `ResolvedShape`, `ResolvedTheme`, `WithRenderedTheme`, `resolve` |
 
@@ -294,6 +295,15 @@ fun UINode.schemaType(): String
 
 `toUINode()` and `toUIScreen()` still throw; use these where an exception is not an option.
 
+An unknown `type` inside the data layer does not fail the parse either. `DataCondition`, `ComputedField`, `DataMutation`, `DataEffect` and `DataValueRef` each decode it to their `Unsupported` variant, which keeps the original `typeName` (see [data-layer.md](data-layer.md#unsupported-types) for what each does at runtime):
+
+```kotlin
+data class Unsupported(@Transient val typeName: String = "unsupported")   // in each of the five types
+
+/** True when this condition, or any operand beneath it, is DataCondition.Unsupported. */
+fun DataCondition.containsUnsupported(): Boolean
+```
+
 A `type` this build does not know decodes to `UINode.Unknown`, which keeps what the payload sent:
 
 ```kotlin
@@ -322,6 +332,102 @@ fun UINode.NumberField.committedValue(value: Double): Double
 ```
 
 Node filters, computed fields' `where`, and the data layer's named conditions all answer field questions through `RecordConditionEvaluator`, so they agree; dates compare in the device's time zone (`isToday` is the user's calendar day).
+
+---
+
+## Operations
+
+Operations are how a schema reaches the network. The schema names an operation and declares what goes in and where the result goes; the host decides how it runs. The renderer never makes a network call itself, and a payload can never point the app's client at an arbitrary host.
+
+```kotlin
+// action package
+fun interface OperationHandler {
+    suspend fun execute(name: String, input: ActionPayload): OperationOutcome   // never throw
+}
+
+sealed class OperationOutcome {
+    data class Success(val records: List<DataRecord> = emptyList()) : OperationOutcome()
+    data class Failure(val code: String) : OperationOutcome() {
+        companion object { const val UNEXPECTED: String; const val UNSUPPORTED: String }   // "unexpected", "unsupported"
+    }
+}
+
+class ActionPayload(values: Map<String, Any?>) {
+    // getString / getLong / getDouble / getBoolean / getStringList / isNull, as above
+    fun toJsonObject(): JsonObject                                  // every value, for forwarding to a server
+}
+```
+
+- `Success.records` are flat maps of primitives (JSON primitives or Kotlin values). They are coerced to the target collection's declared types; give every field a type in the collection's `schema`, or it arrives as a string.
+- `Failure.code` is a machine code such as `offline` or `unauthorized`, written to the operation's `failureField`. The schema chooses the copy with an `equals` condition; never put user-facing text in a code.
+- Never throw from `execute`: an exception escaping into a Swift Export host crashes the app. A throw from a Kotlin handler is contained, reported through `RenderDiagnostics.onActionError("operation:<name>", …)`, and treated as `Failure(UNEXPECTED)`.
+
+Bind operations in the feature's `ui` module and call the feature's use cases from there, so `/synapse:data-boundaries` still holds: operation → use case → repository → network. To add operations without an app release, implement one gateway handler that forwards every name to your backend (see [examples.md](examples.md#gateway-operation-handler)), and keep native bindings for things like purchase and restore.
+
+Runtime (data package, see [data-layer.md](data-layer.md#operationexecutor)):
+
+```kotlin
+class OperationExecutor(store: ReactiveDataStore, handler: OperationHandler, diagnostics: RenderDiagnostics) {
+    suspend fun execute(name: String, itemContext: DataRecord? = null): MutationResult   // throws only CancellationException
+}
+
+class PageOperations(executor: OperationExecutor) {
+    fun launch(name: String, itemContext: DataRecord?, onSettled: (MutationResult) -> Unit)
+    fun cancel()
+}
+
+fun renderedPageActionHandler(
+    fallback: ActionHandler,
+    mutationExecutor: MutationExecutor?,
+    operations: PageOperations? = null,      // null: operation: actions are ignored
+    navigateToPage: (pageId: String) -> Unit,
+    navigateBack: () -> Unit,
+): ActionHandler
+```
+
+Hosts using `renderedEntries` only set `RenderedPageConfig.operationHandler`. A custom host creates one `PageOperations` per page, passes it to `renderedPageActionHandler`, and calls `cancel()` when the page leaves the screen.
+
+---
+
+## Capabilities and compatibility
+
+Package `com.ribads.synapse.ui.renderer.capability`. The client sends what it can run with every screen request; the server only returns screens that fit, and the client can check a screen before rendering it.
+
+```kotlin
+object SynapseSchemaVersion { const val CURRENT: Int }      // 2; 1 is everything through 0.2.0-alpha9
+
+class RendererCapabilities(val operations: Set<String> = emptySet()) {   // names bound natively; no blanks or commas
+    val schemaVersion: Int
+    val schemaVersionHeaderValue: String
+    val operationsHeaderValue: String                       // sorted, comma-separated
+    companion object {
+        const val SCHEMA_VERSION_HEADER: String             // "X-Synapse-Schema-Version"
+        const val OPERATIONS_HEADER: String                 // "X-Synapse-Operations"
+    }
+}
+
+// navigation package, on the payload
+@Serializable
+data class ScreenRequirements(val minSchemaVersion: Int = 1, val operations: List<String> = emptyList())
+// UIScreen gains: val requires: ScreenRequirements? = null
+
+fun UIScreen.compatibilityWith(capabilities: RendererCapabilities): ScreenCompatibility
+
+sealed class ScreenCompatibility {
+    data object Compatible : ScreenCompatibility()
+    data class Incompatible(val reasons: List<IncompatibilityReason>) : ScreenCompatibility()
+}
+
+sealed class IncompatibilityReason {
+    data class SchemaVersionTooNew(val required: Int, val supported: Int) : IncompatibilityReason()
+    data class OperationNotBound(val name: String) : IncompatibilityReason()
+    data class UnsupportedSchemaElement(val kind: SchemaElementKind, val typeName: String) : IncompatibilityReason()
+}
+
+enum class SchemaElementKind { Condition, ComputedField, Mutation, Effect, ValueRef, OperationResult }
+```
+
+Attach both headers to the request that fetches screens (from the host's data layer; the renderer makes no network calls). Clients from 0.2.0-alpha9 and earlier send no headers and ignore `requires`, so a server must gate newer screens on the header, not on `requires` alone. Unknown nodes never make a screen incompatible: they render nothing by design.
 
 ---
 
@@ -404,7 +510,7 @@ Type-discriminated via `"type"` field. Unknown types decode to `UINode.Unknown`,
 | **Toggle/Progress** | `Checkbox`, `RadioGroup`, `ProgressBar`, `CircularProgress` |
 | **Structured** | `Divider`, `Scaffold`, `TopNavBar`, `Tray`, `TabLayout`, `ConfirmDialog`, `EmptyState` |
 | **Charts** | `BarChart`, `LineChart`, `PieChart` |
-| **Meta** | `Conditional`, `Unknown` |
+| **Meta** | `Conditional`, `OnAppear`, `Unknown` |
 
 For complete field reference for each node type, see [nodes-reference.md](nodes-reference.md).
 
@@ -487,15 +593,21 @@ data class RenderedPageConfig(
     val fontResolver: FontResolver = FontResolver.Default,
     val mediaProvider: MediaProvider = MediaProvider.NoOp,
     val diagnostics: RenderDiagnostics = RenderDiagnostics.NoOp,
+    val operationHandler: OperationHandler? = null,             // ignored without dataSchema
 )
 ```
 
 `stateHolder` and `conditionEvaluator` are ignored when `dataSchema` is set: the `ReactiveDataStore` takes over both roles.
 
+Each rendered page gets its own `PageOperations`, cancelled when the page leaves composition (including an Android configuration change, which rebuilds the route's store from persistence). An operation the user walked away from never applies its effects, so make submits idempotent on the server. A page under a bottom sheet or dialog stays composed, so its operations keep running.
+
 **Built-in action prefixes:**
 - `renderer:navigate:<pageId>`: navigates to another rendered page
 - `renderer:back`: pops the back stack
 - `mutation:<name>`: executes a declared data mutation
+- `operation:<name>`: launches a declared data operation through `RenderedPageConfig.operationHandler`
+
+`RenderedPageAction` (navigation package) holds these as constants: `NAVIGATE_PREFIX`, `BACK`, `MUTATION_PREFIX`, `OPERATION_PREFIX`, with builders `navigateTo(pageId)`, `mutation(name)`, `operation(name)`.
 
 ---
 

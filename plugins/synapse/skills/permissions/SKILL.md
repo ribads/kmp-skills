@@ -128,6 +128,7 @@ the request return `Denied` every time.
 ```xml
 <uses-permission android:name="android.permission.RECORD_AUDIO" />
 <uses-permission android:name="android.permission.CAMERA" />
+<uses-feature android:name="android.hardware.camera" android:required="false" />
 <uses-permission android:name="android.permission.READ_PHONE_STATE" />
 <uses-permission
     android:name="android.permission.BLUETOOTH_SCAN"
@@ -136,7 +137,7 @@ the request return `Denied` every time.
 <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 ```
 
-Declare only the entries for the requests the app makes.
+Declare only the entries for the requests the app makes. Put the `android.hardware.camera` feature, with `required="false"`, in the same manifest as `CAMERA`: without it Google Play treats the camera as required, and Android lint fails the build with `PermissionImpliesUnsupportedChromeOsHardware` even when a library merges the feature in.
 
 ### Per-request mapping
 

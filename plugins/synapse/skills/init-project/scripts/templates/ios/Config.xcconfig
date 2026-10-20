@@ -6,3 +6,10 @@ DEVELOPMENT_TEAM=$(TEAM_ID)
 
 CURRENT_PROJECT_VERSION=1
 MARKETING_VERSION=1.0
+
+// "//" starts a comment in xcconfig, so URLs are written as https:/$()/host.
+API_BASE_URL[config=Debug]=https:/$()/api.dev.example.com/
+API_BASE_URL[config=Release]=https:/$()/api.example.com/
+
+VERBOSE_NETWORK_LOGGING[config=Debug]=YES
+VERBOSE_NETWORK_LOGGING[config=Release]=NO

@@ -125,6 +125,8 @@ sealed class ProductsResult {
 **`RepositoryImpl` is the single place that catches.** It logs and returns a failure variant. Above it nothing catches, because above it nothing throws.
 
 ```kotlin
+import com.ribads.synapse.core.network.NetworkFailure
+import com.ribads.synapse.core.network.toNetworkFailure
 import kotlin.coroutines.cancellation.CancellationException
 
 internal class ProductRepositoryImpl @Inject constructor(
@@ -138,17 +140,25 @@ internal class ProductRepositoryImpl @Inject constructor(
     }.getOrElse {
         if (it is CancellationException) throw it
         errorLogger.log(it)
-        ProductsEntityResult.Failure
+        ProductsEntityResult.Failure(it.toNetworkFailure().toProductFailureReason())
     }
 
     override fun observe(id: String): Flow<ProductEntityResult> = flow {
         emit(dataSource.fetchProduct(id).let(mapper::map))
     }.catch {
         errorLogger.log(it)
-        emit(ProductEntityResult.Failure)
+        emit(ProductEntityResult.Failure(it.toNetworkFailure().toProductFailureReason()))
+    }
+
+    private fun NetworkFailure.toProductFailureReason(): ProductFailureReason = when (this) {
+        NetworkFailure.Offline, NetworkFailure.Timeout -> ProductFailureReason.Connectivity
+        NetworkFailure.Unauthorized -> ProductFailureReason.Unauthorized
+        is NetworkFailure.Http, NetworkFailure.Malformed, NetworkFailure.Unexpected -> ProductFailureReason.Unexpected
     }
 }
 ```
+
+**Classify, then translate.** `Throwable.toNetworkFailure()` from `/synapse:network` turns Ktor exceptions into a sealed `NetworkFailure` (`Offline`, `Timeout`, `Unauthorized`, `Http(status)`, `Malformed`, `Unexpected`). The repository translates that into the domain's own reason enum, because `NetworkFailure` is a transport type and entities must not import it. Keep the domain reason as coarse as its callers need: a feature that only shows "try again" does not need five cases.
 
 **Rethrow `CancellationException`.** `runCatching` catches it along with everything else, and swallowing it turns a cancelled call (the user left the screen, a `flatMapLatest` superseded the request) into a logged failure while the cancelled coroutine carries on. `Flow.catch` already lets the collector's own cancellation through, so the `observe` example needs no check.
 
@@ -168,8 +178,8 @@ A message from a network response is not user-facing copy: it is unlocalized, un
 
 ```
 Exception
-  └─ RepositoryImpl catches → ErrorLogger.log(it) → EntityResult.Failure
-       └─ usecase mapper → FeatureResult.Failure
+  └─ RepositoryImpl catches → ErrorLogger.log(it) → toNetworkFailure() → EntityResult.Failure(reason)
+       └─ usecase mapper → FeatureResult.Failure (or Failure(reason) when the screen must branch)
             └─ screen Mapper → Result.OnLoadFailed(ToastModel(Text.Localized(Res.string.…), ToastIntent.Error))
                  └─ Reducer → state withEffect Effect.ShowToast(result.toast)
                       └─ Screen → toaster.show(effect.model)

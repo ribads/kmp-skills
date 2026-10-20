@@ -38,6 +38,7 @@ data class DataSchema(
     val collections: Map<String, DataCollection> = emptyMap(),
     val mutations: Map<String, DataMutation> = emptyMap(),
     val conditions: Map<String, DataCondition> = emptyMap(),
+    val operations: Map<String, DataOperation> = emptyMap(),
 )
 ```
 
@@ -113,7 +114,7 @@ Computed fields derive their value from collection data or other fields. They up
 | `Update` | `"update"` | `collection: String`, `id: DataValueRef`, `values: Map<String, DataValueRef>`, `then: List<DataEffect>` |
 | `Trigger` | `"trigger"` | `then: List<DataEffect>` (effects-only, no collection operation) |
 
-Triggered from UI via `"actionId": "mutation:<name>"`.
+Triggered from UI via `"actionId": "mutation:<name>"`. Mutations are local and synchronous; for anything that leaves the device, use a [DataOperation](#dataoperation).
 
 ---
 
@@ -169,6 +170,77 @@ Triggered from UI via `"actionId": "mutation:<name>"`.
 
 ---
 
+## DataOperation
+
+An operation the host app runs, usually over the network, triggered by `"actionId": "operation:<name>"` (from a button, a card, or an `OnAppear` node). The schema declares what goes in and where the outcome goes; the host's `OperationHandler` decides how it runs. See SKILL.md for the host contract.
+
+```kotlin
+@Serializable
+data class DataOperation(
+    val input: Map<String, DataValueRef> = emptyMap(),   // resolved like a mutation's record, item context included
+    val pendingField: String? = null,                    // declared boolean, true while running; never persisted
+    val failureField: String? = null,                    // declared string, gets the failure code; cleared on each start; never persisted
+    val result: DataOperationResult? = null,             // where Success.records go
+    val onSuccess: List<DataEffect> = emptyList(),
+    val onFailure: List<DataEffect> = emptyList(),
+    val concurrency: OperationConcurrency = OperationConcurrency.dropWhileRunning,
+)
+```
+
+### DataOperationResult (sealed, discriminator `"type"`)
+
+| Variant | SerialName | Fields | Effect of `Success.records` |
+|---------|-----------|--------|-----------------------------|
+| `ReplaceCollection` | `"replaceCollection"` | `collection: String` | Replace every record, coerced to the collection's declared types, with ids generated where missing |
+| `SetFields` | `"setFields"` | `fields: Map<String, String>` (field name to record key) | Copy keys of the first record into fields, coerced to their declared types; with no records, reset the fields to their defaults |
+| `Unsupported` | (unknown type) | `typeName` | Records are discarded |
+
+### OperationConcurrency
+
+JSON uses the enum names.
+
+| Value | A second launch while one is running |
+|---|---|
+| `dropWhileRunning` (default) | Is ignored, so a double tap never submits twice |
+| `replace` | Cancels the running one and starts again (search-as-you-type) |
+
+The policy is per operation name: an `OnAppear` inside an `itemTemplate` launching the same operation for every row runs once under `dropWhileRunning`.
+
+### Example
+
+```json
+"operations": {
+  "submit_order": {
+    "input": { "amount": { "type": "fieldRef", "name": "amount" } },
+    "pendingField": "submitting",
+    "failureField": "submit_error",
+    "result": { "type": "replaceCollection", "collection": "orders" },
+    "onSuccess": [ { "type": "navigate", "page": "done" } ]
+  }
+}
+```
+
+`pendingField` and `failureField` must be declared fields of type `boolean` and `string`; a misdeclared one is reported through diagnostics and ignored.
+
+---
+
+## Unsupported types
+
+A `"type"` this build does not know decodes to the sealed type's `Unsupported` variant instead of failing the screen. Each keeps the original value in `typeName` and behaves as follows:
+
+| Variant | At runtime |
+|---|---|
+| `DataCondition.Unsupported` | Any condition tree containing one is `false`, including under `not`, in named conditions, `where`, and node `filter`s |
+| `ComputedField.Unsupported` | The field is a plain field holding its declared `default`; it has no dependencies |
+| `DataMutation.Unsupported` | Does nothing; its `then` effects are dropped at decode time |
+| `DataEffect.Unsupported` | Skipped; later effects in the same `then` still run |
+| `DataValueRef.Unsupported` | Resolves to `null` |
+| `DataOperationResult.Unsupported` | The returned records are discarded; effects still run |
+
+Use `UIScreen.compatibilityWith` (see SKILL.md) to find them before rendering. An unknown `DataField.type` still fails the parse.
+
+---
+
 ## Runtime Classes
 
 ### ReactiveDataStore
@@ -187,6 +259,8 @@ class ReactiveDataStore(
     override fun evaluate(conditionKey: String): Boolean
 
     fun insertRecord(collectionName: String, record: DataRecord)
+    // Coerces JSON primitives or Kotlin values to the declared types; generates missing ids.
+    fun replaceCollection(collectionName: String, records: List<DataRecord>)
     fun deleteRecord(collectionName: String, recordId: Any?)
     fun updateRecord(collectionName: String, recordId: Any?, values: Map<String, Any?>)
     fun collectionSize(name: String): Int
@@ -208,6 +282,8 @@ class ReactiveDataStore(
 
 Conditions are re-evaluated after every settled change. Field questions inside them go through the core `RecordConditionEvaluator.matchesValues`; only `collectionEmpty`/`collectionNotEmpty` and the `and`/`or`/`not` combinators are answered by the store.
 
+Fields named as any operation's `pendingField` or `failureField` are never persisted or hydrated, so a spinner can never come back stuck after process death.
+
 > **Threading:** `ReactiveDataStore` is not thread-safe. Drive it from a single thread (the UI thread in practice). Marshal back to the main dispatcher before calling in from a background coroutine.
 
 ### MutationExecutor
@@ -228,14 +304,44 @@ data class MutationResult(
 )
 ```
 
+### OperationExecutor
+
+Runs a schema's operations through the host's `OperationHandler`. Clears `failureField` and sets `pendingField`, calls the handler, then applies the result, the failure code and the effects in one `batch`, resetting `pendingField` in the same batch. On cancellation it resets `pendingField` and applies nothing.
+
+```kotlin
+class OperationExecutor(
+    store: ReactiveDataStore,
+    handler: OperationHandler,
+    diagnostics: RenderDiagnostics,
+) {
+    // Call on the store's thread. Throws only CancellationException: a handler throw becomes
+    // Failure(UNEXPECTED), and an effect that throws is reported, never propagated.
+    suspend fun execute(name: String, itemContext: DataRecord? = null): MutationResult
+}
+```
+
+### PageOperations
+
+The operations one page has started, with the concurrency policy applied. Create one per page, launch from the main thread, and `cancel()` it when the page leaves, so an operation the user walked away from never applies its effects or navigates.
+
+```kotlin
+class PageOperations(executor: OperationExecutor) {
+    fun launch(name: String, itemContext: DataRecord?, onSettled: (MutationResult) -> Unit)
+    fun cancel()
+}
+```
+
+`renderedEntries` does this for you. Host-specific errors (a throwing `onSettled`) are reported through the executor's diagnostics.
+
 ### renderedPageActionHandler
 
-Gives the built-in action prefixes their meaning for any host, Nav3 or not, and passes everything else to `fallback`. A `mutation:` action reads its item context from the payload's `_itemContext`.
+Gives the built-in action prefixes their meaning for any host, Nav3 or not, and passes everything else to `fallback`. `mutation:` and `operation:` actions read their item context from the payload's `_itemContext`.
 
 ```kotlin
 fun renderedPageActionHandler(
     fallback: ActionHandler,
     mutationExecutor: MutationExecutor?,          // null: mutation: actions are ignored
+    operations: PageOperations? = null,           // null: operation: actions are ignored
     navigateToPage: (pageId: String) -> Unit,
     navigateBack: () -> Unit,
 ): ActionHandler
