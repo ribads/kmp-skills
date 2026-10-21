@@ -489,7 +489,7 @@ internal fun LoginScreen(
             modifier = Modifier.padding(padding).padding(horizontal = Theme.spacing.x6),
             verticalArrangement = Arrangement.spacedBy(Theme.spacing.x4),
         ) {
-            LabelTextField(
+            TextField(
                 model = viewState.email,
                 modifier = Modifier.fillMaxWidth(),
                 onValueChange = { viewModel.emit(Intent.OnEmailChanged(it)) },

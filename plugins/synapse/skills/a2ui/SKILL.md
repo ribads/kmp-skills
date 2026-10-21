@@ -338,7 +338,7 @@ Every visible component keeps an 8 dp margin (`Theme.spacing.x2`) and containers
 | Divider | `Divider` in `border.secondary`; vertical is a 1 dp line |
 | Modal | the trigger; tapping it opens the content in a `Tray` |
 | Button | `primary`: `PrimaryButton`, `default`: `OutlineButton`, `borderless`: a link in the accent. A `Text` child becomes the title, an `Icon` child an icon button, a `Row` of a `Text` between icons a title with images; any other child is drawn inside. Disabled while a check fails |
-| TextField | `LabelTextField` (`number`: numeric keyboard), `longText`: `TextArea`, `obscured`: `PasswordTextField`; checks and `validationRegexp` show in the footer once the user has typed |
+| TextField | `TextField` (`number`: numeric keyboard), `longText`: `TextArea`, `obscured`: `PasswordTextField`; checks and `validationRegexp` show in the footer once the user has typed |
 | CheckBox | `LabelCheckbox` |
 | ChoicePicker | `chips`: `ChipGroup`; otherwise checkboxes for `multipleSelection`, `RadioGroup` for `mutuallyExclusive` (a `DropdownSelectionField` past six options); `filterable` adds a search field |
 | Slider | `Slider`, showing the value beside its label; a whole-number range at least 10 wide moves in whole steps |

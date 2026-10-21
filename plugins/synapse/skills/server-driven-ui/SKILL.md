@@ -41,8 +41,8 @@ Import each type from its package below.
 | `com.ribads.synapse.ui.renderer.data` | `DataPersistence`, `MutationExecutor`, `MutationResult`, `OperationExecutor`, `PageOperations`, `ReactiveDataStore`, `renderedPageActionHandler` |
 | `com.ribads.synapse.ui.renderer.diagnostics` | `RenderDiagnostics`, `RenderPassSummary`, `callbackRenderDiagnostics`, `children`, `reportNodeRenderError`, `summarizeTree` |
 | `com.ribads.synapse.ui.renderer.engine` | `BoundRecordGroups`, `BoundRecords`, `CollectionProvider`, `ConditionEvaluator`, `DataRecord`, `DataRecordView`, `ITEM_CONTEXT_PAYLOAD_KEY`, `MediaProvider`, `NodeRenderer`, `NodeRendererRegistry`, `RecordConditionEvaluator`, `RenderNode`, `SynapseRenderer`, `TemplateEngine`, `boundRecords`, `committedValue`, `dispatchWithRecord`, `effectiveTextFormat`, `hasConditionalFormat`, `narrowRecords`, `recordFieldReader`, `watchBoundRecords` |
-| `com.ribads.synapse.ui.renderer.navigation` | `InMemorySchemaStore`, `RenderedPageAction`, `RenderedPageConfig`, `RenderedPageKey`, `RenderedRoutesBuilder`, `SchemaStore`, `ScreenParseResult`, `ScreenRequirements`, `UIPage`, `UIScreen`, `load`, `navigateToRenderedPage`, `parseUIScreen`, `renderedEntries`, `renderedEntry`, `rendererNavigationSerializers`, `toUIScreen` |
-| `com.ribads.synapse.ui.renderer.schema` | `ComputedField`, `DataCollection`, `DataCondition`, `DataEffect`, `DataField`, `DataFieldType`, `DataMutation`, `DataOperation`, `DataOperationResult`, `DataOrderBy`, `DataSchema`, `DataValueRef`, `OperationConcurrency`, `SchemaParseResult`, `SortDirection`, `UIButtonState`, `UIDimension`, `UIGradient`, `UIModifier`, `UINavBarAction`, `UINavBarLeadingIcon`, `UINode`, `UITextFormat`, `UITextIntent`, `UITheme`, `UIThemeBorder`, `UIThemeColors`, `UIThemeElement`, `UIThemeElementInteractive`, `UIThemeIntentPalette`, `UIThemeIntents`, `UIThemeShadow`, `UIThemeShape`, `UIThemeSpacing`, `UIThemeSurface`, `UIThemeSurfaceInteractive`, `UIThemeTextStyle`, `UIThemeTypography`, `UIVisibility`, `containsUnsupported`, `parseUINode`, `schemaType`, `toUINode`, `toUINodes` |
+| `com.ribads.synapse.ui.renderer.navigation` | `InMemorySchemaStore`, `RenderedPageAction`, `RenderedPageConfig`, `RenderedPageKey`, `RenderedRoutesBuilder`, `SchemaStore`, `ScreenParseResult`, `ScreenRequirements`, `UIPage`, `UIScreen`, `load`, `navigateToRenderedPage`, `parseUIScreen`, `renderedEntries`, `renderedEntry`, `rendererNavigationSerializers`, `toUIScreen`, `uiScreenJsonSchema` |
+| `com.ribads.synapse.ui.renderer.schema` | `ComputedField`, `DataCollection`, `DataCondition`, `DataEffect`, `DataField`, `DataFieldType`, `DataMutation`, `DataOperation`, `DataOperationResult`, `DataOrderBy`, `DataSchema`, `DataValueRef`, `OperationConcurrency`, `SchemaParseResult`, `SortDirection`, `UIButtonState`, `UIDimension`, `UIGradient`, `UIModifier`, `UINavBarAction`, `UINavBarLeadingIcon`, `UINode`, `UITextFormat`, `UITextIntent`, `UITheme`, `UIThemeBorder`, `UIThemeColors`, `UIThemeElement`, `UIThemeElementInteractive`, `UIThemeIntentPalette`, `UIThemeIntents`, `UIThemeShadow`, `UIThemeShape`, `UIThemeSpacing`, `UIThemeSurface`, `UIThemeSurfaceInteractive`, `UIThemeTextStyle`, `UIThemeTypography`, `UIVisibility`, `containsUnsupported`, `parseUINode`, `schemaType`, `toUINode`, `toUINodes`, `uiNodeJsonSchema` |
 | `com.ribads.synapse.ui.renderer.state` | `InMemoryRendererStateHolder`, `RendererStateHolder`, `WatchHandle`, `watchBoolean`, `watchDouble`, `watchLong`, `watchRevision`, `watchString` |
 | `com.ribads.synapse.ui.renderer.theme` | `FontResolver`, `ResolvedShape`, `ResolvedTheme`, `WithRenderedTheme`, `resolve` |
 
@@ -314,6 +314,24 @@ data class Unknown(
     @Transient val typeName: String = "Unknown",   // e.g. "Hologram"; not serialised
 ) : UINode()
 ```
+
+## JSON Schema for generators
+
+```kotlin
+/** Draft 2020-12 JSON Schema for one node payload. */
+fun uiNodeJsonSchema(): String           // com.ribads.synapse.ui.renderer.schema
+
+/** Draft 2020-12 JSON Schema for a screen payload. */
+fun uiScreenJsonSchema(): String         // com.ribads.synapse.ui.renderer.navigation
+```
+
+Both are generated from the serializers, so they always match the library version in use. Use them to validate generated payloads, or to constrain an LLM's output (Gemini, XGrammar in vLLM/SGLang, llguidance). Snapshots for non-Kotlin pipelines are checked in at `ui/renderer-core/json-schema/ui-node.schema.json` and `ui-screen.schema.json`.
+
+- Every named type sits under `$defs`, recursion goes through `$ref` (`UINode.children`, `DataCondition` `and`/`or`/`not`), and each union is an `anyOf` of variants that pin `type` with `const`.
+- **Stricter than the parser**: every object sets `additionalProperties: false`, enums are exact, and the `Unknown` and `Unsupported` fallbacks are left out. A payload the renderer draws can still fail validation, for example one with a misspelt enum that `coerceInputValues` quietly drops.
+- **Structural only**: no `description`s and no defaults. A property is optional exactly when its Kotlin parameter has a default.
+- It does not check meaning: that an `actionId` has a handler, that a data reference resolves, or that a `{{template}}` is well formed.
+- Recursive schemas are outside some providers' structured-output support (Claude's included); validate and repair instead there.
 
 ---
 

@@ -1098,7 +1098,7 @@ private val LightColors = Colors(
     elementInteractive = ElementInteractive(
         enabled = Color(0xFFFFFFFF),
         hoverTap = Color(0xFF6366F1),
-        disabled = Color(0xFFFFFFFF),
+        disabled = Color(0xFF6B7280),
     ),
     shadow = Shadow(spot = Color(0x1A000000)),
     intents = Intents(
@@ -1134,7 +1134,7 @@ private val DarkColors = Colors(
     elementInteractive = ElementInteractive(
         enabled = Color(0xFF111827),
         hoverTap = Color(0xFF9CA3AF),
-        disabled = Color(0xFF374151),
+        disabled = Color(0xFF9CA3AF),
     ),
     shadow = Shadow(spot = Color(0x33000000)),
     intents = Intents(
@@ -1169,7 +1169,7 @@ private val AppShape = Shape(
     roundShape = RoundedCornerShape(16.dp),
     imageShape = CircleShape,
     card = RoundedCornerShape(8.dp),
-    textShape = RoundedCornerShape(4.dp),
+    textShape = RoundedCornerShape(12.dp),
     chipShape = RoundedCornerShape(8.dp),
 )
 '''

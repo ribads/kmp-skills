@@ -60,11 +60,12 @@ Use this table to go from need → Synapse composable + model. For composable si
 |---|---|---|
 | Primary CTA / small CTA | `PrimaryButton` / `SmallButton` | `ButtonModel` (+ `ButtonState` as separate field if loading/disabled toggles) |
 | Outlined action | `OutlineButton` / `SmallOutlineButton` | `ButtonModel` |
-| Text entry | `LabelTextField` | `TextInputModel` |
+| Text entry | `TextField` | `TextInputModel` (+ `FieldState` as separate field if read-only/disabled toggles) |
 | Password | `PasswordTextField` | `TextInputModel` |
 | Phone | `PhoneTextField` | `PhoneInputModel` |
 | Currency | `CurrencyTextField` | `CurrencyInputModel` |
 | Dropdown-style | `SelectionTextField` | `TextInputModel` |
+| Dropdown menu | `DropdownSelectionField` | `SelectionFieldModel` |
 | Multi-line | `TextArea` | `TextInputModel` |
 | Date | `DatePicker` / `DatePickerBottomSheet` | `DatePickerModel` |
 | Time | `TimePicker` | `TimePickerModel` |
@@ -143,7 +144,7 @@ For each UI event, the changes you need across the five files. The Mapper builds
 
 Goal: in the `auth` feature, an email field, a password field and a primary "Log in" button that call `LoginUseCase`. On success the app enters the `home` feature as the new root, so back does not return to login; on failure a toast says why.
 
-Pick components: `LabelTextField` + `PasswordTextField` + `PrimaryButton`. All three are Synapse primitives, so no custom composables are needed.
+Pick components: `TextField` + `PasswordTextField` + `PrimaryButton`. All three are Synapse primitives, so no custom composables are needed.
 
 **UseCase result** (`features/auth/usecase`). The feature owns it; per `/synapse:data-boundaries` a UseCase never returns a domain entity result or `kotlin.Result`:
 
@@ -329,7 +330,7 @@ internal fun LoginScreen(
             modifier = Modifier.padding(padding).padding(horizontal = Theme.spacing.x6),
             verticalArrangement = Arrangement.spacedBy(Theme.spacing.x4),
         ) {
-            LabelTextField(model = viewState.email, onValueChange = { viewModel.emit(Intent.OnEmailChanged(it)) })
+            TextField(model = viewState.email, onValueChange = { viewModel.emit(Intent.OnEmailChanged(it)) })
             PasswordTextField(model = viewState.password, onValueChange = { viewModel.emit(Intent.OnPasswordChanged(it)) })
             PrimaryButton(model = viewState.submit, state = viewState.submitState, onClick = { viewModel.emit(Intent.OnSubmitClick) })
         }

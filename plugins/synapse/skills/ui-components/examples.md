@@ -13,10 +13,16 @@ PrimaryButton(
 ## Text Fields
 
 ```kotlin
-LabelTextField(
+TextField(
     model = TextInputModel(label = "Email".asText(), value = email, placeholder = "Enter email".asText()),
+    state = viewState.formState,    // FieldState.Disabled while the form submits
     onValueChange = { email = it }
 )
+
+// At the app root, to draw every field outlined instead of filled
+WithTextFieldStyle(TextFieldStyle.Outlined) {
+    App()
+}
 ```
 
 ## Currency field

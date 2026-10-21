@@ -43,8 +43,8 @@ Import each type from its package below.
 | `com.ribads.synapse.ui.component.divider` | `Divider` |
 | `com.ribads.synapse.ui.component.emptystate` | `EmptyState` |
 | `com.ribads.synapse.ui.component.emptystate.model` | `EmptyStateModel` |
-| `com.ribads.synapse.ui.component.field` | `CurrencyTextField`, `DropdownSelectionField`, `LabelTextField`, `PasswordTextField`, `PhoneTextField`, `SelectionTextField`, `TextArea` |
-| `com.ribads.synapse.ui.component.field.model` | `CountryLocale`, `CurrencyAmount`, `CurrencyInputModel`, `PhoneInputModel`, `SelectionFieldModel`, `SelectionOption`, `TextInputModel` |
+| `com.ribads.synapse.ui.component.field` | `CurrencyTextField`, `DropdownSelectionField`, `LocalTextFieldStyle`, `PasswordTextField`, `PhoneTextField`, `SelectionTextField`, `TextArea`, `TextField`, `WithTextFieldStyle` |
+| `com.ribads.synapse.ui.component.field.model` | `CountryLocale`, `CurrencyAmount`, `CurrencyInputModel`, `FieldState`, `PhoneInputModel`, `SelectionFieldModel`, `SelectionOption`, `TextFieldStyle`, `TextInputModel` |
 | `com.ribads.synapse.ui.component.progress` | `CircularProgress`, `ProgressBar` |
 | `com.ribads.synapse.ui.component.progress.model` | `CircularProgressModel`, `ProgressBarModel` |
 | `com.ribads.synapse.ui.component.radio` | `RadioGroup` |
@@ -81,7 +81,7 @@ Import each type from its package below.
 | Small button | `SmallButton` | `ButtonModel` | [inputs](inputs-reference.md) |
 | Outline button | `OutlineButton` | `ButtonModel` | [inputs](inputs-reference.md) |
 | Small outline button | `SmallOutlineButton` | `ButtonModel` | [inputs](inputs-reference.md) |
-| Label text field | `LabelTextField` | `TextInputModel` | [inputs](inputs-reference.md) |
+| Text field | `TextField` | `TextInputModel` | [inputs](inputs-reference.md) |
 | Password text field | `PasswordTextField` | `TextInputModel` | [inputs](inputs-reference.md) |
 | Phone text field | `PhoneTextField` | `PhoneInputModel` | [inputs](inputs-reference.md) |
 | Currency text field | `CurrencyTextField` | `CurrencyInputModel` | [inputs](inputs-reference.md) |
@@ -134,7 +134,7 @@ PrimaryButton(model: ButtonModel, modifier: Modifier = Modifier, state: ButtonSt
               onClick: (() -> Unit)?)
 ```
 
-Required callbacks deliberately sit *after* defaulted config parameters, so callbacks are passed as named arguments. Containers (`Scaffold`, `Card`, `TraySurface`, `ToastHandler`) have no `model`, lead with `modifier`, and end with a trailing `content` slot. A few components predate the rule: `Divider` leads with `color`, the text-field family buries `modifier` mid-list, and `Tray` and `ScrollableTray` lead with `onDismissRequest` and take no `modifier` at all (the sheet fills the window's width; size what you put inside it).
+Required callbacks deliberately sit *after* defaulted config parameters, so callbacks are passed as named arguments. Containers (`Scaffold`, `Card`, `TraySurface`, `ToastHandler`) have no `model`, lead with `modifier`, and end with a trailing `content` slot. A few components predate the rule: `Divider` leads with `color`, and `Tray` and `ScrollableTray` lead with `onDismissRequest` and take no `modifier` at all (the sheet fills the window's width; size what you put inside it).
 
 **Everything else that holds across the catalog:**
 
@@ -145,9 +145,9 @@ Required callbacks deliberately sit *after* defaulted config parameters, so call
 - **Build models outside composables**, in `ViewState.Default`, the Mapper, or the Reducer. Never inline in a `@Composable`.
 - **Components are stateless for anything that matters to the screen.** They render what you pass and report events upward; there are no stateful/stateless pairs and no public `rememberXState()` factories. Hoist state into `ViewState`. A few keep local UI state that the screen never needs, and it resets when they leave the composition: `PasswordTextField` (whether the password is visible; it still reports toggles through `onPasswordToggleChange`), `DropdownSelectionField` (whether the menu is open), `DatePicker` (the month on screen and whether the month or year grid is showing; a new model resets them), and `Slider` (the thumb position while dragging, reset by a new `value`).
 - **Components never accept domain models or use-case DTOs.** Translate in the Mapper first.
-- **`ButtonState` is a separate `ViewState` field**, not a field on `ButtonModel`. Pass it as the `state =` argument so loading and disabled states are driven by the reducer.
+- **`ButtonState` and `FieldState` are separate `ViewState` fields**, not fields on `ButtonModel` or the field models. Pass them as the `state =` argument so loading, read-only and disabled states are driven by the reducer.
 - **Components read theme roles and never branch on the appearance.** They are correct in light and dark with no arguments; a region that must stay dark (a camera, controls over a photo) is wrapped in `WithAppearance(Appearance.Dark)` by the caller (see `/synapse:ui-element`).
-- **Validation feedback goes in the model.** `TextInputModel.isError = true` recolours the indicator and footer automatically; put the message in `footerText`, not in a separate `Text` below the field.
+- **Validation feedback goes in the model.** `TextInputModel.isError = true` draws the error ring and recolours the footer automatically; put the message in `footerText`, not in a separate `Text` below the field, so screen readers announce it as the field's error.
 - **Callbacks are named for the slot, not the consequence**: `onClick` when there is one action, otherwise `onLeadingClick` / `onTrailingIconClick` / `onValueChange` / `onCheckedChange`, and `onDismissRequest` for every dismissal. Nullable click handlers use `OptionalClickCallback` from `ui:element`.
 
 **Not in this catalog:** there is no loading-box, error-box, or pagination helper. Build loading states from `Modifier.shimmer()` over `Placeholder` model variants, empty states from `EmptyState`, and drive pagination from `nextPageToken` on your `ViewState`.

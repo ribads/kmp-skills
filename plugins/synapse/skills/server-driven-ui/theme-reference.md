@@ -59,7 +59,7 @@ The host app's theme has a light and a dark scheme of single-valued roles (see `
 Only colours merge with the host. In Compose, any non-null `theme`, even one that sends only colours, replaces the rest of the host theme:
 
 - **Typography: the whole host type scale is replaced.** A role the payload leaves unset falls back to Compose's default text style, not the host's, and the font becomes `FontFamily.Default` unless `typography.fontFamily` names a font the `FontResolver` can load. Send every role you use, with a `fontFamily`, when the payload sets a theme.
-- **Spacing and shape: unset steps and radii take Synapse's defaults** (`ResolvedTheme.Default`: spacing `x1` = 4 up to `x32` = 128; shapes `button` 8, `round` 16, `chip` 100, `image` 12, `text` 8, `card` 12, `circle` a perfect circle), not the host app's values.
+- **Spacing and shape: unset steps and radii take Synapse's defaults** (`ResolvedTheme.Default`: spacing `x1` = 4 up to `x32` = 128; shapes `button` 8, `round` 16, `chip` 100, `image` 12, `text` 12, `card` 12, `circle` a perfect circle), not the host app's values.
 
 ---
 
@@ -97,7 +97,7 @@ data class UIThemeTypography(
 
 ## UIThemeShape
 
-`button`, `round`, `chip`, `image`, `circle`, `text`, `card` (all `Float?`): corner radii in dp. `circle` sets the circle role's radius; unset, it stays a perfect circle at any size.
+`button`, `round`, `chip`, `image`, `circle`, `text`, `card` (all `Float?`): corner radii in dp. `text` is the corner radius of every input field. `circle` sets the circle role's radius; unset, it stays a perfect circle at any size.
 
 Resolved, engine-neutral form (`com.ribads.synapse.ui.renderer.theme`):
 

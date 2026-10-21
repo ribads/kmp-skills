@@ -81,7 +81,7 @@ fun Panel(
 
 So the full rule is: `model`, `modifier`, config, callbacks, `content`, dropping whichever do not apply. There is no appearance or colour-inversion parameter: see [Colours](#colours).
 
-Synapse's own module holds this at roughly 80%. The known deviations are `Divider` (leads with `color`) and the `field/` family (buries `modifier`). Match the rule above for new components rather than the nearest existing file.
+Synapse's own module holds this at roughly 80%. The known deviation is `Divider` (leads with `color`). Match the rule above for new components rather than the nearest existing file.
 
 ### Callback naming
 

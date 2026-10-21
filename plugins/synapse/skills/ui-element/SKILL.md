@@ -142,7 +142,7 @@ data class SurfaceInteractive(val enabled: Color, val hoverTap: Color, val disab
 
 @Immutable
 data class Border(
-    val primary: Color,     // the outline of a text field
+    val primary: Color,     // the outline of an outlined text field
     val secondary: Color,   // a list separator
     val emphasis: Color,    // an outlined button's border, a focused field
 )
@@ -263,6 +263,8 @@ data class Shape(
     val imageShape: Shape, val circleShape: Shape, val textShape: Shape, val card: Shape,
 )
 ```
+
+`textShape` is the corners of every text field in `ui:component`.
 
 All theme values (colour schemes, typography styles, spacing sizes, shapes) are **defined by the consuming app**, not by this library. The library provides the data structures and the composables that wire them into the composition. Apps create their own theme composable that calls `WithAppTheme` at the root. There are no preset or ready-made themes in this module. `spacing` is optional: when omitted, the theme keeps a built-in default spacing scale (`x1 = 4.dp` to `x32 = 128.dp`). Typography carries no colours: `Text` draws in the style's colour if it sets one, and in `LocalContentColor` otherwise.
 
