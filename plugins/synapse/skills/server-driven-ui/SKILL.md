@@ -41,8 +41,8 @@ Import each type from its package below.
 | `com.ribads.synapse.ui.renderer.data` | `DataPersistence`, `MutationExecutor`, `MutationResult`, `OperationExecutor`, `PageOperations`, `ReactiveDataStore`, `renderedPageActionHandler` |
 | `com.ribads.synapse.ui.renderer.diagnostics` | `RenderDiagnostics`, `RenderPassSummary`, `callbackRenderDiagnostics`, `children`, `reportNodeRenderError`, `summarizeTree` |
 | `com.ribads.synapse.ui.renderer.engine` | `BoundRecordGroups`, `BoundRecords`, `CollectionProvider`, `ConditionEvaluator`, `DataRecord`, `DataRecordView`, `ITEM_CONTEXT_PAYLOAD_KEY`, `MediaProvider`, `NodeRenderer`, `NodeRendererRegistry`, `RecordConditionEvaluator`, `RenderNode`, `SynapseRenderer`, `TemplateEngine`, `boundRecords`, `committedValue`, `dispatchWithRecord`, `effectiveTextFormat`, `hasConditionalFormat`, `narrowRecords`, `recordFieldReader`, `watchBoundRecords` |
-| `com.ribads.synapse.ui.renderer.navigation` | `InMemorySchemaStore`, `RenderedPageAction`, `RenderedPageConfig`, `RenderedPageKey`, `RenderedRoutesBuilder`, `SchemaStore`, `ScreenParseResult`, `ScreenRequirements`, `UIPage`, `UIScreen`, `load`, `navigateToRenderedPage`, `parseUIScreen`, `renderedEntries`, `renderedEntry`, `rendererNavigationSerializers`, `toUIScreen`, `uiScreenJsonSchema` |
-| `com.ribads.synapse.ui.renderer.schema` | `ComputedField`, `DataCollection`, `DataCondition`, `DataEffect`, `DataField`, `DataFieldType`, `DataMutation`, `DataOperation`, `DataOperationResult`, `DataOrderBy`, `DataSchema`, `DataValueRef`, `OperationConcurrency`, `SchemaParseResult`, `SortDirection`, `UIButtonState`, `UIDimension`, `UIGradient`, `UIModifier`, `UINavBarAction`, `UINavBarLeadingIcon`, `UINode`, `UITextFormat`, `UITextIntent`, `UITheme`, `UIThemeBorder`, `UIThemeColors`, `UIThemeElement`, `UIThemeElementInteractive`, `UIThemeIntentPalette`, `UIThemeIntents`, `UIThemeShadow`, `UIThemeShape`, `UIThemeSpacing`, `UIThemeSurface`, `UIThemeSurfaceInteractive`, `UIThemeTextStyle`, `UIThemeTypography`, `UIVisibility`, `containsUnsupported`, `parseUINode`, `schemaType`, `toUINode`, `toUINodes`, `uiNodeJsonSchema` |
+| `com.ribads.synapse.ui.renderer.navigation` | `InMemorySchemaStore`, `RenderedPageAction`, `RenderedPageConfig`, `RenderedPageKey`, `RenderedRoutesBuilder`, `SchemaStore`, `ScreenNavigationHost`, `ScreenNavigationState`, `ScreenNavigator`, `ScreenParseResult`, `ScreenRequirements`, `UINavigationTab`, `UIPage`, `UIScreen`, `UIScreenNavigation`, `load`, `navigateToRenderedPage`, `parseUIScreen`, `rememberScreenNavigator`, `renderedEntries`, `renderedEntry`, `rendererNavigationSerializers`, `toUIScreen`, `uiScreenJsonSchema` |
+| `com.ribads.synapse.ui.renderer.schema` | `ComputedField`, `DataCollection`, `DataCondition`, `DataEffect`, `DataField`, `DataFieldType`, `DataMutation`, `DataOperation`, `DataOperationResult`, `DataOrderBy`, `DataSchema`, `DataValueRef`, `OperationConcurrency`, `SchemaParseResult`, `SortDirection`, `UIButtonState`, `UIDimension`, `UIGradient`, `UIModifier`, `UINavBarAction`, `UINavBarLeadingIcon`, `UINode`, `UITextFormat`, `UITextIntent`, `UITheme`, `UIThemeBorder`, `UIThemeColors`, `UIThemeCorners`, `UIThemeElement`, `UIThemeElementInteractive`, `UIThemeIntentPalette`, `UIThemeIntents`, `UIThemeNeutral`, `UIThemeShadow`, `UIThemeShape`, `UIThemeSpacing`, `UIThemeSurface`, `UIThemeSurfaceInteractive`, `UIThemeTextStyle`, `UIThemeTypography`, `UIVisibility`, `containsUnsupported`, `parseUINode`, `schemaType`, `toUINode`, `toUINodes`, `uiNodeJsonSchema` |
 | `com.ribads.synapse.ui.renderer.state` | `InMemoryRendererStateHolder`, `RendererStateHolder`, `WatchHandle`, `watchBoolean`, `watchDouble`, `watchLong`, `watchRevision`, `watchString` |
 | `com.ribads.synapse.ui.renderer.theme` | `FontResolver`, `ResolvedShape`, `ResolvedTheme`, `WithRenderedTheme`, `resolve` |
 
@@ -412,7 +412,7 @@ Hosts using `renderedEntries` only set `RenderedPageConfig.operationHandler`. A 
 Package `com.ribads.synapse.ui.renderer.capability`. The client sends what it can run with every screen request; the server only returns screens that fit, and the client can check a screen before rendering it.
 
 ```kotlin
-object SynapseSchemaVersion { const val CURRENT: Int }      // 2; 1 is everything through 0.2.0-alpha9
+object SynapseSchemaVersion { const val CURRENT: Int }      // 3; see the version table in SCHEMA.md
 
 class RendererCapabilities(val operations: Set<String> = emptySet()) {   // names bound natively; no blanks or commas
     val schemaVersion: Int
@@ -547,15 +547,65 @@ data class UIScreen(
     val theme: UITheme? = null,
     val data: DataSchema? = null,
     val pages: List<UIPage> = emptyList(),
+    val requires: ScreenRequirements? = null,
+    val navigation: UIScreenNavigation? = null,
 ) {
-    val entryPage: String?
+    val entryPage: String?                       // startPage, else the first tab's page, else the first page
+    fun resolvedTabs(): List<UINavigationTab>    // tabs whose page exists, each page once
 }
 
 @Serializable
 data class UIPage(val id: String, val root: UINode)
 
+@Serializable
+data class UIScreenNavigation(val tabs: List<UINavigationTab> = emptyList())
+
+@Serializable
+data class UINavigationTab(val page: String, val label: String, val icon: UIIcon? = null)
+
 fun String.toUIScreen(): UIScreen
 ```
+
+### Screen tabs
+
+A screen's top-level destinations are declared once, in `navigation.tabs`; pages never draw a tab bar themselves. The renderer keeps one stack of pages per tab, so switching tabs keeps each tab where the user left it.
+
+```json
+{
+  "navigation": { "tabs": [
+    { "page": "trip", "label": "Trip", "icon": "map" },
+    { "page": "budget", "label": "Budget", "icon": "payments" }
+  ] },
+  "pages": [ ... ]
+}
+```
+
+- `renderer:navigate:<page>` opens the page on top of the tab showing; naming a tab's root page selects that tab at its root. Opening the page already showing does nothing.
+- Selecting the tab showing returns it to its root.
+- Back closes the page showing, then returns to the first tab from another tab's root, then leaves the screen.
+- A start page that is not a tab root (onboarding, say) shows without the bar until the user enters a tab.
+
+Every host navigates through the same pure model, `ScreenNavigationState` (in `ui:renderer-core`). Compose hosts draw it with `ScreenNavigationHost` (in `ui:renderer`):
+
+```kotlin
+val navigator = rememberScreenNavigator(screen.entryPage!!, screen.resolvedTabs())
+WithRenderedTheme(theme = screen.theme) {
+    ScreenNavigationHost(navigator) { pageId -> /* SynapseRenderer for pageId */ }
+}
+// renderer:navigate: -> navigator.navigate(pageId); renderer:back -> if (!navigator.back()) leaveTheScreen()
+```
+
+`ScreenNavigationHost` draws the design system's `BottomNavigationBar` inside its `Scaffold`, keeps every open page's saved state while another tab shows, moves pages with the platform's navigation motion, and handles system back in the order above.
+
+SwiftUI hosts use the SwiftUI engine's `ScreenNavigator` and `ScreenNavigationHost`, which draw the same model as a system `TabView` over one `NavigationStack` per tab:
+
+```swift
+@StateObject var navigator = ScreenNavigator(entryPage: screen.entryPage!, tabs: screen.resolvedTabs())
+ScreenNavigationHost(navigator: navigator) { pageId in /* SynapseRendererView for pageId */ }
+// renderer:navigate: -> navigator.navigate(pageId); renderer:back -> if !navigator.back() { leaveTheScreen() }
+```
+
+Tabs need schema version 3; servers should send tabbed screens only to clients that report it.
 
 ### renderedEntries / renderedEntry
 
@@ -612,10 +662,13 @@ data class RenderedPageConfig(
     val mediaProvider: MediaProvider = MediaProvider.NoOp,
     val diagnostics: RenderDiagnostics = RenderDiagnostics.NoOp,
     val operationHandler: OperationHandler? = null,             // ignored without dataSchema
+    val navigation: UIScreenNavigation? = null,                  // tabs: the screen runs inside one entry
 )
 ```
 
 `stateHolder` and `conditionEvaluator` are ignored when `dataSchema` is set: the `ReactiveDataStore` takes over both roles.
+
+A route without tabs registers each page as its own Nav3 entry. A route whose `navigation` has tabs is one entry holding the whole screen through `ScreenNavigationHost`; navigation between its pages stays inside that entry, and back pops the entry only once there is nowhere to go back to within the screen.
 
 Each rendered page gets its own `PageOperations`, cancelled when the page leaves composition (including an Android configuration change, which rebuilds the route's store from persistence). An operation the user walked away from never applies its effects, so make submits idempotent on the server. A page under a bottom sheet or dialog stays composed, so its operations keep running.
 

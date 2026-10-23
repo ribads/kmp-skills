@@ -5,12 +5,31 @@ JSON-declarable theme that overrides the design system at render time. A payload
 ```kotlin
 @Serializable
 data class UITheme(
+    val brand: String? = null,
+    val accent: String? = null,
+    val neutral: UIThemeNeutral? = null,   // Tinted (default), Warm, Cool, Gray
+    val corners: UIThemeCorners? = null,   // Sharp, Soft (default), Round
     val colors: UIThemeColors? = null,
     val typography: UIThemeTypography? = null,
     val spacing: UIThemeSpacing? = null,
     val shape: UIThemeShape? = null,
 )
 ```
+
+---
+
+## A theme from a brand colour
+
+`brand` alone sets every colour role in both appearances:
+
+```json
+{ "theme": { "brand": "#1B2A4A", "accent": "#C9A96E", "neutral": "Warm", "corners": "Round" } }
+```
+
+- **Contrast is guaranteed.** Primary text reaches 7:1 on every surface, secondary text, intent text and button labels 4.5:1, and in dark mode a filled control reaches 3:1 against the page. `BrandColorsTest` checks this across a sweep of brand colours.
+- **The brand is used exactly as given** whenever it can carry a white label at 4.5:1. A light brand (yellow, orange) keeps its colour under a dark label; any other brand darkens in lightness only, keeping its hue. In dark mode a brand too dark to show against the page becomes a light tone of itself with a dark label.
+- `accent` colours the accent intent (`Emphasis` text, its surface and border); unset, it is the brand. `neutral` tints backgrounds, borders and text: `Tinted` carries a trace of the brand's hue, `Warm` gives cream and warm greys, `Cool` blue-greys, `Gray` none. `corners` picks the radii: `Sharp`, `Soft` (the Synapse defaults) or `Round` (pill buttons).
+- **`colors` and `shape` still override single roles** on top of what the brand derives. A brand that does not parse as hex derives nothing.
 
 ---
 
@@ -50,7 +69,7 @@ data class UIThemeColors(
 The host app's theme has a light and a dark scheme of single-valued roles (see `/synapse:ui-element`). The payload keeps light/dark field pairs, and each field sets one role in one scheme: a `...Light` or `...OnLight` field sets the light scheme, a `...Dark` or `...OnDark` field sets the dark scheme, with the suffix dropped (`element.primaryOnDark` sets the dark scheme's `element.primary`).
 
 - **Unset fields keep the host's value** for that role and appearance, so a partial theme changes only what it names. A payload that sets only `...OnLight` fields leaves dark mode entirely to the host.
-- **Roles with no payload field** (`surface.raised`, `surface.skeleton`, `overlay`) always come from the host.
+- **Roles with no payload field** (`surface.raised`, `surface.skeleton`, `overlay`) come from the host, except that a `brand` derives `raised` and `skeleton` too (Compose only so far; the SwiftUI engine does not map them yet).
 - **The appearance is the host's.** The payload never chooses light or dark. Compose renders the scheme for the host's `WithAppTheme` appearance; SwiftUI renders the one for the view's `\.colorScheme`.
 - In Compose, a schema with no `theme` renders with the host theme unchanged. The SwiftUI engine has no host Synapse theme, so it uses iOS system colours for anything the payload leaves unset.
 
@@ -58,7 +77,7 @@ The host app's theme has a light and a dark scheme of single-valued roles (see `
 
 Only colours merge with the host. In Compose, any non-null `theme`, even one that sends only colours, replaces the rest of the host theme:
 
-- **Typography: the whole host type scale is replaced.** A role the payload leaves unset falls back to Compose's default text style, not the host's, and the font becomes `FontFamily.Default` unless `typography.fontFamily` names a font the `FontResolver` can load. Send every role you use, with a `fontFamily`, when the payload sets a theme.
+- **Typography: the whole host type scale is replaced.** A role the payload leaves unset takes Synapse's scale (`ResolvedTypography.Default`: `h1` 34/40 semibold down to `labelXs` 10/14 medium), not the host's, and the font becomes `FontFamily.Default` unless `typography.fontFamily` names a font the `FontResolver` can load. A role the payload sets is used as given, so set its weight and line height too.
 - **Spacing and shape: unset steps and radii take Synapse's defaults** (`ResolvedTheme.Default`: spacing `x1` = 4 up to `x32` = 128; shapes `button` 8, `round` 16, `chip` 100, `image` 12, `text` 12, `card` 12, `circle` a perfect circle), not the host app's values.
 
 ---

@@ -96,6 +96,8 @@ Shared fields: `title`, `leadingImageUrl`, `trailingImageUrl`, `state`, `stateCo
 | `Divider` | (modifier only) |
 | `Scaffold` | `topBar` (UINode?), `bottomBar` (UINode?), `content` (List\<UINode\>) |
 | `TopNavBar` | `title`, `leadingIcon` (UINavBarLeadingIcon?), `trailingActions` (List\<UINavBarAction\>) |
+| `Section` | `title`, `actionLabel`, `actionId`, `grouped`, `emptyText`, `children`, `dataSource`, `itemTemplate`, `filter`, `searchKey`, `searchFields` |
+| `ListItem` | `title`, `overline`, `subtitle`, `icon` (UIIcon?), `iconField`, `check`, `value`, `amountKey`, `currency`, `chevron`, `actionId` |
 | `Tray` | `content` (List\<UINode\>), `dismissActionId`, `isSwipeDismissible` (Boolean, default true) |
 | `TabLayout` | `tabs` (List\<UITab\>), `stateKey` |
 | `ConfirmDialog` | `title`, `message`, `confirmLabel` (default "Confirm"), `cancelLabel` (default "Cancel"), `confirmActionId`, `stateKey` |
@@ -138,6 +140,18 @@ The bar shows either a row of icons or one text action, never both:
 - When every drawable action has an icon, all of them render as icons.
 - Otherwise only the first action with a `label` renders, as text; the others are not shown.
 - An action with neither `iconUrl` nor `label` draws nothing (blank strings count as absent).
+
+A screen's tab bar is not a node: declare top-level destinations in `UIScreen.navigation.tabs` (see SKILL.md, "Screen tabs").
+
+---
+
+## List Nodes
+
+**Section**: a titled group drawn by the design system's `Section`. Its rows are `children` followed by one `itemTemplate` per record of `dataSource` (narrowed by `filter`, `searchKey` and `searchFields` as a `LazyColumn` narrows them). The rows are not lazy, so several sections fit in one scrolling `Column`. `grouped` draws the rows on one card with hairlines between; `emptyText` shows when there are no rows. Compose only for now.
+
+**ListItem**: one row drawn by the design system's `ListItem`. `title`, `overline`, `subtitle` and `value` are templates. Leading: a checkbox when `check` is set, otherwise the glyph from `iconField` (a record field holding an icon name) or `icon`. Trailing: the money at `amountKey` in `currency`, otherwise `value`, otherwise a chevron when `chevron` is set. `actionId` runs with the row's record. Compose only for now.
+
+**Record-bound checkboxes**: inside an `itemTemplate`, a Checkbox `bind` or a ListItem `check` of `item.<field>` shows that boolean field of the row's record and sets it through the built-in `renderer:setItemField:<field>` action, which `renderedPageActionHandler` applies to the store. No mutation is needed.
 
 ---
 

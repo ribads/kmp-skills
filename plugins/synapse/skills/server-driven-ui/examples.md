@@ -322,3 +322,52 @@ internal class GatewayOperationHandler(
 ```
 
 Keep native bindings for operations that are not HTTP calls (purchase, restore, share) by matching their names before falling through to the gateway, and list those names in `RendererCapabilities(operations = …)`.
+
+## Tabs, Sections and Row Checkboxes: a Packing List
+
+The tab bar comes from `navigation.tabs`, not from a node; each tab keeps its own stack of pages. The checkbox in each row sets `packed` on that row's record, so no mutation is needed, and `requires` asks for the schema version these need.
+
+```json
+{
+  "requires": { "minSchemaVersion": 3 },
+  "theme": { "brand": "#1B2A4A", "neutral": "Warm" },
+  "navigation": { "tabs": [
+    { "page": "trip", "label": "Trip", "icon": "map" },
+    { "page": "packing", "label": "Packing", "icon": "luggage" }
+  ] },
+  "data": {
+    "collections": {
+      "packing": {
+        "schema": { "name": "string", "packed": "boolean" },
+        "initialData": [ { "name": "Passports", "packed": false }, { "name": "Umbrella", "packed": true } ]
+      }
+    }
+  },
+  "pages": [
+    { "id": "trip", "root": { "type": "Text", "content": "Paris and Lyon", "style": "H1" } },
+    {
+      "id": "packing",
+      "root": {
+        "type": "Scaffold",
+        "topBar": { "type": "TopNavBar", "title": "Packing" },
+        "content": [ {
+          "type": "Column",
+          "modifier": { "verticalScroll": true, "paddingStart": 16, "paddingEnd": 16 },
+          "children": [
+            {
+              "type": "Section", "title": "To pack", "grouped": true, "dataSource": "packing",
+              "filter": { "type": "isFalse", "field": "packed" }, "emptyText": "All packed",
+              "itemTemplate": { "type": "ListItem", "title": "{{item.name}}", "check": "item.packed" }
+            },
+            {
+              "type": "Section", "title": "Packed", "grouped": true, "dataSource": "packing",
+              "filter": { "type": "isTrue", "field": "packed" },
+              "itemTemplate": { "type": "ListItem", "title": "{{item.name}}", "check": "item.packed" }
+            }
+          ]
+        } ]
+      }
+    }
+  ]
+}
+```
