@@ -250,13 +250,18 @@ Materialises a `DataSchema` into `StateFlow`-backed state. It is the whole react
 ```kotlin
 class ReactiveDataStore(
     val schema: DataSchema,
-    // Non-null. Use DataPersistence.NoOp for a purely transient store.
-    private val persistence: DataPersistence = DataPersistence.NoOp,
-    private val scope: String = "default",
+    // Use DataPersistence.NoOp for a purely transient store.
+    persistence: DataPersistence = DataPersistence.NoOp,
+    // Separates this store's data from others in the same persistence.
+    scope: String = "default",
+    // Receives onPersistenceError when a save fails.
+    diagnostics: RenderDiagnostics = RenderDiagnostics.NoOp,
 ) : RendererStateHolder, CollectionProvider, ConditionEvaluator {
     override fun getCollection(name: String): StateFlow<List<DataRecord>>
     override fun conditionFlow(conditionKey: String): StateFlow<Boolean>
     override fun evaluate(conditionKey: String): Boolean
+    // Advances once per settled change that changed `key`'s value, computed fields included.
+    override fun revisionOf(key: String): StateFlow<Long>
 
     fun insertRecord(collectionName: String, record: DataRecord)
     // Coerces JSON primitives or Kotlin values to the declared types; generates missing ids.
@@ -271,16 +276,25 @@ class ReactiveDataStore(
     // Throws on unknown fields; silently no-op on computed fields.
     fun resetField(name: String)
 
-    // Group mutations. Persistence, computed recompute, condition refresh, and the revision
-    // bump fire exactly once on the outermost flush. Returns [block]'s result.
+    // Group mutations. Recompute, condition refresh, the revision bumps and the save happen
+    // exactly once, when the outermost batch ends. Returns [block]'s result.
     fun <R> batch(block: ReactiveDataStore.() -> R): R
+
+    // Writes every change not yet saved; returns once it is written or has failed.
+    suspend fun flush()
+    // Starts writing every change not yet saved and stops the store's clock.
+    fun close()
 
     override fun clear()
     // + all RendererStateHolder methods (getOrPutString, putString, getString, revision, etc.)
 }
 ```
 
-Conditions are re-evaluated after every settled change. Field questions inside them go through the core `RecordConditionEvaluator.matchesValues`; only `collectionEmpty`/`collectionNotEmpty` and the `and`/`or`/`not` combinators are answered by the store.
+Hydration reads the persistence synchronously, on the thread that builds the store, and coerces every loaded value to its declared type. After that the store saves in the background: changes gather for 250 ms after the first unsaved one and are written in one `DataPersistence.save` call, off the main thread, so typing or toggling never waits on storage. Call `flush()` when the app goes to the background and `close()` when the store is discarded; `renderedEntries` does both. A failed save is reported through `RenderDiagnostics.onPersistenceError` and written again with the next change, `flush()` or `close()`.
+
+Every condition and `where` is compiled once (`DataCondition.compile()`). Named conditions are re-evaluated after every settled change; only `collectionEmpty`/`collectionNotEmpty` and the `and`/`or`/`not` combinators are answered by the store. A computed field whose `where` compares against another field (`fieldRef`) is recomputed when that field changes, and a computed `fieldRef` field is ordered before it. Values that depend on the time (`dateBefore`, `dateAfter`, `dateWithin`, `isToday`) are re-evaluated each wall-clock minute while something observes one of them.
+
+A collection's `orderBy` sorts mixed value types in a fixed order (missing, then booleans, numbers, strings), and records that compare equal keep the order they were inserted in.
 
 Fields named as any operation's `pendingField` or `failureField` are never persisted or hydrated, so a spinner can never come back stuck after process death.
 
@@ -351,10 +365,12 @@ fun renderedPageActionHandler(
 
 Optional durable storage backend. Implement with your storage engine of choice. In the navigation module, pass it as `RenderedPageConfig.dataPersistence`; each route uses its base route as the `scope`. Wrap your implementation to prefix scopes when one base route must hold separate data per user or session.
 
+`save` and `clear` run off the main thread, one call at a time across every store, in the order the changes were made, so they may block on I/O. They must not throw: a failure is reported and the changes are offered again with the next batch. The loads run on the thread that builds the store.
+
 ```kotlin
 interface DataPersistence {
-    fun saveField(scope: String, fieldName: String, value: Any?)
-    fun saveCollection(scope: String, collectionName: String, records: List<DataRecord>)
+    // Everything that changed since the previous call.
+    fun save(scope: String, changes: DataChanges)
     fun loadFields(scope: String): Map<String, Any?>
     // Return null if the collection has never been persisted for this scope;
     // return an empty list if it was persisted empty (e.g. user deleted all
@@ -367,6 +383,26 @@ interface DataPersistence {
         // when you want a transient store with no durable layer.
         val NoOp: DataPersistence
     }
+}
+
+// The latest value of each changed field, and each changed collection.
+data class DataChanges(
+    val fields: Map<String, Any?> = emptyMap(),
+    val collections: Map<String, CollectionChange> = emptyMap(),
+)
+
+// Both forms carry every current record, in order: a key-value store writes `records`,
+// a database applies the edits.
+sealed interface CollectionChange {
+    val records: List<DataRecord>
+
+    data class Replaced(override val records: List<DataRecord>) : CollectionChange
+
+    data class Edited(
+        override val records: List<DataRecord>,
+        val upserted: List<DataRecord>,   // inserted and updated records
+        val deletedIds: Set<Any?>,
+    ) : CollectionChange
 }
 ```
 

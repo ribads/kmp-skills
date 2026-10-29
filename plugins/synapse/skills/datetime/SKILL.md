@@ -21,6 +21,7 @@ Import them from exactly these paths:
 
 ```kotlin
 import com.ribads.synapse.core.datetime.DateTimeParser
+import com.ribads.synapse.core.datetime.DeviceTimeZone
 ```
 
 ---
@@ -40,8 +41,15 @@ interface DateTimeParser {
 }
 ```
 
-- `parse` — parses an ISO 8601 date-time string to epoch milliseconds. The instant is fixed by the offset carried in the string (trailing `Z` or numeric offset), so the result is timezone-independent.
-- `format` — formats epoch millis to string. Defaults to `ISO_FORMAT` and UTC.
+```kotlin
+object DeviceTimeZone {
+    fun current(): TimeZone
+}
+```
+
+- `parse`: parses an ISO 8601 date-time string to epoch milliseconds. The instant is fixed by the offset carried in the string (trailing `Z` or numeric offset), so the result is timezone-independent.
+- `format`: formats epoch millis to string. Defaults to `ISO_FORMAT` and UTC. Formatters are built once per pattern, time zone and locale and reused, so formatting in a list costs no more per row than the first call.
+- `DeviceTimeZone.current()`: the zone the device is set to. Prefer it to `TimeZone.currentSystemDefault()` on any path that runs often: on iOS that call reloads the zone's rules each time (over half a millisecond), while `DeviceTimeZone` resolves the zone once and again only after the system reports a change.
 
 ### Locale-Dependent Patterns
 

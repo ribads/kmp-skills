@@ -22,7 +22,7 @@
 | `LazyGrid` | Compose `LazyVerticalGrid` | `columns` (Int, default 2), `children`, `verticalArrangement`, `horizontalArrangement` |
 | `Spacer` | Compose `Spacer` | (modifier only) |
 | `Card` | Surface container; children stack like a `Box`, so wrap several in a `Column` | `children`, `actionId` |
-| `Expandable` | Collapsible section | `header` (UINode, required), `content` (List\<UINode\>), `initiallyExpanded` (Boolean), `stateKey` |
+| `Expandable` | Collapsible section | `header` (UINode, required), `content` (List\<UINode\>), `initiallyExpanded` (Boolean), `bind` |
 
 ---
 
@@ -31,7 +31,7 @@
 | Type | Key fields |
 |------|-----------|
 | `Text` | `content` (templates), `style` (UITypographyToken), `textFormat` (UITextFormat), `conditionalTextFormat` (Map\<String, UITextFormat\>), `actionId`, `maxLines` |
-| `MoneyText` | `amount` (Long, minor units), `currency` (ISO 4217, matched ignoring case; one of NGN, GBP, USD, EUR, JPY, CHF, CAD, AUD, NZD, CNY, HKD, any other draws nothing and is reported through `onNodeRenderError`), `style`, `textFormat` (UITextFormat), `stateKey` |
+| `MoneyText` | `amount` (Long, minor units), `currency` (ISO 4217, matched ignoring case; one of NGN, GBP, USD, EUR, JPY, CHF, CAD, AUD, NZD, CNY, HKD, any other draws nothing and is reported through `onNodeRenderError`), `style`, `textFormat` (UITextFormat), `bind` |
 | `Image` | `url` (templates), `contentDescription`, `actionId` |
 | `Icon` | `url`, `adaptive` (Boolean: tint the icon with the surrounding content colour, `element.primary` by default), `actionId` |
 | `RichText` | `content` (markdown, templates), `style` (UITypographyToken) |
@@ -57,22 +57,22 @@ Shared fields: `title`, `leadingImageUrl`, `trailingImageUrl`, `state`, `stateCo
 
 | Type | Key fields |
 |------|-----------|
-| `TextField` | `label`, `placeholder`, `initialValue`, `isError`, `footerText`, `stateKey`, `bind`, `onValueChangeActionId` |
+| `TextField` | `label`, `placeholder`, `initialValue`, `isError`, `footerText`, `bind`, `onChangeActionId` |
 | `PasswordField` | Same as TextField |
-| `CurrencyField` | `label`, `placeholder`, `initialAmount` (Long), `currency` (String, default "GBP"; same supported set as `MoneyText`, any other draws nothing and is reported), `stateKey`, `bind`, `onAmountChangeActionId` |
+| `CurrencyField` | `label`, `placeholder`, `initialAmount` (Long), `currency` (String, default "GBP"; same supported set as `MoneyText`, any other draws nothing and is reported), `bind`, `onChangeActionId` |
 | `SelectionField` | `label`, `placeholder`, `value`, `isError`, `actionId` |
-| `DropdownField` | `label`, `placeholder`, `options` (List\<UISelectionOption\>), `isError`, `footerText`, `stateKey`, `bind`, `onSelectionChangeActionId` |
-| `TextArea` | `label`, `placeholder`, `initialValue`, `isError`, `footerText`, `stateKey`, `bind`, `onValueChangeActionId`, `minLines` (Int, default 4), `maxLines` (Int, default 4) |
+| `DropdownField` | `label`, `placeholder`, `options` (List\<UISelectionOption\>), `isError`, `footerText`, `bind`, `onChangeActionId` |
+| `TextArea` | `label`, `placeholder`, `initialValue`, `isError`, `footerText`, `bind`, `onChangeActionId`, `minLines` (Int, default 4), `maxLines` (Int, default 4) |
 | `ImagePicker` | `bind`, `placeholder` |
-| `DatePicker` | `selectedDate` (Long?), `minDate` (Long?), `maxDate` (Long?), `stateKey` (no `bind`), `onDateSelectedActionId` |
-| `NumberField` | `label`, `placeholder`, `min` (Double?), `max` (Double?), `step` (Double?, default null: on leaving the field the value snaps to the nearest multiple of `step` from `min` or zero, staying in range; see `committedValue`), `decimals` (Int, default 0), `stateKey`, `bind`, `onValueChangeActionId` |
-| `SearchBar` | `placeholder` (default "Search..."), `stateKey`, `bind` |
-| `RatingInput` | `maxStars` (Int, default 5), `stateKey`, `bind`, `onRatingChangeActionId` |
-| `ChipGroup` | `options` (List\<UISelectionOption\>), `multiSelect` (Boolean), `stateKey`, `bind`, `onSelectionChangeActionId` |
-| `Slider` | `min` (Float, default 0), `max` (Float, default 1), `step` (Float), `showValue` (Boolean), `label`, `stateKey`, `bind`, `onValueChangeActionId` |
-| `Stepper` | `min` (Int, default 0), `max` (Int, default `Int.MAX_VALUE`), `step` (Int, default 1), `label`, `stateKey`, `bind`, `onValueChangeActionId` |
-| `TimePicker` | `label`, `is24Hour` (Boolean, default true), `stateKey`, `bind`, `onTimeChangeActionId` |
-| `Timer` | `label`, `autoStart` (Boolean, default false), `stateKey`, `bind` |
+| `DatePicker` | `selectedDate` (Long?), `minDate` (Long?), `maxDate` (Long?), `bind`, `onChangeActionId` |
+| `NumberField` | `label`, `placeholder`, `min` (Double?), `max` (Double?), `step` (Double?, default null: on leaving the field the value snaps to the nearest multiple of `step` from `min` or zero, staying in range; see `committedValue`), `decimals` (Int, default 0), `bind`, `onChangeActionId` |
+| `SearchBar` | `placeholder` (default "Search..."), `bind` |
+| `RatingInput` | `maxStars` (Int, default 5), `bind`, `onChangeActionId` |
+| `ChipGroup` | `options` (List\<UISelectionOption\>), `multiSelect` (Boolean), `bind`, `onChangeActionId` |
+| `Slider` | `min` (Float, default 0), `max` (Float, default 1), `step` (Float), `showValue` (Boolean), `label`, `bind`, `onChangeActionId` |
+| `Stepper` | `min` (Int, default 0), `max` (Int, default `Int.MAX_VALUE`), `step` (Int, default 1), `label`, `bind`, `onChangeActionId` |
+| `TimePicker` | `label`, `is24Hour` (Boolean, default true), `bind`, `onChangeActionId` |
+| `Timer` | `label`, `autoStart` (Boolean, default false), `bind` |
 
 **UISelectionOption**: `key` (String), `label` (String)
 
@@ -82,8 +82,8 @@ Shared fields: `title`, `leadingImageUrl`, `trailingImageUrl`, `state`, `stateCo
 
 | Type | Key fields |
 |------|-----------|
-| `Checkbox` | `label` (templates), `bind`, `stateKey`, `onToggleActionId` |
-| `RadioGroup` | `options` (List\<UISelectionOption\>), `orientation` (UIOrientation, default Vertical), `stateKey`, `bind`, `onSelectionChangeActionId` |
+| `Checkbox` | `label` (templates), `bind`, `onChangeActionId` |
+| `RadioGroup` | `options` (List\<UISelectionOption\>), `orientation` (UIOrientation, default Vertical), `bind`, `onChangeActionId` |
 | `ProgressBar` | `value` (String, default "0", templates), `max` (String, default "1", templates), `label` (templates), `showPercentage` (Boolean), `color` (hex), `animate` (Boolean, default true) |
 | `CircularProgress` | `value` (String, default "0", templates), `max` (String, default "1", templates), `label` (templates), `showPercentage` (Boolean, default true), `color` (hex), `animate` (Boolean, default true) |
 
@@ -99,8 +99,8 @@ Shared fields: `title`, `leadingImageUrl`, `trailingImageUrl`, `state`, `stateCo
 | `Section` | `title`, `actionLabel`, `actionId`, `grouped`, `emptyText`, `children`, `dataSource`, `itemTemplate`, `filter`, `searchKey`, `searchFields` |
 | `ListItem` | `title`, `overline`, `subtitle`, `icon` (UIIcon?), `iconField`, `check`, `value`, `amountKey`, `currency`, `chevron`, `actionId` |
 | `Tray` | `content` (List\<UINode\>), `dismissActionId`, `isSwipeDismissible` (Boolean, default true) |
-| `TabLayout` | `tabs` (List\<UITab\>), `stateKey` |
-| `ConfirmDialog` | `title`, `message`, `confirmLabel` (default "Confirm"), `cancelLabel` (default "Cancel"), `confirmActionId`, `stateKey` |
+| `TabLayout` | `tabs` (List\<UITab\>), `bind` |
+| `ConfirmDialog` | `title`, `message`, `confirmLabel` (default "Confirm"), `cancelLabel` (default "Cancel"), `confirmActionId`, `bind` |
 | `EmptyState` | `iconUrl`, `title` (templates), `subtitle` (templates), `actionLabel`, `actionId` |
 
 **UITab**: `label` (String), `content` (List\<UINode\>)
@@ -225,11 +225,14 @@ These fields were added to existing node types for data layer integration.
 
 ### Input Nodes
 
-Every stateful input takes `bind`: TextField, PasswordField, CurrencyField, DropdownField, TextArea, ImagePicker, NumberField, SearchBar, RatingInput, ChipGroup, Slider, Stepper, Timer, TimePicker, Checkbox, and RadioGroup. DatePicker, TabLayout, Expandable, and ConfirmDialog take `stateKey` only.
+Every node that holds state takes `bind`, and every input that reports a change takes `onChangeActionId`.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `bind` | `String?` | Declared field name to bind to. Wins over `stateKey`; preferred when using the data layer. |
+| `bind` | `String?` | The state key, usually a declared data field, the node reads and writes. Without `bind` the node's `id` is the key. With neither, the value belongs to the node alone: it survives recomposition and configuration changes, every row of a list keeps its own, and no other node can read it. |
+| `onChangeActionId` | `String?` | Dispatched on every change. The payload carries the new value under the key the node documents (`value`, `amount`, `selection`, `date`, `checked`, `rating`, or `hour`, `minute` and `time`) and, when the node is bound, `stateKey` naming the key it wrote. |
+
+Payloads written before this vocabulary still parse: `stateKey` reads as `bind`, and `onValueChangeActionId`, `onAmountChangeActionId`, `onSelectionChangeActionId`, `onDateSelectedActionId`, `onToggleActionId`, `onRatingChangeActionId` and `onTimeChangeActionId` read as `onChangeActionId`. When a node carries both names, the new one wins.
 
 ### Chart Nodes (data-bound mode)
 
@@ -244,4 +247,4 @@ All three chart types (BarChart, LineChart, PieChart) support data binding:
 
 ### Template Interpolation
 
-Templated fields are marked "(templates)" above. They resolve `{{key}}` from state (long, then double, then string lane), `{{item.field}}` from the current record inside an `itemTemplate`, and `{{name.count}}` from a collection's size, with pipes such as `{{total | number:2}}`. Every templated field re-resolves when the state or the counted collection changes.
+Templated fields are marked "(templates)" above. They resolve `{{key}}` from state (long, then double, then string lane), `{{item.field}}` from the current record inside an `itemTemplate`, and `{{name.count}}` from a collection's size, with pipes such as `{{total | number:2}}`. Every templated field re-resolves when a key it names or a collection it counts changes, and only then.

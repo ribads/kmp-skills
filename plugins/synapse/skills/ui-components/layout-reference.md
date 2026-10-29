@@ -42,6 +42,48 @@ The picker keeps the month on screen and whether the calendar, month grid or yea
 
 Paints `surface.secondary` in `Theme.shape.card` and provides `LocalContentColor = element.primary` to its content.
 
+## Section
+
+A titled group on a page: a heading with an optional text action, then its rows. It keeps a gap above and below itself, so sections stack without spacers, and adds no side padding.
+
+```kotlin
+data class SectionModel(
+    val title: Clause? = null,
+    val actionLabel: Clause? = null,   // a text action at the end of the heading, such as "See all"
+    val emptyText: Clause? = null,     // shown in place of the rows when there are none
+    val grouped: Boolean = false,      // rows on one card with hairlines between them; otherwise stacked with a small gap
+)
+
+@Composable fun Section(
+    model: SectionModel,
+    rowCount: Int,
+    modifier: Modifier = Modifier,
+    onActionClick: (() -> Unit)? = null,
+    row: @Composable (index: Int) -> Unit,
+)
+
+// The same section as items of a LazyColumn, so only the rows on screen compose.
+fun LazyListScope.section(
+    model: SectionModel,
+    rowCount: Int,
+    key: String,                                   // every item key starts with it
+    rowKey: (index: Int) -> String = { it.toString() },   // unique within the section, stable as rows change
+    onActionClick: (() -> Unit)? = null,
+    row: @Composable (index: Int) -> Unit,
+)
+```
+
+Use `Section` inside a scrolling `Column` for a handful of rows, and `section` for a long or data-driven list:
+
+```kotlin
+LazyColumn {
+    section(SectionModel(title = "Recent".asText(), grouped = true), rowCount = expenses.size, key = "recent",
+        rowKey = { expenses[it].id }) { index -> ExpenseRow(expenses[index]) }
+}
+```
+
+`section` draws what `Section` draws: the heading is one item and each row another, a grouped card is split across its rows in the theme's card shape, and the gaps match. Give the list no arrangement that spreads free space between items (`SpaceBetween`, `SpaceAround`, `SpaceEvenly`), or the gaps land inside the card.
+
 ## Divider
 
 ```kotlin

@@ -52,6 +52,8 @@ Import each type from its package below.
 | `com.ribads.synapse.ui.component.rating` | `RatingInput` |
 | `com.ribads.synapse.ui.component.rating.model` | `RatingInputModel` |
 | `com.ribads.synapse.ui.component.scaffold` | `Scaffold` |
+| `com.ribads.synapse.ui.component.section` | `Section`, `section` |
+| `com.ribads.synapse.ui.component.section.model` | `SectionModel` |
 | `com.ribads.synapse.ui.component.slider` | `Slider` |
 | `com.ribads.synapse.ui.component.slider.model` | `SliderModel` |
 | `com.ribads.synapse.ui.component.stepper` | `Stepper` |

@@ -38,10 +38,10 @@ Import each type from its package below.
 |---|---|
 | `com.ribads.synapse.ui.renderer.action` | `ActionDispatcher`, `ActionHandler`, `ActionPayload`, `OperationHandler`, `OperationOutcome`, `bridgedActionHandler`, `onAction` |
 | `com.ribads.synapse.ui.renderer.capability` | `IncompatibilityReason`, `RendererCapabilities`, `SchemaElementKind`, `ScreenCompatibility`, `SynapseSchemaVersion`, `compatibilityWith` |
-| `com.ribads.synapse.ui.renderer.data` | `DataPersistence`, `MutationExecutor`, `MutationResult`, `OperationExecutor`, `PageOperations`, `ReactiveDataStore`, `renderedPageActionHandler` |
+| `com.ribads.synapse.ui.renderer.data` | `CollectionChange`, `DataChanges`, `DataPersistence`, `MutationExecutor`, `MutationResult`, `OperationExecutor`, `PageOperations`, `ReactiveDataStore`, `renderedPageActionHandler` |
 | `com.ribads.synapse.ui.renderer.diagnostics` | `RenderDiagnostics`, `RenderPassSummary`, `callbackRenderDiagnostics`, `children`, `reportNodeRenderError`, `summarizeTree` |
-| `com.ribads.synapse.ui.renderer.engine` | `BoundRecordGroups`, `BoundRecords`, `CollectionProvider`, `ConditionEvaluator`, `DataRecord`, `DataRecordView`, `ITEM_CONTEXT_PAYLOAD_KEY`, `MediaProvider`, `NodeRenderer`, `NodeRendererRegistry`, `RecordConditionEvaluator`, `RenderNode`, `SynapseRenderer`, `TemplateEngine`, `boundRecords`, `committedValue`, `dispatchWithRecord`, `effectiveTextFormat`, `hasConditionalFormat`, `narrowRecords`, `recordFieldReader`, `watchBoundRecords` |
-| `com.ribads.synapse.ui.renderer.navigation` | `InMemorySchemaStore`, `RenderedPageAction`, `RenderedPageConfig`, `RenderedPageKey`, `RenderedRoutesBuilder`, `SchemaStore`, `ScreenNavigationHost`, `ScreenNavigationState`, `ScreenNavigator`, `ScreenParseResult`, `ScreenRequirements`, `UINavigationTab`, `UIPage`, `UIScreen`, `UIScreenNavigation`, `load`, `navigateToRenderedPage`, `parseUIScreen`, `rememberScreenNavigator`, `renderedEntries`, `renderedEntry`, `rendererNavigationSerializers`, `toUIScreen`, `uiScreenJsonSchema` |
+| `com.ribads.synapse.ui.renderer.engine` | `BoundRecordGroups`, `BoundRecords`, `CollectionProvider`, `CompiledCondition`, `CompiledTemplate`, `ConditionEvaluator`, `DataRecord`, `DataRecordView`, `ITEM_CONTEXT_PAYLOAD_KEY`, `MediaProvider`, `NodeRenderer`, `NodeRendererRegistry`, `RecordConditionEvaluator`, `RenderNode`, `RendererClock`, `SynapseRenderer`, `TemplateEngine`, `boundRecords`, `committedValue`, `compile`, `dispatchWithRecord`, `effectiveTextFormat`, `hasConditionalFormat`, `narrowRecords`, `recordFieldReader`, `rowKeys`, `watchBoundRecords`, `watchCondition`, `watchEffectiveTextFormat`, `watchTemplateInputs` |
+| `com.ribads.synapse.ui.renderer.navigation` | `InMemorySchemaStore`, `PersistedState`, `PersistentRendererStateHolder`, `RenderedPageAction`, `RenderedPageConfig`, `RenderedPageKey`, `RenderedRoutesBuilder`, `SchemaStore`, `ScreenNavigationHost`, `ScreenNavigationState`, `ScreenNavigator`, `ScreenParseResult`, `ScreenRequirements`, `StatePersistence`, `UINavigationTab`, `UIPage`, `UIScreen`, `UIScreenNavigation`, `load`, `navigateToRenderedPage`, `parseUIScreen`, `rememberScreenNavigator`, `renderedEntries`, `renderedEntry`, `rendererNavigationSerializers`, `toUIScreen`, `uiScreenJsonSchema` |
 | `com.ribads.synapse.ui.renderer.schema` | `ComputedField`, `DataCollection`, `DataCondition`, `DataEffect`, `DataField`, `DataFieldType`, `DataMutation`, `DataOperation`, `DataOperationResult`, `DataOrderBy`, `DataSchema`, `DataValueRef`, `OperationConcurrency`, `SchemaParseResult`, `SortDirection`, `UIButtonState`, `UIDimension`, `UIGradient`, `UIModifier`, `UINavBarAction`, `UINavBarLeadingIcon`, `UINode`, `UITextFormat`, `UITextIntent`, `UITheme`, `UIThemeBorder`, `UIThemeColors`, `UIThemeCorners`, `UIThemeElement`, `UIThemeElementInteractive`, `UIThemeIntentPalette`, `UIThemeIntents`, `UIThemeNeutral`, `UIThemeShadow`, `UIThemeShape`, `UIThemeSpacing`, `UIThemeSurface`, `UIThemeSurfaceInteractive`, `UIThemeTextStyle`, `UIThemeTypography`, `UIVisibility`, `containsUnsupported`, `parseUINode`, `schemaType`, `toUINode`, `toUINodes`, `uiNodeJsonSchema` |
 | `com.ribads.synapse.ui.renderer.state` | `InMemoryRendererStateHolder`, `RendererStateHolder`, `WatchHandle`, `watchBoolean`, `watchDouble`, `watchLong`, `watchRevision`, `watchString` |
 | `com.ribads.synapse.ui.renderer.theme` | `FontResolver`, `ResolvedShape`, `ResolvedTheme`, `WithRenderedTheme`, `resolve` |
@@ -163,6 +163,12 @@ interface RendererStateHolder {
     /** Advances once per settled change, and once on clear. */
     val revision: StateFlow<Long>
 
+    /**
+     * Advances when [key]'s value changes, when its lane is created, and on clear. Observing it
+     * never creates the key. The default, [revision], is correct but wakes every reader.
+     */
+    fun revisionOf(key: String): StateFlow<Long> = revision
+
     fun clear()
 
     companion object { operator fun invoke(): RendererStateHolder = InMemoryRendererStateHolder() }
@@ -196,6 +202,41 @@ fun RendererStateHolder.watchRevision(onChange: (Long) -> Unit): WatchHandle
 
 The callback fires with the current value before it returns, so one call both seeds and subscribes.
 
+### Persisted state without a data schema
+
+`PersistentRendererStateHolder` (module `ui:renderer-data`) is a `RendererStateHolder` over a
+`StatePersistence` backend. It hydrates on construction, then writes the latest value of each
+changed key in the background, at most one batch per 250 ms, one call at a time, so a
+`StatePersistence` may block on I/O but must not throw.
+
+```kotlin
+class PersistentRendererStateHolder(
+    persistence: StatePersistence,
+    scope: String,
+    diagnostics: RenderDiagnostics = RenderDiagnostics.NoOp,   // receives onPersistenceError
+) : RendererStateHolder {
+    suspend fun flush()   // writes what is unsaved; returns once written or failed
+    fun close()           // starts writing what is unsaved
+}
+
+interface StatePersistence {
+    fun putString(scope: String, key: String, value: String)
+    fun putLong(scope: String, key: String, value: Long?)
+    fun putDouble(scope: String, key: String, value: Double?)
+    fun putBoolean(scope: String, key: String, value: Boolean)
+    fun loadAll(scope: String): PersistedState
+    fun clear(scope: String)
+}
+
+@Serializable
+data class PersistedState(
+    val strings: Map<String, String> = emptyMap(),
+    val longs: Map<String, Long?> = emptyMap(),
+    val doubles: Map<String, Double?> = emptyMap(),
+    val booleans: Map<String, Boolean> = emptyMap(),
+)
+```
+
 ### Bridged surface (Swift Export and other non-Kotlin hosts)
 
 A Swift Export host crashes when the bridge converts a map of arbitrary values across the
@@ -224,7 +265,7 @@ class DataRecordView internal constructor(/* wraps DataRecord */) {
 class BoundRecords internal constructor(/* narrowed rows */) {
     val size: Int
     fun view(index: Int): DataRecordView     // record + 1-based "_index"
-    fun stableId(index: Int): String         // record id, or position when absent
+    fun stableId(index: Int): String         // rowKeys(records)[index]
     fun groups(groupBy: String): BoundRecordGroups
 }
 class BoundRecordGroups internal constructor(/* first-encounter order */) {
@@ -237,8 +278,24 @@ class BoundRecordGroups internal constructor(/* first-encounter order */) {
 /** Search-then-filter narrowing, the collection-bound lazy-node pipeline. */
 fun narrowRecords(
     records: List<DataRecord>, searchText: String, searchFields: List<String>,
-    filter: DataCondition?, fieldReader: (String) -> Any?,
+    filter: CompiledCondition?, fieldReader: (String) -> Any?,
 ): List<DataRecord>
+
+/** One key per record, unique within [records]: its id, `@<index>` without one, `#2`, `#3`... appended to repeats. */
+fun rowKeys(records: List<DataRecord>): List<String>
+
+/** A condition prepared once for repeated evaluation, with what its answer depends on. */
+class CompiledCondition internal constructor(/* parsed predicate */) {
+    val fields: Set<String>        // read from the value tested: a record's or the model's fields
+    val fieldRefs: Set<String>     // read through the field reader: an equals' fieldRef
+    val collections: Set<String>   // collections whose size it asks about
+    val readsClock: Boolean        // the answer moves with time: now, dateWithin, isToday
+    // Without collectionSize, collection questions are false.
+    fun matches(valueOf: (String) -> Any?, fieldReader: ((String) -> Any?)? = null, collectionSize: ((String) -> Int)? = null): Boolean
+    // Reads the clock once for every record.
+    fun filter(records: List<DataRecord>, fieldReader: ((String) -> Any?)? = null): List<DataRecord>
+}
+fun DataCondition.compile(): CompiledCondition
 
 /** String-first state reads for record filters (templates read long, double, string). */
 fun RendererStateHolder.recordFieldReader(): (String) -> Any?
@@ -248,7 +305,10 @@ fun boundRecords(
     filter: DataCondition? = null, searchKey: String? = null, searchFields: List<String> = emptyList(),
 ): BoundRecords
 
-/** Fires synchronously with the current records, then on collection or search-text changes. */
+/**
+ * Fires synchronously with the current records, then when the collection, the search text, a
+ * field the filter compares against, or, for a time-relative filter, the minute changes.
+ */
 fun watchBoundRecords(
     collectionProvider: CollectionProvider, stateHolder: RendererStateHolder, dataSource: String,
     filter: DataCondition? = null, searchKey: String? = null, searchFields: List<String> = emptyList(),
@@ -259,6 +319,38 @@ fun watchBoundRecords(
 fun ActionDispatcher.dispatchWithRecord(
     actionId: String, record: DataRecordView?, payload: Map<String, Any?> = emptyMap(),
 )
+
+// A template parsed once, with the keys it reads: TemplateEngine.compile(content)
+class CompiledTemplate internal constructor(/* segments */) {
+    val source: String
+    val isLiteral: Boolean                                    // no slots: resolve returns source
+    fun stateKeys(readsRecord: Boolean): Set<String>          // state keys its slots read
+    fun countedCollections(readsRecord: Boolean): Set<String> // collections its `.count` slots read
+    fun resolve(stateHolder: RendererStateHolder, itemContext: Map<String, Any?>? = null, collectionSize: ((String) -> Int)? = null): String
+    fun resolveWithRecord(stateHolder: RendererStateHolder, record: DataRecordView?, collectionProvider: CollectionProvider): String
+}
+
+/**
+ * Runs [onChange] each time a state key or a counted collection's size that [template] reads
+ * changes, never for anything else, and not for the current values. With [readsRecord],
+ * `item.` slots read the host's record and are not watched.
+ */
+fun watchTemplateInputs(
+    template: CompiledTemplate, stateHolder: RendererStateHolder, collectionProvider: CollectionProvider,
+    readsRecord: Boolean, onChange: () -> Unit,
+): WatchHandle
+
+/** Fires with the current answer, then each time it changes. */
+fun ConditionEvaluator.watchCondition(conditionKey: String, onChange: (Boolean) -> Unit): WatchHandle
+
+/** Fires with the current effective format, then only when it changes. */
+fun watchEffectiveTextFormat(node: UINode.TextNode, evaluator: ConditionEvaluator, onChange: (UITextFormat?) -> Unit): WatchHandle
+
+/** The time source of time-relative conditions: one tick at each wall-clock minute, on the main thread. */
+object RendererClock {
+    fun nowMillis(): Long
+    fun minuteTicks(): Flow<Long>
+}
 
 // TemplateEngine members for record-held item context
 fun resolveWithRecord(
@@ -462,6 +554,8 @@ interface RenderDiagnostics {
     fun onActionDispatched(actionId: String, payloadKeys: Set<String>)
     fun onActionError(actionId: String, error: Throwable)
     fun onRenderPass(summary: RenderPassSummary)
+    /** A background save to [scope]'s persistence failed; it is retried with the next change. */
+    fun onPersistenceError(scope: String, error: Throwable) {}
     companion object { val NoOp: RenderDiagnostics }
 }
 
@@ -507,6 +601,7 @@ fun callbackRenderDiagnostics(
     onActionDispatched: (actionId: String, payloadKeys: Set<String>) -> Unit = { _, _ -> },
     onActionError: (actionId: String, message: String) -> Unit = { _, _ -> },
     onRenderPass: (summary: RenderPassSummary) -> Unit = { },
+    onPersistenceError: (scope: String, message: String) -> Unit = { _, _ -> },
 ): RenderDiagnostics
 
 /** onNodeRenderError for engines that hold the failure as text. */
@@ -619,7 +714,9 @@ data class RenderedPageKey(val baseRoute: String, val pageId: String) : NavKey
 val rendererNavigationSerializers: SerializersModule
 ```
 
-Register rendered pages inside a feature's `EntryProviderScope<NavKey>.register(dispatcher)` block. When `config.dataSchema` is provided, a `ReactiveDataStore` and a `MutationExecutor` are created once per base route, the store answers state, collections, and conditions, and it persists through `config.dataPersistence` with the base route as its scope. The `mutation:` action prefix is intercepted and routed to the executor. Without a `dataSchema` the route has no collections: every `dataSource` binds to an empty list.
+Register rendered pages inside a feature's `EntryProviderScope<NavKey>.register(dispatcher)` block. When `config.dataSchema` is provided, one `ReactiveDataStore` serves every page of the base route: it answers state, collections, and conditions, and it persists through `config.dataPersistence` with the base route as its scope. The `mutation:` action prefix is intercepted and routed to it. Without a `dataSchema` the route has no collections: every `dataSource` binds to an empty list.
+
+The store is built when one of the route's pages is first shown and kept in the enclosing `NavContainer`'s ViewModel store (`LocalNavContainerViewModelStoreOwner`), so it survives configuration changes and a rebuilt entry provider, and it is closed when that ViewModel store is cleared. Its changes are written in the background and whenever the page stops. A different `dataSchema` (compared by value), `dataPersistence` or `stateHolder` (by identity) replaces the store, once the old one's unsaved changes are written, so keep one persistence instance per backend. Outside a `NavContainer` the store lives as long as the registration that built it, so an entry provider rebuilt within the save window can hydrate a new store without the last change.
 
 `UIScreen` is the payload as it arrives; nothing applies its `theme` or `data` on its own. Load its pages into the `SchemaStore` and pass the rest through the config:
 
@@ -654,13 +751,13 @@ fun NavigationDispatcher.navigateToRenderedPage(baseRoute: String, pageId: Strin
 data class RenderedPageConfig(
     val registry: NodeRendererRegistry = NodeRendererRegistry.defaults(),
     val conditionEvaluator: ConditionEvaluator = ConditionEvaluator.AlwaysFalse,
-    val stateHolder: RendererStateHolder = RendererStateHolder(),
+    val stateHolder: RendererStateHolder? = null,                 // null: an in-memory holder kept with the route's data
     val dataSchema: DataSchema? = null,
     val dataPersistence: DataPersistence = DataPersistence.NoOp,   // ignored without dataSchema
     val theme: UITheme? = null,
     val fontResolver: FontResolver = FontResolver.Default,
     val mediaProvider: MediaProvider = MediaProvider.NoOp,
-    val diagnostics: RenderDiagnostics = RenderDiagnostics.NoOp,
+    val diagnostics: RenderDiagnostics = RenderDiagnostics.NoOp,   // failed saves go to the store's first one
     val operationHandler: OperationHandler? = null,             // ignored without dataSchema
     val navigation: UIScreenNavigation? = null,                  // tabs: the screen runs inside one entry
 )
@@ -670,7 +767,7 @@ data class RenderedPageConfig(
 
 A route without tabs registers each page as its own Nav3 entry. A route whose `navigation` has tabs is one entry holding the whole screen through `ScreenNavigationHost`; navigation between its pages stays inside that entry, and back pops the entry only once there is nowhere to go back to within the screen.
 
-Each rendered page gets its own `PageOperations`, cancelled when the page leaves composition (including an Android configuration change, which rebuilds the route's store from persistence). An operation the user walked away from never applies its effects, so make submits idempotent on the server. A page under a bottom sheet or dialog stays composed, so its operations keep running.
+Each rendered page gets its own `PageOperations`, cancelled when the page leaves composition, including an Android configuration change (the route's store itself survives it). An operation the user walked away from never applies its effects, so make submits idempotent on the server. A page under a bottom sheet or dialog stays composed, so its operations keep running.
 
 **Built-in action prefixes:**
 - `renderer:navigate:<pageId>`: navigates to another rendered page

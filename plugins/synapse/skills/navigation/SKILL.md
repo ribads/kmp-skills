@@ -42,6 +42,7 @@ import com.ribads.synapse.ui.compose.presentation.navigation.compose.BottomSheet
 import com.ribads.synapse.ui.compose.presentation.navigation.compose.BottomSheetOptions
 import com.ribads.synapse.ui.compose.presentation.navigation.compose.BottomSheetSceneStrategy
 import com.ribads.synapse.ui.compose.presentation.navigation.compose.LocalBottomSheetAppearance
+import com.ribads.synapse.ui.compose.presentation.navigation.compose.LocalNavContainerViewModelStoreOwner
 import com.ribads.synapse.ui.compose.presentation.navigation.compose.NavContainer
 import com.ribads.synapse.ui.compose.presentation.navigation.compose.PageTransition
 import com.ribads.synapse.ui.compose.presentation.navigation.compose.bottomSheet
@@ -242,6 +243,16 @@ class FlowPath {                                     // flow ancestry of a desti
 ```
 
 `onDestinationChanged` fires with the top destination and its flow ancestry on every change; `flowPath.feature` drives bottom-bar selection and visibility without string routes. In a two-pane scene the top destination is the detail, not the list beside it.
+
+Each destination has its own `LocalViewModelStoreOwner`, cleared when the destination leaves the back stack. State that several destinations share, and that has to survive a configuration change, belongs in the container's own store instead, which `NavContainer` provides to every destination:
+
+```kotlin
+val LocalNavContainerViewModelStoreOwner: ProvidableCompositionLocal<ViewModelStoreOwner?>   // null outside a NavContainer
+
+val shared = viewModel(viewModelStoreOwner = LocalNavContainerViewModelStoreOwner.current!!, key = "checkout") { CheckoutState() }
+```
+
+Key such a ViewModel explicitly: every destination in the container resolves the same store, so a key is what keeps two features' ViewModels of one class apart. `renderedEntries` keeps each route's data store there.
 
 `pageTransition` is the motion for destinations that do not choose their own (see [Transitions](#transitions)); `bottomSheetAppearance` styles every `bottomSheet()` destination. Destinations are clipped to the container's bounds, so give it an opaque background: a Synapse `Scaffold` around it provides one.
 
