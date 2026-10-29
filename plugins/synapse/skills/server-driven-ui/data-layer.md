@@ -365,7 +365,7 @@ fun renderedPageActionHandler(
 
 Optional durable storage backend. Implement with your storage engine of choice. In the navigation module, pass it as `RenderedPageConfig.dataPersistence`; each route uses its base route as the `scope`. Wrap your implementation to prefix scopes when one base route must hold separate data per user or session.
 
-`save` and `clear` run off the main thread, one call at a time across every store, in the order the changes were made, so they may block on I/O. They must not throw: a failure is reported and the changes are offered again with the next batch. The loads run on the thread that builds the store.
+`save` and `clear` run off the main thread, one call at a time across every store, in the order the changes were made, so they may block on I/O. A write that fails should throw: the store reports the exception through `RenderDiagnostics.onPersistenceError` and offers the same changes again with its next save. The loads run on the thread that builds the store.
 
 ```kotlin
 interface DataPersistence {

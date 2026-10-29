@@ -233,7 +233,7 @@ A multi-page app with reactive collections, computed fields, mutations, and cond
 
 ## Operations: Load on Appear, Submit with Loading and Failure
 
-The list page loads through `OnAppear`; the form page submits with a loading button and shows copy chosen from the failure code. The same schema ships as `operations_demo_schema.json` in the demo apps.
+The list page loads through `OnAppear`; the form page submits with a loading button and shows copy chosen from the failure code. The host binds `list_tasks` and `add_task` through its `OperationHandler`.
 
 ```json
 {

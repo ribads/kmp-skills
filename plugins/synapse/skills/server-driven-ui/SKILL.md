@@ -207,7 +207,8 @@ The callback fires with the current value before it returns, so one call both se
 `PersistentRendererStateHolder` (module `ui:renderer-data`) is a `RendererStateHolder` over a
 `StatePersistence` backend. It hydrates on construction, then writes the latest value of each
 changed key in the background, at most one batch per 250 ms, one call at a time, so a
-`StatePersistence` may block on I/O but must not throw.
+`StatePersistence` may block on I/O. A write that fails should throw: it is reported through
+`onPersistenceError` and the same values are offered again with the next save.
 
 ```kotlin
 class PersistentRendererStateHolder(
