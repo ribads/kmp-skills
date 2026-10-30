@@ -149,9 +149,9 @@ A screen's tab bar is not a node: declare top-level destinations in `UIScreen.na
 
 **Section**: a titled group drawn by the design system's `Section`. Its rows are `children` followed by one `itemTemplate` per record of `dataSource` (narrowed by `filter`, `searchKey` and `searchFields` as a `LazyColumn` narrows them). The rows are not lazy, so several sections fit in one scrolling `Column`. `grouped` draws the rows on one card with hairlines between; `emptyText` shows when there are no rows. Compose only for now.
 
-**ListItem**: one row drawn by the design system's `ListItem`. `title`, `overline`, `subtitle` and `value` are templates. Leading: a checkbox when `check` is set, otherwise the glyph from `iconField` (a record field holding an icon name) or `icon`. Trailing: the money at `amountKey` in `currency`, otherwise `value`, otherwise a chevron when `chevron` is set. `actionId` runs with the row's record. Compose only for now.
+**ListItem**: one row drawn by the design system's `ListItem`. `title`, `overline`, `subtitle` and `value` are templates. Leading: a checkbox when `check` is set, otherwise the glyph from `iconField` (a field holding an icon name: of the row's record, bare or as `item.<field>`, or of the page's record as `record.<field>`) or `icon`. Trailing: the money at `amountKey` in `currency`, otherwise `value`, otherwise a chevron when `chevron` is set. `check` and `amountKey` name a data field, or a field of a record as a `bind` does (see Record binds). `actionId` runs with the row's record. Compose only for now.
 
-**Record-bound checkboxes**: inside an `itemTemplate`, a Checkbox `bind` or a ListItem `check` of `item.<field>` shows that boolean field of the row's record and sets it through the built-in `renderer:setItemField:<field>` action, which `renderedPageActionHandler` applies to the store. No mutation is needed.
+**Record binds**: a `bind` (or a ListItem `check`) of `item.<field>` names a field of the record its list row renders, and one of `record.<field>` a field of the record its page shows (a page with a `record` collection; see SKILL.md, "SynapseRenderer"). The input shows that field, or its initial value while the record holds none, and sets it through the built-in `renderer:setItemField:<field>` action with the record, which `renderedPageActionHandler` applies to the store, converted to the column's declared type. No mutation is needed, and no data field is created. Without a record (outside a list row, or on a page that shows none) the input shows its default and sets nothing.
 
 ---
 
@@ -229,7 +229,7 @@ Every node that holds state takes `bind`, and every input that reports a change 
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `bind` | `String?` | The state key, usually a declared data field, the node reads and writes. Without `bind` the node's `id` is the key. With neither, the value belongs to the node alone: it survives recomposition and configuration changes, every row of a list keeps its own, and no other node can read it. |
+| `bind` | `String?` | The state key, usually a declared data field, the node reads and writes. On every node that takes `bind`, `item.<field>` names a field of the list row's record instead and `record.<field>` a field of the record the page shows (see Record binds); `MoneyText` only reads it. Without `bind` the node's `id` is the key. With neither, the value belongs to the node alone: it survives recomposition and configuration changes, every row of a list keeps its own, and no other node can read it. |
 | `onChangeActionId` | `String?` | Dispatched on every change. The payload carries the new value under the key the node documents (`value`, `amount`, `selection`, `date`, `checked`, `rating`, or `hour`, `minute` and `time`) and, when the node is bound, `stateKey` naming the key it wrote. |
 
 Payloads written before this vocabulary still parse: `stateKey` reads as `bind`, and `onValueChangeActionId`, `onAmountChangeActionId`, `onSelectionChangeActionId`, `onDateSelectedActionId`, `onToggleActionId`, `onRatingChangeActionId` and `onTimeChangeActionId` read as `onChangeActionId`. When a node carries both names, the new one wins.
@@ -247,4 +247,14 @@ All three chart types (BarChart, LineChart, PieChart) support data binding:
 
 ### Template Interpolation
 
-Templated fields are marked "(templates)" above. They resolve `{{key}}` from state (long, then double, then string lane), `{{item.field}}` from the current record inside an `itemTemplate`, and `{{name.count}}` from a collection's size, with pipes such as `{{total | number:2}}`. Every templated field re-resolves when a key it names or a collection it counts changes, and only then.
+Templated fields are marked "(templates)" above. They resolve `{{key}}` from state (long, then double, then string lane), `{{item.field}}` from the current record inside an `itemTemplate`, `{{record.field}}` from the record the page shows (rows included; empty on a page that shows none), `{{name.count}}` from a collection's size, and `{{now}}` to the current time in epoch milliseconds (a reserved name), with pipes such as `{{total | number:2}}`:
+
+| Pipe | Result |
+|------|--------|
+| `date`, `date:<pattern>` | A time in the device's time zone; default pattern `dd MMM yyyy` |
+| `number`, `number:<spec>` | `spec` is a count of decimals (default 2), `integer` or `percent`. A trailing `,grouped` adds `,` between thousands and never changes the precision: `number:0,grouped` gives `1,234,567`, `number:grouped` keeps 2 decimals. Locale-neutral |
+| `relative`, `relative:<forms>` | A time as calendar days from today in the device's time zone: `today`, `tomorrow`, `yesterday`, `in 3 days`, `2 days ago`. `relative:Today,Tomorrow,Yesterday,In # days,# days ago` sets the words (`#` is the count); forms left off the end stay English |
+| `uppercase`, `lowercase`, `capitalize` | Case changes |
+| `plural:<one>,<other>` | `one` for 1, otherwise `other` |
+
+A value a pipe cannot read, and any value through an unknown pipe, passes through unchanged. Every templated field re-resolves when a key it names or a collection it counts changes, and, when it reads the clock (`{{now}}` or `relative`), at each wall-clock minute while it is shown. Nothing else wakes it.

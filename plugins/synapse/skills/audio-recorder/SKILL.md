@@ -18,7 +18,7 @@ commonMain.dependencies {
 Depends on `core:context` (Android) and `core:audio-session` (iOS, see `/synapse:audio-session`): on iOS the
 recorder acquires the shared `AVAudioSession` through `AudioSessionCoordinator` for the duration of
 each recording (and the persistent recorder for as long as it is bound), so it coexists with
-`core:playback` and `core:moonshine`.
+`core:playback` and the transcription engines (`/synapse:audio-transcription`).
 
 ## Imports
 
