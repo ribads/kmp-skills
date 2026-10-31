@@ -31,7 +31,7 @@ Import each type from its package below.
 | `com.ribads.synapse.ui.component.button.model` | `BaseButtonColors`, `ButtonModel`, `ButtonState`, `ButtonStyle`, `asButton` |
 | `com.ribads.synapse.ui.component.calendar` | `DatePicker`, `DatePickerBottomSheet` |
 | `com.ribads.synapse.ui.component.calendar.model` | `DatePickerModel` |
-| `com.ribads.synapse.ui.component.card` | `Card` |
+| `com.ribads.synapse.ui.component.card` | `Card`, `SelectableCard` |
 | `com.ribads.synapse.ui.component.chart` | `BarChart`, `LineChart`, `PieChart` |
 | `com.ribads.synapse.ui.component.chart.model` | `BarChartModel`, `ChartEntry`, `ChartSeries`, `LineChartModel`, `PieChartModel`, `PieSlice` |
 | `com.ribads.synapse.ui.component.chat` | `ChatTextArea`, `MessageBubble` |
@@ -92,6 +92,7 @@ Import each type from its package below.
 | Text area | `TextArea` | `TextInputModel` | [inputs](inputs-reference.md) |
 | Date picker | `DatePicker` / `DatePickerBottomSheet` | `DatePickerModel` | [layout](layout-reference.md) |
 | Card | `Card` | — | [layout](layout-reference.md) |
+| Selectable card (one option of a choice) | `SelectableCard` | none | [layout](layout-reference.md) |
 | Divider | `Divider` | — | [layout](layout-reference.md) |
 | Scaffold | `Scaffold` | — | [layout](layout-reference.md) |
 | Top nav bar | `TopNavBar` | `TopNavBarModel` | [layout](layout-reference.md) |
@@ -159,7 +160,7 @@ Required callbacks deliberately sit *after* defaulted config parameters, so call
 ## Detailed Reference
 
 - [Buttons & Inputs](inputs-reference.md) — Buttons, text fields, phone, currency, selection, text area + models
-- [Layout & Containers](layout-reference.md) — DatePicker, Card, Divider, Scaffold, TopNavBar, Trays
+- [Layout & Containers](layout-reference.md): DatePicker, Card, SelectableCard, Divider, Scaffold, TopNavBar, Trays
 - [Controls](controls-reference.md) — Checkbox, progress, rating, chips, tabs, radio, slider, stepper, timer, time picker, confirm dialog, empty state
 - [Charts](charts-reference.md) — Bar, line, pie charts + models
 - [Chat](chat-reference.md) — ChatTextArea, MessageBubble + models

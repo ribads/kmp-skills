@@ -41,7 +41,7 @@ All fields optional.
 |-------|------|-------------|
 | `backgroundColor` | `String?` | Background color as hex (e.g. `"#FF0000"`) |
 | `gradient` | `UIGradient?` | Gradient background sized to the node (applied over backgroundColor) |
-| `cornerRadius` | `Float?` | Corner radius in dp |
+| `cornerRadius` | `Float?` | Corner radius in dp; rounds the background and border and clips the content |
 | `borderWidth` | `Float?` | Border stroke width in dp |
 | `borderColor` | `String?` | Border color as hex |
 
@@ -131,6 +131,8 @@ JSON examples:
 
 `Start`, `End`, `Center`, `SpaceBetween`, `SpaceAround`, `SpaceEvenly`
 
+With the container's `spacing` set, `Space*` values share out what is left once neighbours are `spacing` apart.
+
 ### UIAlignment
 
 `Start`, `End`, `Center`, `Top`, `Bottom`, `CenterStart`, `CenterEnd`, `TopStart`, `TopEnd`, `BottomStart`, `BottomEnd`
@@ -138,3 +140,7 @@ JSON examples:
 ### UIOrientation
 
 `Vertical`, `Horizontal`
+
+### UIContentScale
+
+`Fit` (default: the whole image inside the bounds), `Crop` (covers the bounds, cutting off the overhang)

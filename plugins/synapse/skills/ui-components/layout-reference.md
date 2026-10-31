@@ -42,6 +42,28 @@ The picker keeps the month on screen and whether the calendar, month grid or yea
 
 Paints `surface.secondary` in `Theme.shape.card` and provides `LocalContentColor = element.primary` to its content.
 
+## SelectableCard
+
+```kotlin
+@Composable fun SelectableCard(
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+    content: @Composable () -> Unit,
+)
+```
+
+A `Card` that is one option of a single choice, such as a plan on a paywall. It draws the card's surface with a border in the card's shape: 2dp in `surfaceInteractive.enabled` while `selected`, otherwise 1dp in `border.primary`, the colours a selected and an unselected chip use. The whole card is the tap target, clipped to its shape, and announces itself as a selected or unselected radio button. Hold the choice yourself and pass `selected` for each option:
+
+```kotlin
+var plan by remember { mutableStateOf("yearly") }
+listOf("monthly", "yearly").forEach { option ->
+    SelectableCard(selected = plan == option, onClick = { plan = option }) {
+        Text(clause = option.asText(), modifier = Modifier.padding(Theme.spacing.x4))
+    }
+}
+```
+
 ## Section
 
 A titled group on a page: a heading with an optional text action, then its rows. It keeps a gap above and below itself, so sections stack without spacers, and adds no side padding.

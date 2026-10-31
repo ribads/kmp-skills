@@ -14,14 +14,14 @@
 
 | Type | Maps to | Key fields |
 |------|---------|-----------|
-| `Column` | Compose `Column` | `children`, `verticalArrangement`, `horizontalAlignment` |
-| `Row` | Compose `Row` | `children`, `horizontalArrangement`, `verticalAlignment` |
+| `Column` | Compose `Column` | `children`, `verticalArrangement`, `horizontalAlignment`, `spacing` (Float?, dp between children; the least gap under a `Space*` arrangement) |
+| `Row` | Compose `Row` | `children`, `horizontalArrangement`, `verticalAlignment`, `spacing` (Float?, as on `Column`) |
 | `Box` | Compose `Box` | `children`, `contentAlignment` |
-| `LazyColumn` | Compose `LazyColumn` | `children`, `verticalArrangement` |
-| `LazyRow` | Compose `LazyRow` | `children`, `horizontalArrangement`, `verticalAlignment` |
-| `LazyGrid` | Compose `LazyVerticalGrid` | `columns` (Int, default 2), `children`, `verticalArrangement`, `horizontalArrangement` |
+| `LazyColumn` | Compose `LazyColumn` | `children`, `verticalArrangement`, `spacing` (Float?, dp between items, including each row a `Section` child draws) |
+| `LazyRow` | Compose `LazyRow` | `children`, `horizontalArrangement`, `verticalAlignment`, `spacing` (Float?) |
+| `LazyGrid` | Compose `LazyVerticalGrid` | `columns` (Int, default 2), `children`, `verticalArrangement`, `horizontalArrangement`, `spacing` (Float?, between rows and between columns) |
 | `Spacer` | Compose `Spacer` | (modifier only) |
-| `Card` | Surface container; children stack like a `Box`, so wrap several in a `Column` | `children`, `actionId` |
+| `Card` | Surface container; children stack like a `Box`, so wrap several in a `Column`. With `bind` and `value` it is an option of a single choice, drawn by `SelectableCard` | `children`, `actionId`, `bind` (String?, string state key), `value` (String?, templates; stored under `bind` on tap) |
 | `Expandable` | Collapsible section | `header` (UINode, required), `content` (List\<UINode\>), `initiallyExpanded` (Boolean), `bind` |
 
 ---
@@ -32,7 +32,7 @@
 |------|-----------|
 | `Text` | `content` (templates), `style` (UITypographyToken), `textFormat` (UITextFormat), `conditionalTextFormat` (Map\<String, UITextFormat\>), `actionId`, `maxLines` |
 | `MoneyText` | `amount` (Long, minor units), `currency` (ISO 4217, matched ignoring case; one of NGN, GBP, USD, EUR, JPY, CHF, CAD, AUD, NZD, CNY, HKD, any other draws nothing and is reported through `onNodeRenderError`), `style`, `textFormat` (UITextFormat), `bind` |
-| `Image` | `url` (templates), `contentDescription`, `actionId` |
+| `Image` | `url` (templates; blank draws a skeleton-coloured placeholder of the node's size), `contentDescription` (templates), `actionId`, `contentScale` (UIContentScale?, `Fit` by default) |
 | `Icon` | `url`, `adaptive` (Boolean: tint the icon with the surrounding content colour, `element.primary` by default), `actionId` |
 | `RichText` | `content` (markdown, templates), `style` (UITypographyToken) |
 
