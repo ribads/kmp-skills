@@ -33,7 +33,7 @@
 | `Text` | `content` (templates), `style` (UITypographyToken), `textFormat` (UITextFormat), `conditionalTextFormat` (Map\<String, UITextFormat\>), `actionId`, `maxLines` |
 | `MoneyText` | `amount` (Long, minor units), `currency` (ISO 4217, matched ignoring case; one of NGN, GBP, USD, EUR, JPY, CHF, CAD, AUD, NZD, CNY, HKD, any other draws nothing and is reported through `onNodeRenderError`), `style`, `textFormat` (UITextFormat), `bind` |
 | `Image` | `url` (templates; blank draws a skeleton-coloured placeholder of the node's size), `contentDescription` (templates), `actionId`, `contentScale` (UIContentScale?, `Fit` by default) |
-| `Icon` | `url`, `adaptive` (Boolean: tint the icon with the surrounding content colour, `element.primary` by default), `actionId` |
+| `Icon` | `name` (UIIcon?: a bundled glyph that draws offline and wins over `url`; schema version 5), `size` (Float?: the glyph's side in dp, 24 by default), `intent` (UITextIntent?: the glyph's colour), `container` (UIIconContainer?: `Circle` or `Rounded`, a backing 1.75 times the glyph filled with the intent's surface colour, `Emphasis` by default), `url`, `adaptive` (Boolean: tint a remote icon with the surrounding content colour, `element.primary` by default), `actionId` |
 | `RichText` | `content` (markdown, templates), `style` (UITypographyToken) |
 
 ---

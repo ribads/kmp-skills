@@ -123,6 +123,10 @@ JSON examples:
 
 `Caution`, `Emphasis`, `Success`, `Error`
 
+### UIIconContainer
+
+`Circle`, `Rounded`: the backing a named `Icon` glyph sits on. `Rounded` takes the corners the theme gives thumbnails.
+
 ### UIVisibility
 
 `Visible`, `Invisible`, `Gone`
