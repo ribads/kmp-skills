@@ -21,6 +21,7 @@ Import them from exactly these paths:
 
 ```kotlin
 import com.ribads.synapse.core.context.AppContextProvider
+import com.ribads.synapse.core.context.launchForResult   // androidMain only
 ```
 
 ---
@@ -37,6 +38,20 @@ expect object AppContextProvider {
 Auto-initialized on Android via a `ContentProvider` registered in the manifest — no manual setup needed.
 
 On Android, `currentActivity` is the most recently resumed `ComponentActivity` that is still alive. It stays set while that activity is paused or stopped (for example behind a permission prompt, or while the camera app is open), so a launch chained after a prompt's result still finds it. It is cleared when the activity is destroyed.
+
+### Results that survive recreation (Android)
+
+```kotlin
+// androidMain
+suspend fun <I, O> ComponentActivity.launchForResult(contract: ActivityResultContract<I, O>, input: I): O
+```
+
+Launches `input` through `contract` and returns the result, even when the system recreates the activity (rotation, a
+window resize, a font or locale change) while the screen it opened is showing: the activity recreated in its place takes
+the request over under the same key and receives the result the system kept for it. A request registered with a random
+key on one activity's `activityResultRegistry` instead waits forever once that activity is recreated. If the activity
+finishes for good first, the result is the contract's own for a cancelled request (`parseResult(RESULT_CANCELED, null)`).
+Cancelling the caller unregisters the request. `core:permissions` and `core:file` launch through it.
 
 ## Usage
 

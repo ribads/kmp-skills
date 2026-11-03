@@ -90,7 +90,7 @@ enum class SortDirection { asc, desc }
 
 ### Column types
 
-`schema` names each column's type with a `DataFieldType` name. The store converts every value to its column's type on every write: `insert`, `update` and `updateWhere` mutations, `renderer:setItemField:`, a `replaceCollection` result, `initialData`, and the records it hydrates. A record therefore reads the same before and after a relaunch.
+`schema` names each column's type with a `DataFieldType` name. The store converts every value to its column's type on every write: `insert`, `update` and `updateWhere` mutations, `renderer:setItemField:`, a `replaceCollection` or `appendToCollection` result, `initialData`, and the records it hydrates. A record therefore reads the same before and after a relaunch.
 
 | Column type | Holds | A value converts when it is |
 |---|---|---|
@@ -105,7 +105,7 @@ enum class SortDirection { asc, desc }
 - A record whose `id` is missing or does not convert gets one generated in the `id` column's type: one more than the largest for `long`, a random UUID otherwise.
 - `update` and `delete` convert the id they are given to the `id` column's type before matching, so `"2"` finds the record whose `long` id is `2`. An id that does not convert matches nothing.
 - A record's `id` never changes: an `update`, an `updateWhere` or `renderer:setItemField:` that writes `id` leaves it as it was.
-- Keep ids unique within a collection. The store generates unique ones, but `initialData`, an `insert` that gives its own `id`, and a `replaceCollection` result can repeat one. `delete` and `update` act on every record holding the id they are given, and the edits `DataPersistence.save` receives name records by id, so records that share an id cannot be told apart once saved. An `insert` whose `unique` lists `id` is skipped when its id is taken.
+- Keep ids unique within a collection. The store generates unique ones, but `initialData`, an `insert` that gives its own `id`, and a `replaceCollection` or `appendToCollection` result can repeat one. `delete` and `update` act on every record holding the id they are given, and the edits `DataPersistence.save` receives name records by id, so records that share an id cannot be told apart once saved. An `insert` whose `unique` lists `id` is skipped when its id is taken.
 - Declare every numeric column. An undeclared column holds text, so it sorts as text (`"10"` before `"9"`) and reads as null through a number lane such as `ListItem.amountKey`.
 
 ### Computed columns
@@ -139,10 +139,10 @@ sealed class RecordComputed   // discriminator "type"
 }
 ```
 
-- The store derives every computed column, in dependency order, whenever a record enters the collection: `initialData`, hydration, `insertRecord`, `updateRecord`, an `updateWhere` mutation, `renderer:setItemField:` and `replaceCollection`. Node filters, `where`, `orderBy`, `groupBy`, aggregates, named conditions, templates and `DataRecordView` read them like any other column.
+- The store derives every computed column, in dependency order, whenever a record enters the collection: `initialData`, hydration, `insertRecord`, `updateRecord`, an `updateWhere` mutation, `renderer:setItemField:`, `replaceCollection` and `appendToCollection`. Node filters, `where`, `orderBy`, `groupBy`, aggregates, named conditions, templates and `DataRecordView` read them like any other column.
 - A date computation is null when `field` holds no time (a number, or text holding a whole number), and when the result does not fit in epoch milliseconds.
 - Arithmetic follows the [value ref arithmetic](#datavalueref-sealed-discriminator-type) with one difference: a column holds one type for every record, decided from its operands. It holds doubles when an operand is a `double` column, a fractional number, or a computed column that holds doubles (`ratio`, or arithmetic over one), and whole numbers otherwise. So `add` over two `double` columns gives `0.0`, not `0`, for a record missing both, and sorting, grouping and equality see one type per column.
-- Computed columns are never written or saved. Every write drops a value given under a computed name (an `insert`, `update` or `updateWhere` mutation, a `replaceCollection` result, `initialData`, `renderer:setItemField:`), a value saved under one earlier is ignored on load, and `DataPersistence.save` receives only the stored columns, in `records` and in `upserted` alike. Conversion to the [column types](#column-types) applies to the stored columns only.
+- Computed columns are never written or saved. Every write drops a value given under a computed name (an `insert`, `update` or `updateWhere` mutation, a `replaceCollection` or `appendToCollection` result, `initialData`, `renderer:setItemField:`), a value saved under one earlier is ignored on load, and `DataPersistence.save` receives only the stored columns, in `records` and in `upserted` alike. Conversion to the [column types](#column-types) applies to the stored columns only.
 - `daysUntil`, `daysSince` and every column that reads one read the clock. While their collection, an aggregate whose `field` or `where` reads one of them, or a named condition about the collection is observed, the store derives them again on the first `RendererClock.minutes` tick of a new day, and at once when something starts observing them on a day later than their values. A tick on the same day, or a new day that changes no value, emits and saves nothing, and columns that do not read the clock never wake.
 - Building the store throws `IllegalStateException`, naming the collection and the columns, when a computed column is named `id`, shares its name with a `schema` column, or is part of a cycle of computed columns.
 
@@ -198,7 +198,7 @@ A run makes the mutation's change, then applies its `then` effects in order, ins
 
 A `runMutation` effect runs the mutation it names at that point. Its change and its effects join the same batch, read the same row (`itemRef`) and the same clock reading, and add their navigation to the run's: their pages in order among the run's own, and `back` when either asks for it. A name the schema does not declare is skipped. An operation's `onSuccess` and `onFailure` run mutations the same way, with the reading the operation took when it settled.
 
-Mutations that run each other, directly (`a` runs `a`) or through a chain (`a` runs `b`, which runs `a`), would never finish. Building a `MutationExecutor` or an `OperationExecutor` checks every mutation, including one only an operation runs, and throws `IllegalStateException("mutations run each other: a -> b -> a")`, naming the first such chain.
+Mutations that run each other, directly (`a` runs `a`) or through a chain (`a` runs `b`, which runs `a`), would never finish. Building a `MutationExecutor` or an `OperationExecutor` checks every mutation, including one only an operation runs, and throws `IllegalStateException("mutations run each other: a -> b -> a")`, naming the first such chain. To refuse such a schema before building anything, call `DataSchema.validate()`, which reports this, every other construction failure and over-long `runMutation` chains as values (see SKILL.md, "Untrusted payloads").
 
 ```json
 "checkout": { "type": "insert", "collection": "orders",
@@ -324,7 +324,7 @@ enum class CalendarUnit { day, week, month, year }   // JSON uses the entry name
 
 ## DataOperation
 
-An operation the host app runs, usually over the network, triggered by `"actionId": "operation:<name>"` (from a button, a card, or an `OnAppear` node). The schema declares what goes in and where the outcome goes; the host's `OperationHandler` decides how it runs. See SKILL.md for the host contract.
+An operation the host app runs, such as a network call or a device capability (a camera, a recorder), triggered by `"actionId": "operation:<name>"` (from a button, a card, or an `OnAppear` node). The schema declares what goes in and where the outcome goes; the host's `OperationHandler` decides how it runs. See SKILL.md for the host contract.
 
 ```kotlin
 @Serializable
@@ -345,7 +345,19 @@ data class DataOperation(
 |---------|-----------|--------|-----------------------------|
 | `ReplaceCollection` | `"replaceCollection"` | `collection: String` | Replace every record, converted to the collection's declared types (see [Column types](#column-types)), with ids generated where missing or not convertible |
 | `SetFields` | `"setFields"` | `fields: Map<String, String>` (field name to record key) | Copy keys of the first record into fields, coerced to their declared types; with no records, reset the fields to their defaults |
+| `AppendToCollection` | `"appendToCollection"` | `collection: String`, `values: Map<String, DataValueRef>` (default empty) | Add every record after the ones the collection holds (sorted into place under its `orderBy`), converted to its declared types, with ids generated where missing or not convertible. Each record also takes `values`, resolved against it as a row (`itemRef` reads the returned record, `timestamp` is the settle-time reading); a key the record already holds keeps its own value |
 | `Unsupported` | (unknown type) | `typeName` | Records are discarded |
+
+A result naming a collection or field the schema does not declare writes nothing there; `validate()` reports it as `SchemaProblem.UnknownResultTarget`.
+
+```json
+"capture": {
+  "result": {
+    "type": "appendToCollection", "collection": "photos",
+    "values": { "added_at": { "type": "timestamp" }, "album": { "type": "recordRef", "path": "id" } }
+  }
+}
+```
 
 ### OperationConcurrency
 
@@ -450,7 +462,7 @@ Hydration reads the persistence synchronously, on the thread that builds the sto
 
 Every condition and `where` is compiled once (`DataCondition.compile()`). Named conditions are evaluated against the store's fields and, for `collectionEmpty`, `collectionNotEmpty` and `exists`, its records, and answered again after a settled change to something they read (see below). A computed field whose `where` compares against another field (`fieldRef`) is recomputed when that field changes, and a computed `fieldRef` field is ordered before it. Values that depend on the time (`dateBefore`, `dateAfter`, `dateWithin`, `dateInLast`, `dateInPeriod`, `isToday`) are re-evaluated when something starts observing one of them and then each wall-clock minute while it does, on the shared `RendererClock.minutes` ticker. Computed columns that read the clock follow the date instead; see [Computed columns](#computed-columns).
 
-**What an update recomputes.** An update (`updateRecord`, an `updateWhere` mutation, `renderer:setItemField:`) touches the columns whose values it changed, including each computed column it derived again to another value. An insert, a delete, a `replaceCollection`, or an update that moves records in the collection's order touches every column. Only what reads a touched column runs again:
+**What an update recomputes.** An update (`updateRecord`, an `updateWhere` mutation, `renderer:setItemField:`) touches the columns whose values it changed, including each computed column it derived again to another value. An insert, a delete, a `replaceCollection` or `appendToCollection` result, or an update that moves records in the collection's order touches every column. Only what reads a touched column runs again:
 
 - An aggregate over the collection (`sum`, `count`, `average`, `min`, `max`) is recomputed when its `field` or `where` reads a touched column, or its `where` reads the clock, and so is every computed field that reads it, through a `where`'s `fieldRef` too. A `count` without a `where` follows inserts, deletes and replaces only.
 - A named condition is answered again when it reads a field that changed, or asks about the collection and reads a touched column. `collectionEmpty`, `collectionNotEmpty` and an `exists` without a `where` follow inserts, deletes and replaces only; an `exists` with a `where` also follows the columns its `where` reads. A record condition also follows the columns of its own record that its `record.<field>`s read. A condition that reads the clock is answered after every change, and every condition after a clock tick or a `setSortOrder`.

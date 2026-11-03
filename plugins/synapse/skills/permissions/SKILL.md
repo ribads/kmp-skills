@@ -36,6 +36,9 @@ import com.ribads.synapse.core.permissions.model.PermissionsResult
 interface PermissionsManager {
     suspend fun requestPermission(request: PermissionsRequest): PermissionsResult
 
+    // Opens this app's page in system Settings; returns whether it opened. Any thread, never throws.
+    suspend fun openAppSettings(): Boolean
+
     companion object {
         val shared: PermissionsManager
     }
@@ -46,6 +49,8 @@ expect fun buildPermissionsManager(): PermissionsManager
 
 On Android `requestPermission` needs a live `ComponentActivity` (`AppContextProvider.currentActivity`, see `/synapse:context`) to show the prompt, and **throws `IllegalStateException`** when there is none (for example when called before any `ComponentActivity` has resumed, or after the tracked one is destroyed). iOS needs no activity and never throws.
 
+`openAppSettings` is the way out of a final `Denied`: Android starts `ACTION_APPLICATION_DETAILS_SETTINGS` for the package, iOS opens `UIApplicationOpenSettingsURLString`.
+
 ### PermissionsRequest
 
 ```kotlin
@@ -55,6 +60,8 @@ sealed class PermissionsRequest(open val contextUiDisplayed: Boolean) {
     data class MediaStorage(override val contextUiDisplayed: Boolean) : PermissionsRequest(contextUiDisplayed)
     data class VideoCall(override val contextUiDisplayed: Boolean) : PermissionsRequest(contextUiDisplayed)
     data class Location(override val contextUiDisplayed: Boolean) : PermissionsRequest(contextUiDisplayed)
+    // Showing notifications. A foreground service runs without it; only its notification hides.
+    data class Notifications(override val contextUiDisplayed: Boolean) : PermissionsRequest(contextUiDisplayed)
 }
 ```
 
@@ -124,6 +131,7 @@ the request return `Denied` every time.
 | `MediaStorage` | nothing |
 | `VideoCall` | `RECORD_AUDIO`, `CAMERA`; optionally `READ_PHONE_STATE` and `BLUETOOTH_SCAN` (API 31+) |
 | `Location` | `ACCESS_COARSE_LOCATION`; add `ACCESS_FINE_LOCATION` to let the user grant precise location |
+| `Notifications` | `POST_NOTIFICATIONS` (only asked on API 33+) |
 
 ```xml
 <uses-permission android:name="android.permission.RECORD_AUDIO" />
@@ -148,6 +156,7 @@ Declare only the entries for the requests the app makes. Put the `android.hardwa
 | `MediaStorage` | none (modern photo-picker APIs) | photo library read/write (`PHPhotoLibrary`) |
 | `VideoCall` | required `RECORD_AUDIO` + `CAMERA`; optional `READ_PHONE_STATE` + `BLUETOOTH_SCAN` (API 31+ only) | camera + microphone |
 | `Location` | required `ACCESS_COARSE_LOCATION`; optional `ACCESS_FINE_LOCATION` (foreground only) | when-in-use (`CLLocationManager`), either accuracy |
+| `Notifications` | required `POST_NOTIFICATIONS` on API 33+; `Success` straight away below | alert, sound and badge (`UNUserNotificationCenter`); answers without a prompt once decided |
 
 A request succeeds once its **required** permissions are granted. Optional permissions are prompted
 together with the required ones, but declining them does not fail the request. Once every required
@@ -178,3 +187,4 @@ Required iOS `Info.plist` usage-description keys per request:
 | `Camera`, `VideoCall` | `NSCameraUsageDescription` |
 | `MediaStorage` | `NSPhotoLibraryUsageDescription` (read-write access; `NSPhotoLibraryAddUsageDescription` is not used) |
 | `Location` | `NSLocationWhenInUseUsageDescription` |
+| `Notifications` | none |

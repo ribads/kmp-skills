@@ -100,6 +100,7 @@ interface NavFlow {
 ```kotlin
 sealed interface NavigationCommand {
     data class ScreenCommand(val key: NavKey, val clearStack: Boolean = false) : NavigationCommand
+    data class PopToOrPushCommand(val key: NavKey) : NavigationCommand
     data class BackCommand(val result: NavigationResult = NavigationResult.Empty) : NavigationCommand
     data class CloseFlow(val result: NavigationResult = NavigationResult.Empty) : NavigationCommand
     data class CloseFeature(val result: NavigationResult = NavigationResult.Empty) : NavigationCommand
@@ -110,6 +111,7 @@ sealed interface NavigationCommand {
 ```
 
 - `ScreenCommand`: push `key`; with `clearStack`, reset the back stack so `key` becomes the only (root) entry.
+- `PopToOrPushCommand`: show `key` without a second copy of it. When `key` (compared by equality, so arguments count) is already on the stack, everything above its last occurrence is popped, delivering no result; otherwise `key` is pushed. Use it for destinations reached from outside the current flow, such as a launcher shortcut, where pushing could duplicate an entry already on the stack.
 - `BackCommand`: pop the current destination, delivering `result` to the one beneath. No-op on the last entry.
 - `CloseFlow`: pop the nearest enclosing flow of the current destination (its contiguous run of entries, including any of its sub-flows'), delivering `result` to the revealed destination. The revealed destination may belong to any flow: a flow launched from another feature returns its result to the launching screen. No-op when the run spans the whole stack; throws `IllegalStateException` if no flow owns the current destination's key class.
 - `CloseFeature`: same, but for the current destination's entire feature (the root ancestor flow's run).
@@ -306,6 +308,8 @@ data class BottomSheetAppearance(                     // app-wide, via NavContai
     val dragHandle: @Composable () -> Unit = { BottomSheetDefaults.DragHandle() },
     val contentColor: @Composable () -> Color = { contentColorFor(containerColor()) },
     val contentDecoration: @Composable (content: @Composable () -> Unit) -> Unit = { content -> content() },
+    val shape: @Composable () -> Shape = { BottomSheetDefaults.ExpandedShape },     // the sheet's outline
+    val scrimColor: @Composable () -> Color = { BottomSheetDefaults.ScrimColor },   // dims the content beneath
 )
 ```
 
@@ -318,7 +322,7 @@ Lifecycle inside overlays differs by kind:
 
 **The destination already is the sheet.** Root a `bottomSheet()` screen in `TraySurface` (or `ScrollableTraySurface` for scrolling content, with `BottomSheetOptions(skipPartiallyExpanded = true, isSwipeDismissible = false, showDragHandle = false)`) from `/synapse:ui-components`. Never root it in `Tray` or `ScrollableTray`: those draw their own sheet, so the user gets a second sheet behind the first.
 
-**One look for every sheet.** `NavContainer` also publishes `bottomSheetAppearance` as `LocalBottomSheetAppearance`, and Synapse's in-screen sheets (`Tray`, `ScrollableTray`, `DatePickerBottomSheet`) read it. Set the drag handle, colours and `contentDecoration` once on `NavContainer` and both kinds of sheet match. Apps on the Synapse theme pass `ThemedBottomSheetAppearance` from `/synapse:ui-components`, which paints `surface.raised`, tints the handle with `border.primary` and wraps the content in `WithRaisedSurface`. Outside any `NavContainer` the local holds `BottomSheetAppearance()`.
+**One look for every sheet.** `NavContainer` also publishes `bottomSheetAppearance` as `LocalBottomSheetAppearance`, and Synapse's in-screen sheets (`Tray`, `ScrollableTray`, `DatePickerBottomSheet`) read it. Set the drag handle, colours and `contentDecoration` once on `NavContainer` and both kinds of sheet match. Apps on the Synapse theme pass `ThemedBottomSheetAppearance` from `/synapse:ui-components`, which paints `surface.raised` in the top corners of `roundShape`, dims the content with `overlay.scrim`, tints the handle with `border.primary` and wraps the content in `WithRaisedSurface`. Outside any `NavContainer` the local holds `BottomSheetAppearance()`.
 
 ```kotlin
 val LocalBottomSheetAppearance: ProvidableCompositionLocal<BottomSheetAppearance>
@@ -471,6 +475,7 @@ val dispatcher = NavContainer(startKey = HomeRoute, features = appFeatures)
 
 // 4. Navigate (typed)
 dispatcher.navigateTo(NavigationCommand.ScreenCommand(DetailRoute(id = "123")))
+dispatcher.navigateTo(NavigationCommand.PopToOrPushCommand(DetailRoute(id = "123")))  // reuse it if already open
 dispatcher.navigateTo(NavigationCommand.BackCommand())
 dispatcher.navigateTo(NavigationCommand.CloseFlow(ShippingResult(addressId, option)))   // end a flow with a result
 dispatcher.navigateTo(NavigationCommand.FlowCompletionCommand(ConfirmationRoute(id)))   // replace a flow

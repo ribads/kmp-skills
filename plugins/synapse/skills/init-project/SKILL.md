@@ -33,8 +33,11 @@ Generates a complete Kotlin Multiplatform project with the canonical Synapse mul
 │           │   ├── strings.xml
 │           │   ├── themes.xml             # DayNight window theme
 │           │   └── colors.xml             # window_background = light surface.primary
-│           └── values-night/
-│               └── colors.xml             # window_background = dark surface.primary
+│           ├── values-night/
+│           │   └── colors.xml             # window_background = dark surface.primary
+│           └── xml/
+│               ├── data_extraction_rules.xml  # Android 12+: encrypted prefs stay out of backup and transfer
+│               └── backup_rules.xml       # Android 11 and lower: the same exclusions
 │
 ├── composeApp/                             # KMP library: DI wiring + shared app logic
 │   ├── build.gradle.kts                   # androidMultiplatformLibrary plugin
@@ -196,9 +199,12 @@ Key conventions:
 - **Android config lives inside `kotlin {}` block**: `kotlin { android { namespace = "..."; compileSdk = ...; minSdk = ... } }`
 - **`androidResources { enable = true }`** for modules that need Android resources
 - **JVM target is 21** (`JvmTarget.JVM_21`, `JavaVersion.VERSION_21`)
+- **`androidApp` enables core library desugaring** (`desugar_jdk_libs`): the generated `minSdk` is 24, and `kotlinx-datetime`, which every Synapse `Text` reads, needs `java.time`, which Android ships only from API 26
 - **MVI files go in `ui/` package** (e.g., `app.ui.MainContract`), not `mvi/`
 - **Landing screen files use `LandingScreen` prefix** (e.g., `LandingScreenContract`, `LandingScreenViewModel`)
 - **`kotlin-inject-runtime-kmp`** is used instead of `kotlin-inject-runtime`
+- **Only `composeApp` builds an iOS framework** (`ComposeApp`, the one Xcode links); every other module declares plain `iosArm64()` and `iosSimulatorArm64()` targets, so `./gradlew build` links one framework, not one per module
+- **Backups exclude encrypted preferences**: `synapse_secure_prefs.xml` always, and `<name>_session.xml` with `--with-session`. They are sealed by an Android Keystore key that never leaves the device, so a restored copy could not be decrypted
 - **Modules with kotlin-inject codegen** (`composeApp`, each `domain/*/data`, each `features/*/usecase` and `features/*/ui`) declare `add("kspCommonMainMetadata", libs.kotlin.inject.compiler)` and call `configureCommonMainKsp()`, which puts the generated sources on the common compile path. The project has no `build-logic`, so the script writes an identical copy of that function at the bottom of each of those build files. Change it in every copy, or move it into a convention plugin once the project grows one.
 
 ## Runtime wiring

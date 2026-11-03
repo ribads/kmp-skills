@@ -288,8 +288,10 @@ coilCompose = "3.6.3"
 coroutines = "1.11.0"
 kermitLogger = "2.1.0"
 kotlinxSerialization = "1.11.0"
+desugarJdkLibs = "2.1.5"
 
 [libraries]
+android-desugarJdkLibs = { module = "com.android.tools:desugar_jdk_libs", version.ref = "desugarJdkLibs" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidx-core" }
 androidx-appcompat = { module = "androidx.appcompat:appcompat", version.ref = "androidx-appcompat" }
@@ -381,6 +383,8 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
+        // kotlinx-datetime runs on java.time, which Android ships only from API 26.
+        isCoreLibraryDesugaringEnabled = true
     }
     buildFeatures {
         buildConfig = true
@@ -389,11 +393,31 @@ android {
 }
 
 dependencies {
+    coreLibraryDesugaring(libs.android.desugarJdkLibs)
     implementation(libs.androidx.core.ktx)
     implementation(projects.composeApp)
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.activity.compose)
 }
+'''
+
+ANDROID_DATA_EXTRACTION_RULES = '''<?xml version="1.0" encoding="utf-8"?>
+<!-- Encrypted preferences are sealed by a Keystore key that never leaves the device, so a restored copy cannot be read. -->
+<data-extraction-rules>
+    <cloud-backup>
+__BACKUP_EXCLUDES_NESTED__
+    </cloud-backup>
+    <device-transfer>
+__BACKUP_EXCLUDES_NESTED__
+    </device-transfer>
+</data-extraction-rules>
+'''
+
+ANDROID_BACKUP_RULES = '''<?xml version="1.0" encoding="utf-8"?>
+<!-- Encrypted preferences are sealed by a Keystore key that never leaves the device, so a restored copy cannot be read. -->
+<full-backup-content>
+__BACKUP_EXCLUDES__
+</full-backup-content>
 '''
 
 ANDROID_MANIFEST = '''<?xml version="1.0" encoding="utf-8"?>
@@ -403,6 +427,8 @@ ANDROID_MANIFEST = '''<?xml version="1.0" encoding="utf-8"?>
 
     <application
         android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
         android:label="__PROJECT_NAME__"
         android:supportsRtl="true"
         android:theme="@style/Theme.__PROJECT_NAME__">
@@ -509,6 +535,7 @@ kotlin {
         iosTarget.binaries.framework {
             baseName = "ComposeApp"
             isStatic = true
+            binaryOption("bundleId", "__BASE_PACKAGE__.composeapp")
         }
     }
     configureCommonMainKsp()
@@ -1002,15 +1029,8 @@ kotlin {
         }
     }
 
-    listOf(
-        iosArm64(),
-        iosSimulatorArm64()
-    ).forEach { iosTarget ->
-        iosTarget.binaries.framework {
-            baseName = "ComposeUi"
-            isStatic = true
-        }
-    }
+    iosArm64()
+    iosSimulatorArm64()
 
     sourceSets {
         androidMain.dependencies {
@@ -1182,15 +1202,8 @@ CORE_LOG_BUILD_GRADLE = '''plugins {
 
 kotlin {
     jvm()
-    listOf(
-        iosArm64(),
-        iosSimulatorArm64()
-    ).forEach { iosTarget ->
-        iosTarget.binaries.framework {
-            baseName = "CoreLog"
-            isStatic = true
-        }
-    }
+    iosArm64()
+    iosSimulatorArm64()
 }
 '''
 
@@ -1267,15 +1280,8 @@ kotlin {
         withHostTest {}
     }
 
-    listOf(
-        iosArm64(),
-        iosSimulatorArm64()
-    ).forEach { iosTarget ->
-        iosTarget.binaries.framework {
-            baseName = "domain-__DOMAIN__"
-            isStatic = true
-        }
-    }
+    iosArm64()
+    iosSimulatorArm64()
 
     configureCommonMainKsp()
     sourceSets {
@@ -1485,15 +1491,8 @@ kotlin {
         }
     }
 
-    listOf(
-        iosArm64(),
-        iosSimulatorArm64()
-    ).forEach { iosTarget ->
-        iosTarget.binaries.framework {
-            baseName = "Feature__FEATURE_PASCAL__Ui"
-            isStatic = true
-        }
-    }
+    iosArm64()
+    iosSimulatorArm64()
 
     configureCommonMainKsp()
     sourceSets {
@@ -2001,6 +2000,12 @@ def write_root(out: Path, ctx: dict, domains: list, features: list, with_session
     copy_template_file("gradle/gradlew.bat", out / "gradlew.bat", force)
 
 
+def backup_excludes(project_lower: str, with_session: bool, indent: str) -> str:
+    """Backup exclusions for the encrypted preference files: Synapse's shared one, and the session store."""
+    files = ["synapse_secure_prefs.xml"] + ([f"{project_lower}_session.xml"] if with_session else [])
+    return "\n".join(f'{indent}<exclude domain="sharedpref" path="{file}" />' for file in files)
+
+
 def write_android_app(out: Path, ctx: dict, force: bool) -> None:
     android_app = out / "androidApp"
     res = android_app / "src" / "main" / "res"
@@ -2010,6 +2015,8 @@ def write_android_app(out: Path, ctx: dict, force: bool) -> None:
     write_file(res / "values" / "themes.xml", render(ANDROID_THEMES_XML, ctx), force)
     write_file(res / "values" / "colors.xml", ANDROID_COLORS_XML, force)
     write_file(res / "values-night" / "colors.xml", ANDROID_COLORS_NIGHT_XML, force)
+    write_file(res / "xml" / "data_extraction_rules.xml", render(ANDROID_DATA_EXTRACTION_RULES, ctx), force)
+    write_file(res / "xml" / "backup_rules.xml", render(ANDROID_BACKUP_RULES, ctx), force)
     write_file(
         android_app / "src" / "main" / "java" / pkg_to_path(ctx["APP_PACKAGE"]) / "MainActivity.kt",
         render(MAIN_ACTIVITY, ctx),
@@ -2289,6 +2296,8 @@ def main() -> None:
         "APP_PACKAGE": f"{base_pkg}.app",
         "SYNAPSE_VERSION": resolve_synapse_version(args.synapse_version),
         "FIRST_FEATURE": features[0],
+        "BACKUP_EXCLUDES": backup_excludes(name.lower(), with_session, indent="    "),
+        "BACKUP_EXCLUDES_NESTED": backup_excludes(name.lower(), with_session, indent="        "),
     }
 
     print(f"Generating {name} project in {out}")

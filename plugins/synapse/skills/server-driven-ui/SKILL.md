@@ -38,13 +38,13 @@ Import each type from its package below.
 |---|---|
 | `com.ribads.synapse.ui.renderer.action` | `ActionDispatcher`, `ActionHandler`, `ActionPayload`, `OperationHandler`, `OperationOutcome`, `bridgedActionHandler`, `onAction` |
 | `com.ribads.synapse.ui.renderer.capability` | `IncompatibilityReason`, `RendererCapabilities`, `SchemaElementKind`, `ScreenCompatibility`, `SynapseSchemaVersion`, `compatibilityWith` |
-| `com.ribads.synapse.ui.renderer.data` | `CollectionChange`, `DataChanges`, `DataPersistence`, `MutationExecutor`, `MutationResult`, `OperationExecutor`, `PageDestination`, `PageOperations`, `ReactiveDataStore`, `renderedPageActionHandler` |
+| `com.ribads.synapse.ui.renderer.data` | `CollectionChange`, `DataChanges`, `DataPersistence`, `MutationExecutor`, `MutationResult`, `OperationExecutor`, `PageDestination`, `PageOperations`, `ReactiveDataStore`, `SchemaLimits`, `SchemaProblem`, `renderedPageActionHandler`, `validate` |
 | `com.ribads.synapse.ui.renderer.diagnostics` | `RenderDiagnostics`, `RenderPassSummary`, `callbackRenderDiagnostics`, `children`, `reportNodeRenderError`, `summarizeTree` |
-| `com.ribads.synapse.ui.renderer.engine` | `BoundRecordGroups`, `BoundRecords`, `CollectionProvider`, `CompiledCondition`, `CompiledTemplate`, `ConditionEvaluator`, `DataRecord`, `DataRecordView`, `ITEM_COLLECTION_KEY`, `ITEM_CONTEXT_PAYLOAD_KEY`, `MediaProvider`, `NodeRenderer`, `NodeRendererRegistry`, `PageRecord`, `RecordConditionEvaluator`, `RecordFieldKey`, `RecordId`, `RecordSource`, `RenderNode`, `RendererCalendar`, `RendererClock`, `SynapseRenderer`, `TemplateEngine`, `boundRecords`, `committedValue`, `compile`, `currentRecord`, `dispatchWithRecord`, `effectiveTextFormat`, `hasConditionalFormat`, `inCollection`, `inRow`, `narrowRecords`, `pageAwareFieldReader`, `recordFieldReader`, `rowKeys`, `watchBoundRecords`, `watchCondition`, `watchEffectiveTextFormat`, `watchPageRecord`, `watchTemplateInputs` |
-| `com.ribads.synapse.ui.renderer.navigation` | `InMemorySchemaStore`, `PersistedState`, `PersistentRendererStateHolder`, `RenderedPageAction`, `RenderedPageConfig`, `RenderedPageKey`, `RenderedRoutesBuilder`, `SchemaStore`, `ScreenNavigationHost`, `ScreenNavigationState`, `ScreenNavigator`, `ScreenParseResult`, `ScreenRequirements`, `StatePersistence`, `UINavigationTab`, `UIPage`, `UIScreen`, `UIScreenNavigation`, `load`, `navigateToRenderedPage`, `parseUIScreen`, `rememberScreenNavigator`, `renderedEntries`, `renderedEntry`, `rendererNavigationSerializers`, `toUIScreen`, `uiScreenJsonSchema` |
+| `com.ribads.synapse.ui.renderer.engine` | `BoundRecordGroups`, `BoundRecords`, `CollectionProvider`, `CompiledCondition`, `CompiledTemplate`, `ConditionEvaluator`, `DataRecord`, `DataRecordView`, `ITEM_COLLECTION_KEY`, `ITEM_CONTEXT_PAYLOAD_KEY`, `LocalRendererTextFieldStyle`, `MediaProvider`, `NodeRenderer`, `NodeRendererRegistry`, `PageRecord`, `RecordConditionEvaluator`, `RecordFieldKey`, `RecordId`, `RecordSource`, `RenderNode`, `RendererCalendar`, `RendererClock`, `SynapseRenderer`, `TemplateEngine`, `boundRecords`, `committedValue`, `compile`, `currentRecord`, `dispatchWithRecord`, `effectiveTextFormat`, `hasConditionalFormat`, `inCollection`, `inRow`, `narrowRecords`, `pageAwareFieldReader`, `recordFieldReader`, `rowKeys`, `watchBoundRecords`, `watchCondition`, `watchEffectiveTextFormat`, `watchPageRecord`, `watchTemplateInputs` |
+| `com.ribads.synapse.ui.renderer.navigation` | `InMemorySchemaStore`, `ParseBound`, `ParseLimits`, `PersistedState`, `PersistentRendererStateHolder`, `RenderedPageAction`, `RenderedPageConfig`, `RenderedPageKey`, `RenderedRoutesBuilder`, `SchemaStore`, `ScreenNavigationHost`, `ScreenNavigationState`, `ScreenNavigator`, `ScreenParseResult`, `ScreenRequirements`, `StatePersistence`, `UINavigationTab`, `UIPage`, `UIScreen`, `UIScreenNavigation`, `load`, `navigateToRenderedPage`, `parseUIScreen`, `rememberScreenNavigator`, `renderedEntries`, `renderedEntry`, `rendererNavigationSerializers`, `toUIScreen`, `uiScreenJsonSchema` |
 | `com.ribads.synapse.ui.renderer.schema` | `CalendarUnit`, `ComputedField`, `DataCollection`, `DataCondition`, `DataEffect`, `DataField`, `DataFieldType`, `DataMutation`, `DataOperation`, `DataOperationResult`, `DataOrderBy`, `DataSchema`, `DataValueRef`, `OperationConcurrency`, `RecordComputed`, `SchemaParseResult`, `SortDirection`, `UIButtonState`, `UIContentScale`, `UIDimension`, `UIGradient`, `UIModifier`, `UINavBarAction`, `UINavBarLeadingIcon`, `UINode`, `UITextFormat`, `UITextIntent`, `UITheme`, `UIThemeBorder`, `UIThemeColors`, `UIThemeCorners`, `UIThemeElement`, `UIThemeElementInteractive`, `UIThemeIntentPalette`, `UIThemeIntents`, `UIThemeNeutral`, `UIThemeShadow`, `UIThemeShape`, `UIThemeSpacing`, `UIThemeSurface`, `UIThemeSurfaceInteractive`, `UIThemeTextStyle`, `UIThemeTypography`, `UIVisibility`, `containsUnsupported`, `parseUINode`, `schemaType`, `toUINode`, `toUINodes`, `uiNodeJsonSchema` |
 | `com.ribads.synapse.ui.renderer.state` | `InMemoryRendererStateHolder`, `RendererStateHolder`, `WatchHandle`, `watchBoolean`, `watchDouble`, `watchLong`, `watchRevision`, `watchString` |
-| `com.ribads.synapse.ui.renderer.theme` | `FontResolver`, `ResolvedShape`, `ResolvedTheme`, `WithRenderedTheme`, `resolve` |
+| `com.ribads.synapse.ui.renderer.theme` | `FontResolver`, `RenderedThemeMerge`, `ResolvedShape`, `ResolvedTheme`, `WithRenderedTheme`, `resolve` |
 
 ---
 
@@ -158,11 +158,25 @@ A `Builder` starts empty: merge it over `defaults()` to keep the built-in render
 fun WithRenderedTheme(
     theme: UITheme?,
     fontResolver: FontResolver = FontResolver.Default,
+    merge: RenderedThemeMerge = RenderedThemeMerge.Replace,
     content: @Composable () -> Unit,
 )
+
+enum class RenderedThemeMerge {
+    Replace,      // payload colours merge with the host's; its type scale, spacing and radii replace the host's
+    ColorsOnly,   // only payload colours apply; the host keeps its type scale, spacing and radii
+}
 ```
 
-Wrap `SynapseRenderer` in it to apply a payload theme. A null theme leaves the host theme untouched; see [theme-reference.md](theme-reference.md) for how a non-null theme merges.
+Wrap `SynapseRenderer` in it to apply a payload theme. A null theme leaves the host theme untouched; see [theme-reference.md](theme-reference.md) for how a non-null theme merges. A host with its own design system that lets each screen keep its brand colour passes `merge = RenderedThemeMerge.ColorsOnly`: the screen is recoloured and keeps the host's fonts, spacing and radii.
+
+A schema carries no field style, so rendered inputs draw `TextFieldStyle.Filled` whatever the host's own screens use. A host provides another around the renderer:
+
+```kotlin
+val LocalRendererTextFieldStyle: ProvidableCompositionLocal<TextFieldStyle>   // engine package; Filled by default
+
+CompositionLocalProvider(LocalRendererTextFieldStyle provides TextFieldStyle.Outlined) { SynapseRenderer(...) }
+```
 
 ---
 
@@ -496,6 +510,42 @@ fun UINode.schemaType(): String
 
 `toUINode()` and `toUIScreen()` still throw; use these where an exception is not an option.
 
+### Untrusted payloads: bounded parsing and schema validation
+
+Decoding, the tree walks and Compose layout all recurse, and on Kotlin/Native a stack overflow ends the process. A host that renders payloads it did not write (an LLM's, a user's) measures them first:
+
+```kotlin
+data class ParseLimits(                                   // navigation package
+    val maxLength: Int = 1_048_576,      // characters in the payload
+    val maxJsonDepth: Int = 64,          // object and array nesting, measured before decoding
+    val maxNodes: Int = 5_000,           // across every page's root and whenMissing
+    val maxNodeDepth: Int = 32,          // the longest path from a page's root down, it included
+)
+enum class ParseBound { Length, JsonDepth, Nodes, NodeDepth }
+
+/** Measures length and JSON nesting without decoding, then decodes and walks the nodes with an explicit stack. */
+fun parseUIScreen(json: String, limits: ParseLimits): ScreenParseResult
+
+// ScreenParseResult.Failure gains the bound a payload broke; null when it is malformed rather than too big.
+data class Failure(val message: String, val exceeded: ParseBound? = null) : ScreenParseResult
+```
+
+A schema can also be refused before a store is built from it. `ReactiveDataStore` and `MutationExecutor` throw `IllegalStateException` on what `validate` reports, and a `clearFields` naming an undeclared field throws when its mutation runs; `validate` reports all of these as values, and its walks keep their own stacks, so no schema can exhaust the call stack. `ui:renderer-data` has a JVM target, so a server or a JVM domain module can validate too.
+
+```kotlin
+data class SchemaLimits(val maxMutationChain: Int = 8)   // data package: mutations one dispatch may run, the first included
+
+sealed interface SchemaProblem {
+    data class ComputedValues(val reason: String)                         // unknown references, cycles, clashing columns
+    data class MutationCycle(val chain: List<String>)                     // starts and ends with the same mutation
+    data class MutationChainTooLong(val chain: List<String>, val limit: Int)   // an operation counts as `operation:<name>`
+    data class UnknownClearedField(val owner: String, val field: String)  // owner: a mutation or `operation:<name>`
+    data class UnknownResultTarget(val owner: String, val target: String) // an operation result's undeclared collection or field
+}
+
+fun DataSchema.validate(limits: SchemaLimits = SchemaLimits()): List<SchemaProblem>   // pure, any thread
+```
+
 An unknown `type` inside the data layer does not fail the parse either. `DataCondition`, `ComputedField`, `RecordComputed`, `DataMutation`, `DataEffect`, `DataValueRef` and `DataOperationResult` each decode it to their `Unsupported` variant, which keeps the original `typeName` (see [data-layer.md](data-layer.md#unsupported-types) for what each does at runtime):
 
 ```kotlin
@@ -556,7 +606,7 @@ Node filters, computed fields' `where`, and the data layer's named conditions al
 
 ## Operations
 
-Operations are how a schema reaches the network. The schema names an operation and declares what goes in and where the result goes; the host decides how it runs. The renderer never makes a network call itself, and a payload can never point the app's client at an arbitrary host.
+Operations are how a schema reaches beyond itself: the network, or a device capability the host binds (a camera, a recorder, a share sheet). The schema names an operation and declares what goes in and where the result goes (`replaceCollection`, `setFields`, or `appendToCollection` for records such as captured photos); the host decides how it runs. The renderer never makes a network call itself, and a payload can never point the app's client at an arbitrary host.
 
 ```kotlin
 // action package
@@ -618,7 +668,7 @@ Hosts using `renderedEntries` only set `RenderedPageConfig.operationHandler`. A 
 Package `com.ribads.synapse.ui.renderer.capability`. The client sends what it can run with every screen request; the server only returns screens that fit, and the client can check a screen before rendering it.
 
 ```kotlin
-object SynapseSchemaVersion { const val CURRENT: Int }      // 3; see the version table in SCHEMA.md
+object SynapseSchemaVersion { const val CURRENT: Int }      // 4; see the version table in SCHEMA.md
 
 class RendererCapabilities(val operations: Set<String> = emptySet()) {   // names bound natively; no blanks or commas
     val schemaVersion: Int
@@ -701,7 +751,10 @@ payload describes. The SwiftUI engine reports any renderer that throws. The Comp
 catch an exception thrown while composing, so it reports what it checks before composing: a
 modifier Compose refuses to build (negative padding, non-positive `aspectRatio`, `weight`, or
 radial-gradient `radius`; the node draws without it), an unsupported currency (the node draws
-nothing), and a `LazyGrid` with fewer than one column (drawn with one). An exception inside a
+nothing), a `LazyGrid` with fewer than one column (drawn with one), a `Slider` or `Stepper` whose `min` is
+above its `max` (drawn with the two swapped, and steps stay inside them), a `Text` with `maxLines` below one
+(drawn without a limit), and a `TextArea` whose lines Compose would refuse (drawn with at least one line, and
+`maxLines` no lower than `minLines`). An exception inside a
 Compose renderer still propagates. `RenderPassSummary.errorNodes` is deprecated and always 0.
 
 Hosts that cannot implement a Kotlin interface (Swift, notably: the bridge generates SAM
@@ -952,6 +1005,7 @@ data class RenderedPageConfig(
     val diagnostics: RenderDiagnostics = RenderDiagnostics.NoOp,   // failed saves go to the store's first one
     val operationHandler: OperationHandler? = null,             // ignored without dataSchema
     val navigation: UIScreenNavigation? = null,                  // tabs: the screen runs inside one entry
+    val themeMerge: RenderedThemeMerge = RenderedThemeMerge.Replace,   // how theme combines with the host's
 )
 ```
 

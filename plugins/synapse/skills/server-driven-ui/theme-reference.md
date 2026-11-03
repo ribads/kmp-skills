@@ -75,6 +75,8 @@ The host app's theme has a light and a dark scheme of single-valued roles (see `
 
 ### What a non-null theme replaces
 
+With `WithRenderedTheme(..., merge = RenderedThemeMerge.ColorsOnly)` the colours are all that apply, and the host keeps its type scale, spacing and radii; the rest of this section is about the default, `RenderedThemeMerge.Replace`.
+
 Only colours merge with the host. In Compose, any non-null `theme`, even one that sends only colours, replaces the rest of the host theme:
 
 - **Typography: the whole host type scale is replaced.** A role the payload leaves unset takes Synapse's scale (`ResolvedTypography.Default`: `h1` 34/40 semibold down to `labelXs` 10/14 medium), not the host's, and the font becomes `FontFamily.Default` unless `typography.fontFamily` names a font the `FontResolver` can load. A role the payload sets is used as given, so set its weight and line height too.

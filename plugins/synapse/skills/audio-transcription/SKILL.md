@@ -558,6 +558,7 @@ sealed interface PlatformSpeechFailure {
     data object NeedsUpdate : PlatformSpeechFailure          // the OS's speech components need an update
     data object InputTooLarge : PlatformSpeechFailure        // audio too long for one request
     data object InputTooSmall : PlatformSpeechFailure        // audio too short to transcribe
+    data object NoSpeech : PlatformSpeechFailure             // no speech heard; a buffer or file reports an empty transcript instead
     data object Rejected : PlatformSpeechFailure             // content policy; a live transcript may end early
     data object Unexpected : PlatformSpeechFailure           // anything else
 }
@@ -626,8 +627,13 @@ stream.state.collect { state ->
   (`buildPersistentAudioRecorder`).
 - **Live audio at real-time pace**: feeding a stream much faster than real time overflows ML Kit's buffer
   and fails it. Use `transcribe` / `transcribeFile` for recorded audio.
-- **Files**: MP3, WAV, FLAC, M4A and OGG, recognized by the file extension. Buffer and file results carry
-  no timing.
+- **Files and buffers of any length**: one ML Kit request refuses long audio (`InputTooLarge`), so
+  `transcribe` and `transcribeFile` hear audio in windows of at most 30 s, each ending at the quietest
+  100 ms of its last 2 s so a word is rarely split. Files are decoded with the platform's `MediaExtractor`
+  and `MediaCodec` (any audio Android can play: M4A, MP3, WAV, FLAC, OGG and more), a codec buffer at a
+  time, so memory holds one window whatever the file's length. Buffer and file results carry no timing.
+  A window without speech adds nothing, so a recording with long pauses keeps the words around them, and
+  one with no speech at all comes back as an empty transcript.
 - **Merged into the app**: `INTERNET` and `ACCESS_NETWORK_STATE`, `<queries>` for `com.google.android.tts`
   and `com.google.android.aicore`, ML Kit's `MlKitInitProvider` and `MlKitComponentDiscoveryService`, Play
   services' `GoogleApiActivity`, and datatransport's scheduling components. ML Kit reports usage

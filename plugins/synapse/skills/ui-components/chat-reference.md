@@ -61,7 +61,7 @@ sealed interface ChatAttachment {
 
 ### Visual details
 
-- 24dp corner radius container with 0.5dp border
+- Container in `Theme.shape.textShape`, the shape of every text field, with a 0.5dp border; the send button in `Theme.shape.buttonShape`
 - `animateContentSize` with spring for smooth height transitions
 - Attachment strip: horizontal scrollable row of 56dp image thumbnails and audio chips, each with an 18dp circle remove button
 - Send button: 34dp circle with Canvas arrow icon, spring bounce scale animation (appears when input has content). While shown it is announced as a button labelled `sendLabel`; while hidden it is neither tappable nor announced.

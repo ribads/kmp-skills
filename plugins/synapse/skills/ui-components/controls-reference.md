@@ -363,7 +363,7 @@ data class TimePickerModel(
 
 ## Confirm Dialog
 
-Modal dialog with scrim overlay, surface card, title/message, and confirm/cancel buttons. Uses `Popup` — no Material3 `AlertDialog`.
+Modal dialog with scrim overlay, surface card, title/message, and confirm/cancel buttons. Uses `Popup`, not Material3 `AlertDialog`. The card takes `Theme.shape.roundShape` and casts `Theme.elevation.overlay`; the scrim is `overlay.scrim`.
 
 ```kotlin
 @Composable fun ConfirmDialog(

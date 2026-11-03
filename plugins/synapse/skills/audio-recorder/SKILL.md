@@ -53,7 +53,8 @@ The module does not request permissions itself (use `/synapse:permissions`), and
 **Android** (`AndroidManifest.xml` of the app):
 - Declare `android.permission.RECORD_AUDIO` and request it at runtime before `start()` / `bind()`.
 - Persistent recorder on Android 13+: declare `android.permission.POST_NOTIFICATIONS` and request it
-  at runtime, otherwise the foreground service runs but its notification is not shown.
+  at runtime with `PermissionsRequest.Notifications` (`/synapse:permissions`), otherwise the foreground service
+  runs but its notification is not shown.
 - Call `PersistentAudioRecorder.bind()` while the app is in the foreground: Android restricts
   starting a microphone foreground service from the background.
 - The library already declares `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_MICROPHONE` and the

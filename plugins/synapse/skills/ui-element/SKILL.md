@@ -17,6 +17,13 @@ commonMain.dependencies {
 
 Compose runtime, foundation and UI, Coil's `coil-compose` and `kotlinx-datetime` (the `TimeZone` on `Text.Timestamp`) are `api` dependencies, so a consumer needs none of them declared to use the types this module exposes.
 
+`kotlinx-datetime` runs on `java.time`, which Android ships only from API 26, and `Text` reads it for every clause. An app whose `minSdk` is below 26 enables core library desugaring in its application module, or its first `Text` crashes on Android 7:
+
+```kotlin
+android { compileOptions { isCoreLibraryDesugaringEnabled = true } }
+dependencies { coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5") }
+```
+
 ## Imports
 
 Import each type from its package below.
@@ -27,7 +34,7 @@ Import each type from its package below.
 | `com.ribads.synapse.ui.element.image` | `AsyncImagePainterFactory`, `Icon`, `Image`, `ImagePainterFactory`, `OptionalClickCallback`, `WithImagePainter`, `installSynapseImageComponents`, `isEnabled`, `withContentDescription` |
 | `com.ribads.synapse.ui.element.text` | `Clause`, `CompositeClause`, `Currency`, `Graphics`, `LocalTextIntentPalette`, `MoneyParser`, `Text`, `TextFormat`, `TextIntent`, `TextIntentPalette`, `TextLink`, `WithTextClickHandler`, `WithTextIntentPalette`, `asClickable`, `asMention`, `asText`, `getMoneyParser`, `localizedClause`, `rememberPlainText`, `textIntentPalette`, `toBackgroundColor`, `toColor`, `toComposite`, `withFormat` |
 | `com.ribads.synapse.ui.element.text.markdown` | `asMarkdown` |
-| `com.ribads.synapse.ui.element.theme` | `Appearance`, `Border`, `ColorSchemes`, `Colors`, `Element`, `ElementInteractive`, `IntentPalette`, `Intents`, `LocalContentColor`, `Overlay`, `Shadow`, `Shape`, `Spacing`, `Surface`, `SurfaceInteractive`, `Theme`, `ThemedSystemBars`, `Typography`, `WithAppTheme`, `WithAppearance`, `WithRaisedSurface`, `WithTheme` |
+| `com.ribads.synapse.ui.element.theme` | `Appearance`, `Border`, `ColorSchemes`, `Colors`, `Element`, `Elevation`, `ElementInteractive`, `IntentPalette`, `Intents`, `LocalContentColor`, `Overlay`, `Shadow`, `Shape`, `Spacing`, `Stroke`, `Surface`, `SurfaceInteractive`, `SystemBars`, `Theme`, `ThemedSystemBars`, `Typography`, `WithAppTheme`, `WithAppearance`, `WithRaisedSurface`, `WithTheme` |
 
 ---
 
@@ -48,6 +55,8 @@ fun WithAppTheme(
     typography: Typography,
     shape: Shape,
     spacing: Spacing? = null,          // null keeps the built-in default spacing scale
+    elevation: Elevation? = null,      // null keeps Elevation.Default
+    stroke: Stroke? = null,            // null keeps Stroke.Default
     content: @Composable () -> Unit,
 )
 
@@ -61,6 +70,8 @@ fun WithTheme(
     typography: Typography,
     shape: Shape,
     spacing: Spacing? = null,          // null keeps the enclosing scale (the built-in default at the root)
+    elevation: Elevation? = null,      // null keeps the enclosing elevation (Elevation.Default at the root)
+    stroke: Stroke? = null,            // null keeps the enclosing stroke (Stroke.Default at the root)
     content: @Composable () -> Unit,
 )
 
@@ -75,12 +86,15 @@ fun WithAppearance(appearance: Appearance, content: @Composable () -> Unit)
 @Composable
 fun WithRaisedSurface(content: @Composable () -> Unit)
 
+enum class SystemBars { All, Status, Navigation }
+
 /**
- * Styles the system bar icons for the enclosing theme while composed. The most recently composed call
- * wins; leaving the composition hands the bars back to the previous one. No-op on iOS and wasm.
+ * Styles the icons of [bars] for the enclosing theme while composed. For each bar the most recently composed
+ * call that styles it wins; leaving the composition hands the bar back to the previous one. A bar no call styles
+ * follows the device. No-op on iOS and wasm.
  */
 @Composable
-expect fun ThemedSystemBars()
+expect fun ThemedSystemBars(bars: SystemBars = SystemBars.All)
 
 object Theme {
     val colors: Colors                  @Composable get()   // the scheme for the enclosing appearance
@@ -90,7 +104,29 @@ object Theme {
     @Composable inline fun <reified T : Typography> typography(): T   // the app's own Typography type; throws on a mismatch
     val spacing: Spacing                @Composable get()
     val shape: Shape                    @Composable get()
+    val elevation: Elevation            @Composable get()
+    val stroke: Stroke                  @Composable get()
     val contentColor: Color             @Composable get()   // LocalContentColor.current
+}
+
+/** How far components lift off their surface, as the shadow they cast. */
+@Immutable
+data class Elevation(
+    val button: Dp,          // a button at rest
+    val buttonPressed: Dp,   // while pressed
+    val buttonHovered: Dp,   // while hovered or focused
+    val overlay: Dp,         // dialogs floating above the content
+) {
+    companion object {
+        val Default: Elevation   // 0.5 / 1 / 1.5 dp buttons, 8 dp overlays: Synapse's own look
+        val Flat: Elevation      // buttons cast nothing; overlays keep Default's shadow
+    }
+}
+
+/** Line widths components outline with. */
+@Immutable
+data class Stroke(val outline: Dp) {   // an outlined button's border
+    companion object { val Default: Stroke }   // 0.6 dp
 }
 
 /** The colour of text and icons that don't set their own, for the surface they sit on. */
@@ -106,7 +142,9 @@ Besides the tokens, `WithTheme` (and so `WithAppTheme`) provides these for the r
 | `LocalTextSelectionColors` | handle `border.emphasis`, background `border.emphasis` at 40% alpha |
 | `LocalIndication` | Material 3 `ripple()`, coloured by the pressed component's content colour |
 
-Reading `Theme.colors`, `Theme.colorSchemes`, `Theme.isDark`, `Theme.shape` or `LocalContentColor` with no theme above throws, so a missing theme fails on first composition instead of rendering `Color.Unspecified`. `Theme.typography` and `Theme.spacing` fall back to `Typography(body = TextStyle.Default)` and the default spacing scale.
+Reading `Theme.colors`, `Theme.colorSchemes`, `Theme.isDark`, `Theme.shape` or `LocalContentColor` with no theme above throws, so a missing theme fails on first composition instead of rendering `Color.Unspecified`. `Theme.typography` and `Theme.spacing` fall back to `Typography(body = TextStyle.Default)` and the default spacing scale, and `Theme.elevation` and `Theme.stroke` to `Elevation.Default` and `Stroke.Default`.
+
+A flat brand passes `elevation = Elevation.Flat` and its own `Stroke(outline = 2.dp)` to `WithAppTheme`; every Synapse button reads them, so no app-side button is needed for a flat, heavier outline.
 
 ### Colors
 
@@ -189,6 +227,7 @@ data class Overlay(
 interface Typography {
     val h1: TextStyle; val h2: TextStyle; val h3: TextStyle; val h4: TextStyle
     val headingS: TextStyle; val headingM: TextStyle; val button: TextStyle
+    val buttonOutline: TextStyle get() = button   // an outlined button's label; override to set it apart from filled ones
     val body: TextStyle; val bodyM: TextStyle; val bodyS: TextStyle; val bodyXs: TextStyle
     val labelS: TextStyle; val labelXs: TextStyle
 }
@@ -207,6 +246,7 @@ fun Typography(
     headingM: TextStyle = heading.copy(fontSize = 16.sp, lineHeight = 22.sp),
     headingS: TextStyle = heading.copy(fontSize = 14.sp, lineHeight = 20.sp),
     button: TextStyle = body.copy(fontWeight = FontWeight.SemiBold, fontSize = 15.sp, lineHeight = 20.sp),
+    buttonOutline: TextStyle = button,
     bodyM: TextStyle = body.copy(fontWeight = FontWeight.Medium),
     bodyS: TextStyle = body.copy(fontSize = 14.sp, lineHeight = 20.sp),
     bodyXs: TextStyle = body.copy(fontSize = 12.sp, lineHeight = 16.sp),
@@ -337,7 +377,9 @@ fun WithImagePainter(
 )
 
 object ImagePainterFactory {
-    val Default: AsyncImagePainterFactory                 // what Image and Icon use when nothing overrides it
+    val Default: AsyncImagePainterFactory                 // what Image and Icon use when nothing overrides it; failures report nothing
+    /** Default, also handing each failed load's model and cause to onError. Create once and keep it. */
+    fun reportingFailures(onError: (model: String, cause: Throwable) -> Unit): AsyncImagePainterFactory
     fun createPainterFactory(): AsyncImagePainterFactory  // returns Default
 }
 
@@ -433,6 +475,8 @@ WithAppearance(Appearance.Dark) {
     CameraViewfinder()
 }
 ```
+
+A region of another appearance behind one bar only, such as a dark band under the status bar over a light screen, claims that bar alone with `ThemedSystemBars(SystemBars.Status)`, so the other bar keeps following what sits behind it.
 
 **Fixed regions.** `WithAppearance(Appearance.Dark)` for regions that must stay dark (a camera, a video player, a photo viewer); `WithAppearance(Appearance.Light)` for ones that must stay light (a QR code, a receipt). Everything inside, components included, resolves roles from that scheme.
 

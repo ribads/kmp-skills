@@ -149,6 +149,20 @@ Required callbacks deliberately sit *after* defaulted config parameters, so call
 - **Components are stateless for anything that matters to the screen.** They render what you pass and report events upward; there are no stateful/stateless pairs and no public `rememberXState()` factories. Hoist state into `ViewState`. A few keep local UI state that the screen never needs, and it resets when they leave the composition: `PasswordTextField` (whether the password is visible; it still reports toggles through `onPasswordToggleChange`), `DropdownSelectionField` (whether the menu is open), `DatePicker` (the month on screen and whether the month or year grid is showing; a new model resets them), and `Slider` (the thumb position while dragging, reset by a new `value`).
 - **Components never accept domain models or use-case DTOs.** Translate in the Mapper first.
 - **`ButtonState` and `FieldState` are separate `ViewState` fields**, not fields on `ButtonModel` or the field models. Pass them as the `state =` argument so loading, read-only and disabled states are driven by the reducer.
+- **Geometry comes from the theme, not the component.** Restyle the catalog through `WithAppTheme` (see `/synapse:ui-element`), never with an app-side copy of a component:
+
+| Theme token | What reads it |
+|---|---|
+| `Theme.elevation.button`, `buttonPressed`, `buttonHovered` | Every button's shadow (`Elevation.Flat` makes them flat) |
+| `Theme.elevation.overlay` | `ConfirmDialog`'s shadow |
+| `Theme.stroke.outline` | The border of `OutlineButton` and `SmallOutlineButton` |
+| `Theme.typography.button` / `buttonOutline` | Filled and outlined regular button labels |
+| `Theme.shape.buttonShape` | Every button, and the chat send button |
+| `Theme.shape.textShape` | Every text field, and the `ChatTextArea` container |
+| `Theme.shape.roundShape` | `ConfirmDialog`, and the top corners of `ThemedBottomSheetAppearance` sheets |
+| `Theme.shape.chipShape` | Chips, and the selected item's indicator in `BottomNavigationBar` |
+| `colors.border.secondary` | `Divider` when no `color` is passed |
+| `colors.overlay.scrim` | `ConfirmDialog`'s and `ThemedBottomSheetAppearance` sheets' backdrop |
 - **Components read theme roles and never branch on the appearance.** They are correct in light and dark with no arguments; a region that must stay dark (a camera, controls over a photo) is wrapped in `WithAppearance(Appearance.Dark)` by the caller (see `/synapse:ui-element`).
 - **Validation feedback goes in the model.** `TextInputModel.isError = true` draws the error ring and recolours the footer automatically; put the message in `footerText`, not in a separate `Text` below the field, so screen readers announce it as the field's error.
 - **Callbacks are named for the slot, not the consequence**: `onClick` when there is one action, otherwise `onLeadingClick` / `onTrailingIconClick` / `onValueChange` / `onCheckedChange`, and `onDismissRequest` for every dismissal. Nullable click handlers use `OptionalClickCallback` from `ui:element`.

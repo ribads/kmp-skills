@@ -133,13 +133,15 @@ Shared fields: `title`, `leadingImageUrl`, `trailingImageUrl`, `state`, `stateCo
 | `label` | `String?` | `null` | Text label (renders as text button) |
 | `iconUrl` | `String?` | `null` | Icon URL (renders as icon button) |
 | `actionId` | `String` | `""` | Action dispatched on tap |
+| `icon` | `UIIcon?` | `null` | Bundled icon (renders as icon button, offline); wins over `iconUrl` |
 
 The bar shows either a row of icons or one text action, never both:
 
 - An action with an icon draws the icon; its `label`, when set, is the icon's accessibility description.
 - When every drawable action has an icon, all of them render as icons.
 - Otherwise only the first action with a `label` renders, as text; the others are not shown.
-- An action with neither `iconUrl` nor `label` draws nothing (blank strings count as absent).
+- An action with neither an icon (`icon` or `iconUrl`) nor `label` draws nothing (blank strings count as absent).
+- A client that predates `icon` draws the action's `iconUrl` or `label` instead, so give an icon-only action a `label` too.
 
 A screen's tab bar is not a node: declare top-level destinations in `UIScreen.navigation.tabs` (see SKILL.md, "Screen tabs").
 
@@ -254,6 +256,7 @@ Templated fields are marked "(templates)" above. They resolve `{{key}}` from sta
 | `date`, `date:<pattern>` | A time in the device's time zone; default pattern `dd MMM yyyy` |
 | `number`, `number:<spec>` | `spec` is a count of decimals (default 2), `integer` or `percent`. A trailing `,grouped` adds `,` between thousands and never changes the precision: `number:0,grouped` gives `1,234,567`, `number:grouped` keeps 2 decimals. Locale-neutral |
 | `relative`, `relative:<forms>` | A time as calendar days from today in the device's time zone: `today`, `tomorrow`, `yesterday`, `in 3 days`, `2 days ago`. `relative:Today,Tomorrow,Yesterday,In # days,# days ago` sets the words (`#` is the count); forms left off the end stay English |
+| `duration` | Milliseconds as elapsed time in whole seconds: `0:07`, `1:23`, `1:02:03` |
 | `uppercase`, `lowercase`, `capitalize` | Case changes |
 | `plural:<one>,<other>` | `one` for 1, otherwise `other` |
 

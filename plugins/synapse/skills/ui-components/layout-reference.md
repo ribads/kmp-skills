@@ -109,7 +109,7 @@ LazyColumn {
 ## Divider
 
 ```kotlin
-@Composable fun Divider(color: Color? = null, modifier: Modifier = Modifier.fillMaxWidth(), thickness: Dp = 1.dp)
+@Composable fun Divider(color: Color? = null, modifier: Modifier = Modifier.fillMaxWidth(), thickness: Dp = 1.dp)   // color: border.secondary by default
 ```
 
 ## Scaffold
@@ -235,7 +235,7 @@ sealed class BottomNavigationBadge {
 }
 ```
 
-**Anatomy**: a `surface.primary` bar with a 1dp `border.secondary` hairline along its top. Each item is an icon in a 56×32dp capsule, with an optional one-line label under it. The selected item's capsule fills with `intents.accent.surface` and its icon turns `intents.accent.content`. The capsule grows sideways out from behind the icon as it fades in. Icon tint, label colour and capsule are all driven by one selection animation, so they move together.
+**Anatomy**: a `surface.primary` bar with a 1dp `border.secondary` hairline along its top. Each item is an icon in a 56×32dp capsule drawn in `Theme.shape.chipShape` (a pill when the theme's chip shape is one), with an optional one-line label under it. The selected item's capsule fills with `intents.accent.surface` and its icon turns `intents.accent.content`. The capsule grows sideways out from behind the icon as it fades in. Icon tint, label colour and capsule are all driven by one selection animation, so they move together.
 
 **Interaction**: the whole cell is the touch target, but there is no ripple. Feedback is drawn in the item's capsule, the same place the selection lands. Pressing tints the capsule with `element.primary` at 8% and squeezes the icon to 90%, then springs it back with a slight overshoot on release. A tap shorter than the squeeze still plays it out. Keyboard focus and pointer hover tint the capsule without squeezing. `onItemSelected` fires for the already-selected item too, so a screen can scroll back to its top or pop to its root on reselect.
 
@@ -402,6 +402,8 @@ val ThemedBottomSheetAppearance: BottomSheetAppearance = BottomSheetAppearance(
     dragHandle = { BottomSheetDefaults.DragHandle(color = Theme.colors.border.primary) },
     contentColor = { Theme.colors.element.primary },
     contentDecoration = { content -> WithRaisedSurface(content) },
+    shape = { Theme.shape.roundShape.topCornersOnly() },   // the theme's panel radius on the top corners
+    scrimColor = { Theme.colors.overlay.scrim },
 )
 ```
 

@@ -106,6 +106,11 @@ sealed interface ShareContent {
 
     /** A single video. */
     data class Video(val video: ShareMedia, val caption: String? = null) : ShareContent
+
+    /** One or more files of any kind (audio, documents). Only SYSTEM_SHEET takes them. */
+    data class Files(val files: List<ShareMedia>, val caption: String? = null) : ShareContent {
+        constructor(file: ShareMedia, caption: String? = null)
+    }
 }
 
 /**
@@ -124,7 +129,7 @@ data class ShareMedia(
 )
 
 /** The shape of a ShareContent, used for capability queries. */
-enum class ShareContentKind { TEXT, LINK, IMAGE, VIDEO }
+enum class ShareContentKind { TEXT, LINK, IMAGE, VIDEO, FILE }
 
 val ShareContent.kind: ShareContentKind
 
@@ -184,7 +189,7 @@ enum class ShareCompletion {
 | `FACEBOOK` | link, image, video | — | Facebook strips prefilled text everywhere; `Link` sends the URL only (OG preview). No SDK-free path on iOS. |
 | `TIKTOK` | image, video (best-effort) | — | No SDK-free path on iOS. |
 | `X` | text, link, image, video | text, link | iOS via `twitter://post?message=` (unowned scheme — expect `LaunchFailed` if it breaks, and fall back). |
-| `SYSTEM_SHEET` | all | all | Android success is always `HANDED_OFF` (the chooser gives no result); iOS reports `CONFIRMED`/`Cancelled`. |
+| `SYSTEM_SHEET` | all, file included | all, file included | The only target for `Files`. Android success is always `HANDED_OFF` (the chooser gives no result); iOS reports `CONFIRMED`/`Cancelled`. A file's MIME type comes from `ShareMedia.mimeType`, else its extension; several files of different types go as `*/*`. |
 
 ---
 

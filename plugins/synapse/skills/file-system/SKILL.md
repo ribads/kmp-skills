@@ -59,7 +59,8 @@ import com.ribads.synapse.core.file.dto.PermissionResult // iosMain only
 
 ```kotlin
 interface FilePicker {
-    suspend fun execute(request: FilePickerRequest): FilePickerResult
+    // onImporting: once the user has chosen and the picker has closed, before an import copies (see "Importing picks")
+    suspend fun execute(request: FilePickerRequest, onImporting: () -> Unit = {}): FilePickerResult
 
     companion object {
         val shared: FilePicker
@@ -77,10 +78,17 @@ On iOS every picker presents from the key window's top-most presented view contr
 
 ```kotlin
 sealed class FilePickerRequest {
-    // Pick existing photos or videos. quantity = the most items the user may select:
+    // Pick existing photos, videos, or both. quantity = the most items the user may select:
     // 1 opens a single-item picker, higher opens a multi-select picker capped at that many.
-    // Throws IllegalArgumentException when quantity < 1.
-    data class Media(val type: MediaType, val quantity: Int = 1) : FilePickerRequest()
+    // importTo copies every pick into that directory (see "Importing picks").
+    // Throws IllegalArgumentException when types is empty or quantity < 1.
+    data class Media(
+        val types: Set<MediaType>,
+        val quantity: Int = 1,
+        val importTo: String? = null,
+    ) : FilePickerRequest() {
+        constructor(type: MediaType, quantity: Int = 1, importTo: String? = null)   // one type
+    }
     // Take a photo or record a video with the system camera UI.
     data class Capture(val type: MediaType) : FilePickerRequest()
     data class Document(val mimeTypes: List<String> = listOf("application/pdf")) : FilePickerRequest()
@@ -89,9 +97,20 @@ sealed class FilePickerRequest {
 }
 ```
 
+`Media.types` decides what the picker offers: `setOf(Photo)` or `setOf(Video)` alone, or both together (Android `ImageAndVideo`, iOS `any(of: [images, videos])`).
+
 `Media.quantity` is enforced as a selection limit on both platforms:
 - **Android**: `1` uses `PickVisualMedia`; higher uses `PickMultipleVisualMedia(maxItems = quantity)`. The system photo picker also caps it at its own maximum (`MediaStore.getPickImagesMaxLimit()`). On devices without the photo picker the document-picker fallback cannot limit the selection, so the result is truncated to the first `quantity` items.
 - **iOS**: `PHPickerConfiguration.selectionLimit = quantity`.
+
+### Importing picks
+
+With `Media.importTo`, every pick is copied into that directory (created when missing) and returned as `ImageResult.Url` holding the copy's absolute path, named by a fresh id and its type's extension. Nothing then needs library access or a picker grant, so an app can keep picks in its own storage:
+
+- **Android**: copied through the content resolver, so the copy outlives the photo picker's temporary read grant. The extension comes from the MIME type (`.bin` when it has none).
+- **iOS**: the picker runs without a photo library (`PHPickerConfiguration()`), in the compatible representation mode, and each item provider's file representation is copied before the system deletes it: photos arrive as JPEG and videos as H.264, which every image and video stack reads. No Photos permission is needed.
+- All or nothing: a failure or a cancellation part of the way through deletes the copies already made, and the request resolves to `Failure` (or propagates the cancellation).
+- Progress: copying a long video can take seconds after the picker has closed. `execute`'s `onImporting` is called once, on the main thread, when the user has chosen and before the copying starts (never for a request without `importTo`, or one the user cancels), which is the moment to show that the app is still working.
 
 ### FilePickerResult
 
@@ -118,6 +137,7 @@ What each result points at:
 | Request | Android (`ImageResult.Url`) | iOS |
 |---------|-----------------------------|-----|
 | `Media` | photo-picker `content://` URI | `NativeIdentifier`: the picked asset's `PHAsset` local identifier |
+| `Media` with `importTo` | absolute path of the copy in `importTo` | `Url`: absolute path of the copy in `importTo` |
 | `Capture(Photo)` | `content://<applicationId>.synapse.file.fileprovider/...` URI of a `.jpg` in the app-specific `getExternalFilesDir(Environment.DIRECTORY_PICTURES)` | `NativeIdentifier` of the photo saved to the library |
 | `Capture(Video)` | the same provider, a `.mp4` in `getExternalFilesDir(Environment.DIRECTORY_MOVIES)` | `NativeIdentifier` of the video saved to the library |
 | `Document` | `content://` URI with a persisted read grant | `Url`: path of a copy in the app sandbox |
@@ -203,6 +223,11 @@ FilePicker.shared.execute(FilePickerRequest.Media(type = MediaType.Photo, quanti
 
 // Pick a video from the gallery
 FilePicker.shared.execute(FilePickerRequest.Media(type = MediaType.Video))
+
+// Pick up to 20 photos or videos and keep copies in the app's own storage
+FilePicker.shared.execute(
+    FilePickerRequest.Media(types = setOf(MediaType.Photo, MediaType.Video), quantity = 20, importTo = "$filesDir/picks"),
+)
 
 // Capture a photo or record a video with the camera
 FilePicker.shared.execute(FilePickerRequest.Capture(type = MediaType.Photo))

@@ -55,7 +55,7 @@ All fields optional.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `clickActionId` | `String?` | Action fired when element is clicked (empty payload) |
+| `clickActionId` | `String?` | Action fired when element is clicked; inside an `itemTemplate` the payload holds the row's record under `_itemContext`, elsewhere it is empty |
 
 ### Values Compose cannot build
 

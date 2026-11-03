@@ -15,6 +15,8 @@ commonMain.dependencies {
 }
 ```
 
+Built on `kotlinx-datetime`, which runs on `java.time`. Android ships `java.time` only from API 26, so an app whose `minSdk` is below 26 enables core library desugaring in its application module (`isCoreLibraryDesugaringEnabled = true` and `coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")`); without it, the first parse or format crashes on Android 7.
+
 ## Imports
 
 Import them from exactly these paths:

@@ -28,15 +28,18 @@ Types live in more than one package. Import them from exactly these paths:
 ```kotlin
 import com.ribads.synapse.core.playback.AudioPlayer
 import com.ribads.synapse.core.playback.MediaPlayer
+import com.ribads.synapse.core.playback.MediaProbe
 import com.ribads.synapse.core.playback.VideoPlayer
 import com.ribads.synapse.core.playback.VideoSurface
 import com.ribads.synapse.core.playback.buildAudioPlayer
+import com.ribads.synapse.core.playback.buildMediaProbe
 import com.ribads.synapse.core.playback.buildPersistentAudioPlayer
 import com.ribads.synapse.core.playback.buildVideoPlayer
 import com.ribads.synapse.core.playback.model.AmplitudeConfig
 import com.ribads.synapse.core.playback.model.AmplitudeInfo
 import com.ribads.synapse.core.playback.model.AudioFocusStrategy
 import com.ribads.synapse.core.playback.model.CommandResult
+import com.ribads.synapse.core.playback.model.MediaInfo
 import com.ribads.synapse.core.playback.model.MediaMetadata
 import com.ribads.synapse.core.playback.model.PlaybackCommand
 import com.ribads.synapse.core.playback.model.PlaybackNotification
@@ -71,6 +74,10 @@ expect fun buildPersistentAudioPlayer(
 // a planned follow-up). Nothing in this module pauses it on backgrounding: pause or
 // release it from your lifecycle handling (see Platform Notes).
 expect fun buildVideoPlayer(config: PlayerConfig = PlayerConfig()): VideoPlayer
+
+// Reads a local media file without playing it: duration, displayed video size,
+// poster frame. Safe from any thread; builds no player and takes no audio session.
+expect fun buildMediaProbe(): MediaProbe
 ```
 
 **Platform requirements for `buildPersistentAudioPlayer`:**
@@ -165,6 +172,26 @@ interface VideoPlayer : MediaPlayer {
 `VideoSurface` is an `expect class` with no common members — on Android it holds
 the engine's `SurfaceView`, on iOS a `UIView` hosting an `AVPlayerLayer`. Only
 `ui:playback` reads through it.
+
+## MediaProbe
+
+```kotlin
+interface MediaProbe {
+    // Duration and, for a video, its size as displayed (rotation applied); null when unreadable.
+    suspend fun inspect(path: String): MediaInfo?
+    // A frame from the start of a video as JPEG, upright, scaled down to fit within
+    // maxDimension pixels on its longer side (never up); null for audio or an unreadable file.
+    // Throws IllegalArgumentException when maxDimension < 1.
+    suspend fun posterFrame(path: String, maxDimension: Int): ByteArray?
+}
+```
+
+For local files only (`path` is a filesystem path). Both calls run off the calling
+thread and answer `null` instead of throwing for a file the platform cannot read.
+Android reads through `MediaMetadataRetriever`; iOS loads the asset's `duration` and
+`tracks` asynchronously and generates the frame with `AVAssetImageGenerator`
+(`appliesPreferredTrackTransform`). Use it for thumbnails of recorded or imported
+video, and for the length of a file before it is played.
 
 ---
 
@@ -264,6 +291,15 @@ data class PositionInfo(
 equals `durationMs` once the whole source is loaded. On iOS it is the end of the
 `AVPlayerItem.loadedTimeRanges` range that contains the playhead, refreshed with
 each position tick (so it does not advance while paused).
+
+### MediaInfo
+
+```kotlin
+data class MediaInfo(
+    val durationMs: Long?,       // null when the container records no length
+    val videoSize: VideoSize?,   // a video's size as displayed, rotation applied; null for audio
+)
+```
 
 ### VideoSize
 
