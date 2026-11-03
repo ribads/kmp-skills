@@ -668,7 +668,7 @@ Hosts using `renderedEntries` only set `RenderedPageConfig.operationHandler`. A 
 Package `com.ribads.synapse.ui.renderer.capability`. The client sends what it can run with every screen request; the server only returns screens that fit, and the client can check a screen before rendering it.
 
 ```kotlin
-object SynapseSchemaVersion { const val CURRENT: Int }      // 5; see the version table in SCHEMA.md
+object SynapseSchemaVersion { const val CURRENT: Int }      // 6; see the version table in SCHEMA.md
 
 class RendererCapabilities(val operations: Set<String> = emptySet()) {   // names bound natively; no blanks or commas
     val schemaVersion: Int

@@ -110,7 +110,7 @@ enum class SortDirection { asc, desc }
 
 ### Computed columns
 
-`computed` names columns that each record derives from its own columns. An operand is a string naming a column of the same record, computed ones included, or a number.
+`computed` names columns that each record derives from its own columns or, for the aggregates, from the records of another collection matched to it. An operand is a string naming a column of the same record, computed ones included, or a number.
 
 ```kotlin
 @Serializable
@@ -127,6 +127,11 @@ sealed class RecordComputed   // discriminator "type"
 | `Add` | `"add"` | `operands: List<JsonPrimitive>` | Sum |
 | `Subtract` | `"subtract"` | `left: JsonPrimitive`, `right: JsonPrimitive` | `left - right` |
 | `Multiply` | `"multiply"` | `operands: List<JsonPrimitive>` | Product |
+| `CountOf` | `"countOf"` | `collection: String`, `match: RecordMatch`, `where: DataCondition? = null` | How many records of `collection` are matched to this one |
+| `SumOf`, `MinOf`, `MaxOf`, `AverageOf` | `"sumOf"`, `"minOf"`, `"maxOf"`, `"averageOf"` | `collection`, `field: String`, `match`, `where` | Over the matched records' `field`: `sumOf` is 0 with none, the others null; `averageOf` is a double, the rest hold doubles when `field` does |
+| `StreakOf` | `"streakOf"` | `collection`, `dateField: String`, `period: CalendarUnit`, `match`, `where` | How many periods in a row hold a matched record's `dateField`, counting back from the current one, or from the one before while the current holds none; 0 when neither does |
+
+`RecordMatch(column: String, on: String = "id")` pairs a record with the records of `collection` whose `column` holds the record's `on` column. The six aggregates implement `RecordComputed.Aggregate` (`collection`, `match`, `where`).
 
 ```json
 "tasks": {
@@ -144,7 +149,9 @@ sealed class RecordComputed   // discriminator "type"
 - Arithmetic follows the [value ref arithmetic](#datavalueref-sealed-discriminator-type) with one difference: a column holds one type for every record, decided from its operands. It holds doubles when an operand is a `double` column, a fractional number, or a computed column that holds doubles (`ratio`, or arithmetic over one), and whole numbers otherwise. So `add` over two `double` columns gives `0.0`, not `0`, for a record missing both, and sorting, grouping and equality see one type per column.
 - Computed columns are never written or saved. Every write drops a value given under a computed name (an `insert`, `update` or `updateWhere` mutation, a `replaceCollection` or `appendToCollection` result, `initialData`, `renderer:setItemField:`), a value saved under one earlier is ignored on load, and `DataPersistence.save` receives only the stored columns, in `records` and in `upserted` alike. Conversion to the [column types](#column-types) applies to the stored columns only.
 - `daysUntil`, `daysSince` and every column that reads one read the clock. While their collection, an aggregate whose `field` or `where` reads one of them, or a named condition about the collection is observed, the store derives them again on the first `RendererClock.minutes` tick of a new day, and at once when something starts observing them on a day later than their values. A tick on the same day, or a new day that changes no value, emits and saves nothing, and columns that do not read the clock never wake.
-- Building the store throws `IllegalStateException`, naming the collection and the columns, when a computed column is named `id`, shares its name with a `schema` column, or is part of a cycle of computed columns.
+- An aggregate column is derived again, at the settle, whenever its collection changes in a way it reads: an insert, a delete, a replace, or an update of the matched column, the combined `field`, `dateField` or a column its `where` reads. That includes a record edited in place through `renderer:setItemField:`. What reads the aggregate column then follows it: a computed field over it, a filter, the collection's `orderBy`, a named condition. The aggregating collection's records are never saved for it, since no stored column changed. Collections are derived in aggregation order after hydration, so a total reads the loaded records, not `initialData`.
+- An aggregate's `where` reads only the matched records and the clock. `streakOf`, and an aggregate whose `where` reads the clock, move with the date like `daysUntil`.
+- Building the store throws `IllegalStateException`, naming the collection and the columns, when a computed column is named `id`, shares its name with a `schema` column, or is part of a cycle of computed columns; when an aggregate names an unknown collection or its own, or its `where` has a `fieldRef` or reads `record.`; and when collections aggregate each other in a cycle.
 
 ---
 
@@ -170,6 +177,7 @@ Computed fields derive their value from collection data or other fields. They up
 | `Subtract` | `"subtract"` | `left: String`, `right: String` (field names) |
 | `Add` | `"add"` | `operands: List<JsonPrimitive>`: a string names a field, a number is itself |
 | `Multiply` | `"multiply"` | `operands: List<JsonPrimitive>`, read as `Add` reads them |
+| `PeriodProgress` | `"periodProgress"` | `period: CalendarUnit`: how far through the current period it is, 0.0 to towards 1.0, recomputed each `RendererClock.minutes` tick while observed; the field must be a `double` |
 
 `add` and `multiply` follow the [value ref arithmetic](#datavalueref-sealed-discriminator-type): a missing or non-numeric operand counts as 0, the result is whole when every operand is, and it is null over no operands or when a number cannot hold it. A field named among the operands is a dependency like a `divide` operand, so a cycle or an unknown field throws when the store is built; a number is no dependency. `divide` and `subtract` keep field names only, so a schema using them still parses on clients older than schema version 3.
 
