@@ -26,7 +26,7 @@
 )
 ```
 
-Entries and series without a `color` take the next colour from a built-in colourblind-safe categorical palette, with lighter variants when the theme is dark. Axes, grid lines and labels use theme roles.
+Entries and series without a `color` take the next colour from a palette led by the theme's `surfaceInteractive.enabled` colour, so a single series takes the brand, followed by a built-in colourblind-safe categorical palette (lighter variants when the theme is dark) without the hue nearest the brand. A grey, black or white interactive colour leaves the categorical palette as it is. Axes, grid lines and labels use theme roles; axis labels are whole numbers or one decimal, with K and M suffixes from 10,000.
 
 ---
 
