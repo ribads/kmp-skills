@@ -171,6 +171,30 @@ A screen's tab bar is not a node: declare top-level destinations in `UIScreen.na
 
 ---
 
+## Personal App Nodes
+
+Schema version 7; a payload that uses one needs `minSchemaVersion` 7, since older clients draw nothing for them. Times are epoch ms placed on days in the device's time zone, weeks start Monday. Collection-bound ones read `dataSource` narrowed by `filter`, like a `LazyColumn`.
+
+| Type | Key fields |
+|------|-----------|
+| `CalendarView` | `dataSource`, `dateField`, `filter`, `bind` (Long field: the selected day's first instant, null when cleared; defaults to `id`), `itemTemplate` (each record of the selected day, or today), `emptyText`, `onChangeActionId` (`date`) |
+| `HabitGrid` | `dataSource`, `dateField`, `valueField` (summed per day; else counted), `filter`, `match` (RecordMatch?: the enclosing row's records, as `countOf` matches), `weeks` (Int, default 15), `goal` (Double?: fully shaded at or over it), `title` (template), `addActionId` (empty day: enclosing item context + `day`), `removeActionId` (day with records: its latest record as the row) |
+| `SwipeRow` | `children`, `startAction` / `endAction` (UISwipeAction?). Past half the width runs the action with the item context; `undo` holds it 4 s behind a strip |
+| `Board` | `dataSource`, `statusField`, `columns` (List\<UIBoardColumn\>), `itemTemplate`, `filter`, `emptyText`, `moveLabel` (default "Move to"), `columnWidth` (Float dp, default 280). Long press moves a card: writes the column key into `item.<statusField>` |
+| `Agenda` | `dataSource`, `timeField`, `endField`, `titleField`, `subtitleField`, `iconField` (UIIcon name), `itemTemplate` (replaces title/subtitle), `filter`, `actionId` (with the record), `emptyText`. Day headings; now-or-next stop marked |
+| `FlashcardDeck` | `dataSource`, `frontField`, `backField`, `filter`, `knownActionId`, `againActionId` (each with the card's record), `knownLabel` ("Got it"), `againLabel` ("Again"), `flipHint`, `emptyTitle` ("All done"), `emptySubtitle`, `restartLabel` ("Go again") |
+| `Reminder` | `label` ("Remind me"), `bind` (Boolean field: on/off; defaults to `id`), `timeBind` (String `HH:mm`), `repeatBind` (String key), `defaultTime` ("09:00"), `repeatOptions` (List\<UISelectionOption\>, default `DEFAULT_REPEAT_OPTIONS`: daily, weekdays, weekends), `onChangeActionId` (`enabled`, `time`, `repeat`; e.g. `operation:reminder.schedule`) |
+| `Assist` | `title`, `questionBind`, `placeholder`, `answerBind` (Markdown answer), `actionId` (e.g. `operation:assistant.generate`), `buttonLabel` ("Ask"), `loadingCondition`, `footnote` ("Made on your phone"), `clearLabel` ("Clear") |
+| `ScanField` | `label`, `bind` (String field; defaults to `id`), `placeholder`, `buttonLabel` ("Scan"), `icon` (UIIcon?, `photo_camera` when unset), `editable` (Boolean, default true), `actionId` (e.g. `operation:scan.text`) |
+| `ShareCard` | `children`, `shareLabel` ("Share"), `bind` (String field receiving the picture's reference), `fileName`, `actionId` (e.g. `operation:content.share` reading `bind` as `media`). The picture goes through `MediaProvider.saveImage`; a null reference shares nothing. SwiftUI hosts keep it through `.environment(\.shareImageSaver, ShareImageSaver { png, name in /* reference or nil */ })` instead, since Swift Export cannot build a Kotlin `ByteArray` |
+
+**UISwipeAction**: `label` (String), `actionId` (String), `icon` (UIIcon?), `intent` (UITextIntent?), `undo` (Boolean, default false), `undoLabel` (String, default "Undo")
+**UIBoardColumn**: `key` (String), `label` (String)
+
+Host operations these nodes are designed around (a host advertises the ones it binds in `X-Synapse-Operations`): `reminder.schedule` (`id`, `title`, `enabled`, `time`, `repeat`), `assistant.generate` (`instructions`, `prompt`, `reads`; returns `text`), `scan.text` (`kind`; returns `text`, and `amount`, `merchant`, `date` for receipts), `content.share` (`media`, `text`). See SCHEMA.md, "Host operations for personal app nodes".
+
+---
+
 ## Meta Nodes
 
 | Type | Key fields |

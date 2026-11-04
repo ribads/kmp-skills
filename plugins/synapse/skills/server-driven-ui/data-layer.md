@@ -634,9 +634,15 @@ fun interface ConditionEvaluator {
 
 const val ITEM_CONTEXT_PAYLOAD_KEY = "_itemContext"
 
-/** Picks an image for an ImagePicker node. Return a stable path or URI, or null when cancelled; never throw. */
+/** Picks an image for an ImagePicker node, and keeps a ShareCard's picture. Never throw. */
 fun interface MediaProvider {
+    /** A stable path or URI, or null when cancelled. */
     suspend fun pickImage(): String?
+
+    /** Keeps a ShareCard's PNG and returns the reference its operation reads (for example a media
+     *  reference `content.share` accepts), or null to share nothing. Default: null. */
+    suspend fun saveImage(png: ByteArray, name: String?): String? = null
+
     companion object { val NoOp: MediaProvider }
 }
 ```
