@@ -1,10 +1,10 @@
 ---
 name: capture
-description: Use when implementing camera capture, photo capture, video recording, in-app camera preview, or building a custom capture UI in a KMP project.
+description: Use when implementing camera capture, photo capture, video recording, QR code scanning, in-app camera preview, or building a custom capture UI in a KMP project.
 user-invocable: true
 ---
 
-# core:capture + ui:capture — Camera Capture
+# core:capture + ui:capture: Camera Capture and Code Scanning
 
 **Modules**: `core:capture` (engine) + `ui:capture` (Compose components)
 **Artifacts**: `com.ribads.synapse:core-capture`, `com.ribads.synapse:ui-capture`
@@ -20,6 +20,8 @@ commonMain.dependencies {
 `core:capture` depends on `core:context`. `ui:capture` depends on `core:capture` and `ui:element`.
 
 The engine handles its own audio pipeline — no dependency on `core:record`. Audio is captured directly via CameraX's `Recorder` on Android and `AVCaptureSession` on iOS.
+
+Scanning codes is part of the same engine: set `CaptureConfig.codeFormats` and read `CaptureEvent.CodeScanned` from `events`. See [Scanning codes](#scanning-codes).
 
 ## Imports
 
@@ -40,6 +42,7 @@ import com.ribads.synapse.core.capture.model.CaptureMode
 import com.ribads.synapse.core.capture.model.CaptureOutcome
 import com.ribads.synapse.core.capture.model.CapturePermission
 import com.ribads.synapse.core.capture.model.CaptureSession
+import com.ribads.synapse.core.capture.model.CodeFormat
 import com.ribads.synapse.core.capture.model.FlashMode
 import com.ribads.synapse.core.capture.model.NormalizedPoint
 import com.ribads.synapse.core.capture.model.PhotoOutcome
@@ -63,7 +66,7 @@ import com.ribads.synapse.ui.capture.captureTapToFocus
 
 ## Architecture in one paragraph
 
-`CaptureController` is a stateful actor. Observable state lives in `session: StateFlow<CaptureSession>` — atomic across mode, facing, flash, zoom, recording, and **capabilities** (what the engine can do right now). One-shot signals that don't fit state-flow semantics — async focus completion, OS-initiated recording stops, engine-initiated auto-stops — flow through `events: Flow<CaptureEvent>`. Synchronous outcomes are returned from the suspending command itself via `Result<T>`. UI is *capability-driven*: chrome subscribes to `session.capabilities` and hides controls whose actions would fail, so the surface stays honest without consumers wiring per-action error handling.
+`CaptureController` is a stateful actor. Observable state lives in `session: StateFlow<CaptureSession>`, atomic across mode, facing, flash, zoom, recording, and **capabilities** (what the engine can do right now). One-shot signals that don't fit state-flow semantics (async focus completion, OS-initiated recording stops, engine-initiated auto-stops, scanned codes) flow through `events: Flow<CaptureEvent>`. Synchronous outcomes are returned from the suspending command itself via `Result<T>`. UI is *capability-driven*: chrome subscribes to `session.capabilities` and hides controls whose actions would fail, so the surface stays honest without consumers wiring per-action error handling.
 
 ---
 
@@ -105,7 +108,7 @@ interface CaptureController {
 ### Contracts that matter
 
 - **Start gating**: `start()` is valid from `Idle` (initial) and from `Error` (retry after a failed start or a runtime fault). It is rejected with `CaptureError.InvalidState` from `Initializing` / `Ready` (already in progress / already started) and from `Released` (terminally torn down: build a new controller via `createCaptureController`). Any `start()` failure moves `lifecycle` to `Error(cause)`.
-- **Permission check**: `start()` checks `requiredPermissions(config)` without prompting, camera first, then microphone when `audioEnabled`. The first missing one is returned as `Result.failure(CaptureError.PermissionDenied(permission))` (lifecycle `Error`); request it and call `start()` again. On iOS a permission the user has not been asked for yet (`notDetermined`) counts as missing, so request permissions before the first `start()`.
+- **Permission check**: `start()` checks `requiredPermissions(config)` without prompting, camera first, then microphone when `audioEnabled` on a controller that is not scanning. The first missing one is returned as `Result.failure(CaptureError.PermissionDenied(permission))` (lifecycle `Error`); request it and call `start()` again. On iOS a permission the user has not been asked for yet (`notDetermined`) counts as missing, so request permissions before the first `start()`.
 - **While `Error`**: device commands (`setFacing`, `setFlash`, `setZoom`, `focus`, `capturePhoto`, `startRecording`) return `InvalidState`; `setMode` only records the mode; `release()` works from any state.
 - **`release()`** suspends until in-flight recording flushes and in-flight photo capture completes. Safe to call from any state, including `Released`.
 - **`setZoom`** returns the actually-applied (clamped) ratio so pinch gestures can match resistance to engine state without an extra read of `session`.
@@ -116,6 +119,7 @@ interface CaptureController {
 - **Concurrent commands** serialize on the controller's internal mutex. State updates are atomic across every dimension of `CaptureSession`.
 - **`stopRecording` returns `InvalidState`** if no recording is active — including when an OS interrupt or auto-stop already finalized the recording (the outcome of those exits is delivered via `events`).
 - **Out-of-band recording ends**: OS interrupts → `CaptureEvent.RecordingInterrupted(outcome?, reason)`. Duration / file-size limit → `CaptureEvent.RecordingAutoStopped(outcome)`. `outcome` carries whatever the encoder finalized.
+- **Scanning controllers**: `capturePhoto` and `startRecording` return `CaptureError.Unsupported` on a controller built with `codeFormats`. See [Scanning codes](#scanning-codes).
 
 ---
 
@@ -143,14 +147,23 @@ data class CaptureConfig(
     val audioEnabled: Boolean = true,
     val maxVideoDuration: Duration? = null,
     val outputDirectory: String? = null,
+    val codeFormats: Set<CodeFormat> = emptySet(),
 )
 ```
 
-Quality settings, `audioEnabled`, and `outputDirectory` are fixed for the controller's lifetime. Mode, facing, flash, and zoom can be changed at runtime.
+Quality settings, `audioEnabled`, `outputDirectory`, and `codeFormats` are fixed for the controller's lifetime. Mode, facing, flash, and zoom can be changed at runtime.
 
 `outputDirectory` controls where the engine writes captures when no explicit destination is passed. `null` (the default) uses a `capture` folder inside the app's cache directory on Android (`<cacheDir>/capture`) and inside the temporary directory on iOS (`NSTemporaryDirectory()` + `capture`). The engine creates the directory if it doesn't exist and generates a fresh `IMG_<timestamp>.jpg` / `VID_<timestamp>.mp4` filename per capture.
 
 `maxVideoDuration` triggers `CaptureEvent.RecordingAutoStopped` on hit.
+
+`codeFormats` empty (the default) means no scanning, and the controller behaves exactly as a photo and video camera. Any format makes it a scanning controller: see [Scanning codes](#scanning-codes).
+
+### CodeFormat
+
+```kotlin
+enum class CodeFormat { Qr }
+```
 
 ### CaptureMode
 
@@ -308,10 +321,13 @@ sealed interface CaptureEvent {
         val reason: CaptureError,
     ) : CaptureEvent
     data class RecordingAutoStopped(val outcome: VideoOutcome) : CaptureEvent
+    data class CodeScanned(val text: String, val format: CodeFormat) : CaptureEvent
 }
 ```
 
 Hot stream with a small buffer. Late subscribers see future emissions only. Use for one-shot signals that don't fit `StateFlow` semantics — state lives on `session`.
+
+The hierarchy is sealed, so an exhaustive `when` over `CaptureEvent` must handle `CodeScanned`, even in an app that never scans.
 
 ### CaptureError
 
@@ -344,6 +360,8 @@ The engine does **not** request permissions. Use `requiredPermissions(config)` t
 `ui:capture` ships flat, composable building blocks plus one opinionated assembly (`CaptureScreen`). There are no slots: customize by composing the parts yourself rather than overriding hooks.
 
 Every control subscribes to `session.capabilities` and **renders nothing** when its action is unavailable: recording hides the mode and flip controls, a single-facing device hides the flip control, and a camera without a flash unit hides the flash control. Hiding controls makes the failing action impossible to invoke, which is the cleanest error handling there is.
+
+The exception is a scanning controller, which capabilities do not describe: `CaptureShutter` and `CaptureScreen` still render for one, and their shutter fails with `CaptureError.Unsupported`. Compose `CapturePreview` with your own chrome instead (see [Scanning codes](#scanning-codes)).
 
 ### CapturePreview
 
@@ -469,7 +487,7 @@ When you need a custom layout, a recording-timer overlay, or branded chrome — 
 
 ## Permissions
 
-Add these to the consuming app's manifest / Info.plist.
+Add these to the consuming app's manifest / Info.plist. A controller that only scans uses the camera and never the microphone, so `RECORD_AUDIO` and `NSMicrophoneUsageDescription` are not needed for it.
 
 **Android (`AndroidManifest.xml`)**:
 
@@ -495,6 +513,86 @@ Add these to the consuming app's manifest / Info.plist.
 The last two keys are required even though `core:capture` writes only to app-private storage — iOS frameworks along the `AVCapturePhotoOutput` path probe photo-library metadata internally, and the privacy check crashes the app at runtime if the strings are absent.
 
 The engine checks, but never requests, the runtime permissions in `start()` and returns the first missing one as `Result.failure(CaptureError.PermissionDenied(permission))`. On iOS a permission that has not been requested yet counts as missing, so request permissions before calling `start()`.
+
+---
+
+## Scanning codes
+
+A controller built with `codeFormats` reads codes from the live preview and delivers each one on `events`. It is a different kind of controller, not a mode: the formats are fixed at construction, and `setMode` does not turn scanning on or off.
+
+```kotlin
+@Composable
+fun ScanTicketScreen(onScanned: (String) -> Unit) {
+    val config = remember { CaptureConfig(codeFormats = setOf(CodeFormat.Qr)) }
+    val controller = remember { createCaptureController(config) }
+    val currentOnScanned by rememberUpdatedState(onScanned)
+
+    LaunchedEffect(controller) {
+        controller.events
+            .filterIsInstance<CaptureEvent.CodeScanned>()
+            .collect { code -> currentOnScanned(code.text) }
+    }
+
+    // requiredPermissions(config) is [CapturePermission.Camera]: request it before start().
+    LaunchedEffect(controller) {
+        try {
+            controller.start()
+            awaitCancellation()
+        } finally {
+            withContext(NonCancellable) { controller.release() }
+        }
+    }
+
+    Box(Modifier.fillMaxSize()) {
+        CapturePreview(controller, Modifier.fillMaxSize().captureTapToFocus(controller))
+        ViewfinderOverlay(Modifier.align(Alignment.Center))
+    }
+}
+```
+
+### What repeats do
+
+`CaptureEvent.CodeScanned` fires when a code comes into view, not on every frame.
+
+| Situation | What fires |
+|---|---|
+| A code comes into view | One `CodeScanned` |
+| It stays in view, however long | Nothing more |
+| It is lost for under 2 seconds (blur, a shaky hand) | Nothing: it counts as still in view |
+| It has been out of view for 2 seconds or more | One `CodeScanned` the next time it is read |
+| A different code comes into view | One `CodeScanned` for it, even with the first still in view |
+| Several copies of one code in the same frame | One `CodeScanned` |
+| A code is read while nothing collects `events` | Nothing, and it is not consumed: it fires for the next collector while still in view |
+
+Two codes are the same when both `text` and `format` match. Time away counts as time out of view, so a code still in frame when the app returns from the background fires again.
+
+A code with no text payload, such as binary data, is skipped. `text` is the payload as encoded, with no parsing: a URL arrives as the URL, and a Wi-Fi code as its raw `WIFI:...` string. Validate it before acting on it, because it comes from whatever the camera was pointed at.
+
+### What a scanning controller can do
+
+| | |
+|---|---|
+| `start`, `release`, `session` | As usual |
+| `setFacing`, `setZoom`, `focus` | As usual |
+| `setFlash` | As usual, but only `FlashMode.Torch` has any effect, since no photo is taken. Use it for low light |
+| `capturePhoto`, `startRecording` | `Result.failure(CaptureError.Unsupported)` |
+| `setMode` | Accepted. Nothing on Android; on iOS it picks the session preset as usual |
+| `requiredPermissions(config)` | `[CapturePermission.Camera]`, whatever `audioEnabled` says. The microphone is never attached |
+
+`session.capabilities` does not change for a scanning controller, so `CaptureFlashButton` still shows while it cycles through `Auto` and `On`, which do nothing here. Start with `initialMode = CaptureMode.Video` for a button that toggles the torch, or call `setFlash(FlashMode.Torch)` from your own control.
+
+`CapturePreview`, `Modifier.captureTapToFocus` and `CaptureFlipButton` work unchanged. Do not use `CaptureShutter`, `CaptureModeSelector` or `CaptureScreen` on a scanning controller: they are photo and video chrome.
+
+Compose `CapturePreview` even if the app has no use for the picture: on Android the camera only opens once the preview is on screen. Collect `events` for as long as the scan runs.
+
+### Dependencies scanning adds
+
+`core-capture` brings in ML Kit's bundled barcode scanner on Android for every app that depends on it, scanning or not. Nothing is downloaded at runtime and it reads codes on devices without Google Play services. iOS adds nothing: it uses `AVCaptureMetadataOutput`.
+
+- **Size**: about 6.2 MB on an `arm64-v8a` APK after R8, measured on an app that never scans: 4.9 MB of native library, 0.9 MB of models and 0.4 MB of code. A universal APK carries the library for all four ABIs, about 21.5 MB in total, so ship an app bundle or ABI splits.
+- **Manifest**: merges `INTERNET` and `ACCESS_NETWORK_STATE`, `MlKitInitProvider` (runs at app start), `MlKitComponentDiscoveryService`, Google Data Transport's services and receiver, and `GoogleApiActivity`.
+- **R8**: nothing to configure. `core-capture` publishes a keep rule for ML Kit's component registrars, which R8 full mode would otherwise strip, failing `start()` with `CameraUnavailable`.
+- **Play Data safety**: ML Kit sends diagnostics and usage data to Google. Decide your disclosure from [Google's data disclosure page](https://developers.google.com/ml-kit/android-data-disclosure).
 
 ---
 
@@ -601,6 +699,7 @@ LaunchedEffect(controller) {
                 event.outcome?.let { saveOrDiscard(it) }
             }
             is CaptureEvent.RecordingAutoStopped -> handleOutcome(event.outcome)
+            is CaptureEvent.CodeScanned -> openLink(event.text)
         }
     }
 }
@@ -639,6 +738,8 @@ Box {
 - Photo + video use cases are bound concurrently. Devices below CameraX's `LIMITED` hardware tier may not support this; on such devices, the controller falls back internally.
 - Photo files are written as JPEG with EXIF orientation metadata. `PhotoOutcome.rotationDegrees` reflects the EXIF value.
 - `CaptureEvent.FocusCompleted.locked` reflects the real `FocusMeteringResult.isFocusSuccessful` from CameraX.
+- A scanning controller binds preview and image analysis only, leaving out photo and video: two streams fit every camera, where four depend on what the device can combine. Frames go through `MlKitAnalyzer` with ML Kit's bundled scanner, which asks CameraX for a 1280x720 analysis stream. CameraX drops frames while one is being read.
+- A frame ML Kit fails on yields no codes and the next frame tries again. The first failure is logged once as a warning under the tag `CaptureCodeScanner`.
 
 ### iOS (AVFoundation)
 
@@ -651,3 +752,4 @@ Box {
 - Zoom: `CaptureCapabilities.zoomRange` caps the upper bound at 10x even when `maxAvailableVideoZoomFactor` reports more.
 - `CaptureEvent.FocusCompleted.locked` reflects *request acceptance*, not actual lock acquisition — KVO on `AVCaptureDevice.adjustingFocus` is on the roadmap.
 - `CaptureCapabilities.supportedFlashModes` uses `device.hasTorch` as the proxy for "this lens has an illuminator." Most current devices ship flash + torch together; treating them as one signal keeps the model simple and matches what user-facing UIs care about.
+- A scanning controller attaches an `AVCaptureMetadataOutput` in place of the photo and movie outputs, with no audio input. The session preset still follows `mode` and the quality settings.
