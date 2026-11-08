@@ -380,6 +380,35 @@ sealed class BottomNavigationBadge {
 
 ---
 
+
+## SystemTabBar
+
+The app's top-level destinations on the platform's own floating tab bar, which is Liquid Glass on iOS 26 or later. It takes the same `BottomNavigationBarModel` as `BottomNavigationBar`.
+
+```kotlin
+@Composable fun SystemTabBar(
+    model: BottomNavigationBarModel,
+    modifier: Modifier = Modifier,
+    onItemSelected: (id: String) -> Unit,                  // every tap, the item already selected included
+)
+
+@Composable fun systemTabBarInsets(): WindowInsets?        // what the bar covers; null where the platform has no floating bar
+```
+
+Where `systemTabBarInsets()` is null the bar draws nothing, so use `BottomNavigationBar` there. Place it over the content at the bottom edge of the screen, and provide the insets through `LocalNativeChromeInsets` around that content, so a Synapse `Scaffold` rests clear of it:
+
+```kotlin
+val barInsets = systemTabBarInsets()
+Scaffold(bottomBar = { if (barInsets == null) BottomNavigationBar(tabs, onItemSelected = onTab) }) { padding ->
+    Box(Modifier.padding(padding)) {
+        CompositionLocalProvider(LocalNativeChromeInsets provides barInsets) { Pages() }
+        if (barInsets != null) SystemTabBar(tabs, Modifier.align(Alignment.BottomCenter), onTab)
+    }
+}
+```
+
+The bar is a native view drawn above all Compose content on its window except sheets and dialogs, so leave it out while something should cover it. It steps aside while the keyboard shows. An `Image.Glyph` takes the theme's accent colour, an `Image.Artwork` is drawn as authored, and `Image.Bitmap` or `Image.LocalIdentifier` shows its placeholder.
+
 ## Trays / Bottom Sheets
 
 ### `Tray`

@@ -25,7 +25,7 @@ Import each type from its package below.
 
 | Package | Types |
 |---|---|
-| `com.ribads.synapse.ui.component.bottomnavbar` | `BottomNavigationBar` |
+| `com.ribads.synapse.ui.component.bottomnavbar` | `BottomNavigationBar`, `SystemTabBar`, `systemTabBarInsets` |
 | `com.ribads.synapse.ui.component.bottomnavbar.model` | `BottomNavigationBadge`, `BottomNavigationBarModel`, `BottomNavigationItem` |
 | `com.ribads.synapse.ui.component.button` | `BaseButton`, `OutlineButton`, `PrimaryButton`, `SmallButton`, `SmallOutlineButton` |
 | `com.ribads.synapse.ui.component.button.model` | `BaseButtonColors`, `ButtonModel`, `ButtonState`, `ButtonStyle`, `asButton` |

@@ -671,6 +671,8 @@ class NativeNavCoordinator(
 }
 
 fun nativeShellViewController(coordinator: () -> NativeNavCoordinator): UIViewController?   // null below iOS 26; coordinator runs only where the shell can
+
+class DrawableRasterizer { fun image(drawable: DrawableResource): UIImage }   // a Compose drawable as a UIImage, for native chrome; main thread only
 ```
 
 Create one coordinator per shell session; every call must be on the main thread (checked). Construction fails fast on an empty tab list, duplicate tabs, or a tab naming no registered feature. Kotlin owns each tab's path and publishes it whole; SwiftUI reports its own pops (back chevron, swipe-back) back, and the two reconcile by entry identity.

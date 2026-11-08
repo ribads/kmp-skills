@@ -895,6 +895,7 @@ WithRenderedTheme(theme = screen.theme) {
 fun ScreenNavigationHost(
     navigator: ScreenNavigator,
     modifier: Modifier = Modifier,
+    systemTabBar: Boolean = true,                                     // false: the docked bar on iOS 26 or later too
     page: @Composable (entry: ScreenNavigationState.Entry) -> Unit,   // the entry's page, on its record
 )
 
@@ -917,7 +918,7 @@ fun start(entryPage: String, tabRoots: List<String> = emptyList(), record: Recor
 
 The page closure receives the whole entry, and each entry is a page of its own: opening another record of the page showing puts a new page on top, with its own saved state.
 
-`ScreenNavigationHost` draws the design system's `BottomNavigationBar` inside its `Scaffold`, keeps every open page's saved state while another tab shows, moves pages with the platform's navigation motion, and handles system back in the order above.
+On iOS 26 or later `ScreenNavigationHost` draws `SystemTabBar`, the system's Liquid Glass bar, floating over the page, and a scrolling body runs on beneath it; nothing in the document changes. Pass `systemTabBar = false` where the bar would sit inside a frame, such as a preview, or while something drawn in Compose covers the screen, since the bar is a native view above Compose content. A host pushed on the native shell needs `fullScreen()` metadata, or the shell's own tab bar shows as well. Elsewhere `ScreenNavigationHost` draws the design system's `BottomNavigationBar` inside its `Scaffold`, keeps every open page's saved state while another tab shows, moves pages with the platform's navigation motion, and handles system back in the order above.
 
 SwiftUI hosts use the SwiftUI engine's `ScreenNavigator` and `ScreenNavigationHost`, which draw the same model as a system `TabView` over one `NavigationStack` per tab:
 
