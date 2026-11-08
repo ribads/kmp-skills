@@ -1,6 +1,6 @@
 ---
 name: ui-components
-description: Use when implementing buttons, text fields, password fields, phone inputs, currency inputs, date fields, date pickers, month calendars, cards, dividers, scaffolds, trays, bottom sheets, top nav bars, bottom navigation bars, liquid-glass navigation bars, checkboxes, progress bars, circular progress, rating inputs, chip groups, tab layouts, sliders, timers, steppers, time pickers, confirm dialogs, empty states, radio groups, bar charts, line charts, pie charts, chat text areas, message bubbles, or toasts/snackbars in a KMP Compose project.
+description: Use when implementing buttons, text fields, password fields, phone inputs, currency inputs, date fields, date pickers, month calendars, cards, dividers, scaffolds, trays, bottom sheets, top nav bars, bottom navigation bars, checkboxes, progress bars, circular progress, rating inputs, chip groups, tab layouts, sliders, timers, steppers, time pickers, confirm dialogs, empty states, radio groups, bar charts, line charts, pie charts, chat text areas, message bubbles, or toasts/snackbars in a KMP Compose project.
 user-invocable: true
 ---
 
@@ -25,7 +25,7 @@ Import each type from its package below.
 
 | Package | Types |
 |---|---|
-| `com.ribads.synapse.ui.component.bottomnavbar` | `BottomNavigationBar`, `LiquidGlassBottomNavigationBar` |
+| `com.ribads.synapse.ui.component.bottomnavbar` | `BottomNavigationBar` |
 | `com.ribads.synapse.ui.component.bottomnavbar.model` | `BottomNavigationBadge`, `BottomNavigationBarModel`, `BottomNavigationItem` |
 | `com.ribads.synapse.ui.component.button` | `BaseButton`, `OutlineButton`, `PrimaryButton`, `SmallButton`, `SmallOutlineButton` |
 | `com.ribads.synapse.ui.component.button.model` | `BaseButtonColors`, `ButtonModel`, `ButtonState`, `ButtonStyle`, `asButton` |
@@ -98,8 +98,9 @@ Import each type from its package below.
 | Divider | `Divider` | — | [layout](layout-reference.md) |
 | Scaffold | `Scaffold` | — | [layout](layout-reference.md) |
 | Top nav bar | `TopNavBar` | `TopNavBarModel` | [layout](layout-reference.md) |
+| Navigation chrome | `NavChrome` | `ScreenChrome` | [layout](layout-reference.md) |
+| Dropdown menu | `DropdownMenu` | `MenuModel` | [layout](layout-reference.md) |
 | Bottom navigation bar | `BottomNavigationBar` | `BottomNavigationBarModel` | [layout](layout-reference.md) |
-| Liquid-glass bottom navigation bar | `LiquidGlassBottomNavigationBar` | `BottomNavigationBarModel` | [layout](layout-reference.md) |
 | Tray | `Tray` | — | [layout](layout-reference.md) |
 | Scrollable tray | `ScrollableTray` | — | [layout](layout-reference.md) |
 | Tray as a `bottomSheet()` screen | `TraySurface` / `ScrollableTraySurface` | — | [layout](layout-reference.md) |
@@ -176,7 +177,7 @@ Required callbacks deliberately sit *after* defaulted config parameters, so call
 ## Detailed Reference
 
 - [Buttons & Inputs](inputs-reference.md) — Buttons, text fields, phone, currency, selection, text area + models
-- [Layout & Containers](layout-reference.md): MonthCalendar, DatePickerBottomSheet, Card, SelectableCard, Divider, Scaffold, TopNavBar, Trays
+- [Layout & Containers](layout-reference.md): MonthCalendar, DatePickerBottomSheet, Card, SelectableCard, Divider, Scaffold, TopNavBar, NavChrome, DropdownMenu, Trays
 - [Controls](controls-reference.md) — Checkbox, progress, rating, chips, tabs, radio, slider, stepper, timer, time picker, confirm dialog, empty state
 - [Charts](charts-reference.md) — Bar, line, pie charts + models
 - [Chat](chat-reference.md) — ChatTextArea, MessageBubble + models

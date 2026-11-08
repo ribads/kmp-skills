@@ -585,7 +585,7 @@ __COMPOSE_APP_FEATURE_DEPS__
 dependencies {
     add("kspCommonMainMetadata", libs.kotlin.inject.compiler)
 }
-''' + CONFIGURE_COMMON_MAIN_KSP
+__COMPOSE_RESOURCES_CONFIG__''' + CONFIGURE_COMMON_MAIN_KSP
 
 # ── composeApp: CoreComposeApp ──
 
@@ -612,6 +612,17 @@ private const val MEMORY_CACHE_MAX_SIZE_PERCENT = 0.3
 fun CoreComposeApp(environment: AppEnvironment) {
     val app = RootAppBuilder.obtain(environment)
 
+    AppContentDecorator {
+        RootScreen(
+            viewModel = viewModel { app.mainViewModel() },
+            features = app.features,
+        )
+    }
+}
+
+/** Image loading, theming and toasts, shared by every entry point that hosts app content. */
+@Composable
+internal fun AppContentDecorator(content: @Composable () -> Unit) {
     setSingletonImageLoaderFactory(::buildImageLoader)
 
     val imagePainterFactory = ImagePainterFactory.createPainterFactory()
@@ -619,10 +630,7 @@ fun CoreComposeApp(environment: AppEnvironment) {
     WithImagePainter(imagePainterFactory = imagePainterFactory) {
         __PROJECT_NAME__Theme {
             ToastHandler {
-                RootScreen(
-                    viewModel = viewModel { app.mainViewModel() },
-                    features = app.features,
-                )
+                content()
             }
         }
     }
@@ -700,12 +708,175 @@ internal fun RootScreen(
 }
 '''
 
+# ── composeApp: tabs (generated only with --tabs) ──
+
+APP_TABS_HEAD = '''package __APP_PACKAGE__
+
+import __APP_PACKAGE__.resources.Res
+import __APP_PACKAGE__.resources.ic_tab_placeholder
+import org.jetbrains.compose.resources.DrawableResource
+
+/**
+ * One top-level tab, defined once for both navigation shells: the Compose bottom bar on Android
+ * and pre-iOS-26, and the native Liquid Glass tab bar on iOS 26.
+ *
+ * @param featureName The feature whose start destination is the tab's root.
+ */
+internal data class AppTab(
+    val featureName: String,
+    val title: String,
+    val icon: DrawableResource,
+)
+
+internal val appTabs: List<AppTab> = listOf(
+'''
+
+APP_TAB_ENTRY = '''    AppTab(featureName = "__FEATURE__", title = "__FEATURE_PASCAL__", icon = Res.drawable.ic_tab_placeholder),
+'''
+
+APP_TABS_TAIL = ''')
+'''
+
+ROOT_SCREEN_TABS = '''package __APP_PACKAGE__
+
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import __APP_PACKAGE__.ui.MainContract
+import __APP_PACKAGE__.ui.MainViewModel
+import com.ribads.synapse.ui.component.bottomnavbar.BottomNavigationBar
+import com.ribads.synapse.ui.component.bottomnavbar.model.BottomNavigationBarModel
+import com.ribads.synapse.ui.component.bottomnavbar.model.BottomNavigationItem
+import com.ribads.synapse.ui.component.scaffold.Scaffold
+import com.ribads.synapse.ui.component.tray.ThemedBottomSheetAppearance
+import com.ribads.synapse.ui.compose.presentation.feature.FeatureLauncher
+import com.ribads.synapse.ui.compose.presentation.navigation.NavigationCommand
+import com.ribads.synapse.ui.compose.presentation.navigation.compose.NavContainer
+import com.ribads.synapse.ui.element.image.Image
+import com.ribads.synapse.ui.element.text.asText
+import com.ribads.synapse.ui.mvi.CollectAsEffect
+import com.ribads.synapse.ui.mvi.OnFirstComposition
+
+private val bottomNavItems = appTabs.map { tab ->
+    BottomNavigationItem(
+        id = tab.featureName,
+        icon = Image.Glyph(tab.icon),
+        label = tab.title.asText(),
+    )
+}
+
+private val tabFeatureNames = appTabs.mapTo(mutableSetOf()) { it.featureName }
+
+/**
+ * Full-Compose navigation shell for Android and pre-iOS-26: one NavContainer with [appTabs] as a
+ * Compose bottom bar. iOS 26 skips this composable; the same tabs render as a native TabView through
+ * the NativeNavCoordinator. The selected tab follows the root feature of the top destination, so it
+ * stays correct at any depth.
+ */
+@Composable
+internal fun RootScreen(
+    viewModel: MainViewModel,
+    features: Collection<FeatureLauncher>,
+) {
+    val viewState by remember { derivedStateOf { viewModel.state.value } }
+    var selectedTab by remember { mutableStateOf(appTabs.first().featureName) }
+
+    viewModel.OnFirstComposition(MainContract.Intent.Initial)
+
+    Scaffold { paddingValues ->
+        val startKey = viewState.startFeatureName?.let { name ->
+            features.firstOrNull { it.featureName == name }?.startKey
+        }
+        startKey?.let { key ->
+            Column(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+                val navDispatcher = NavContainer(
+                    startKey = key,
+                    features = features,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .windowInsetsPadding(WindowInsets.statusBars),
+                    onDestinationChanged = { changed, flowPath ->
+                        viewModel.emit(intent = MainContract.Intent.RouteChanged(key = changed))
+                        flowPath.feature?.takeIf { it in tabFeatureNames }?.let { selectedTab = it }
+                    },
+                    bottomSheetAppearance = ThemedBottomSheetAppearance,
+                )
+                BottomNavigationBar(
+                    model = BottomNavigationBarModel(items = bottomNavItems, selectedId = selectedTab),
+                    modifier = Modifier.windowInsetsPadding(WindowInsets.navigationBars),
+                    onItemSelected = { featureName ->
+                        if (featureName != selectedTab) {
+                            navDispatcher.navigateTo(NavigationCommand.FeatureCommand(featureName = featureName))
+                        }
+                    },
+                )
+
+                viewModel.effects.CollectAsEffect { effect ->
+                    when (effect) {
+                        is MainContract.Effect.Navigate -> navDispatcher.navigateTo(effect.command)
+                    }
+                }
+            }
+        }
+    }
+}
+'''
+
+NATIVE_SHELL_FACTORY = '''package __APP_PACKAGE__
+
+import __APP_PACKAGE__.di.RootAppBuilder
+import com.ribads.synapse.ui.component.tray.ThemedBottomSheetAppearance
+import com.ribads.synapse.ui.compose.presentation.navigation.native.NativeNavCoordinator
+import com.ribads.synapse.ui.compose.presentation.navigation.native.NativeNavTab
+import com.ribads.synapse.ui.compose.presentation.navigation.native.NativeTabIcon
+
+/**
+ * The coordinator behind the iOS 26 Liquid Glass shell. The shared [appTabs] drive both shells. Swap an icon for
+ * [NativeTabIcon.SfSymbol] when a fitting SF Symbol exists: symbols take the full Liquid Glass treatment.
+ */
+internal fun createNavCoordinator(environment: AppEnvironment): NativeNavCoordinator {
+    val app = RootAppBuilder.obtain(environment)
+    return NativeNavCoordinator(
+        featureLaunchers = app.features,
+        tabs = appTabs.map { tab ->
+            NativeNavTab(
+                featureName = tab.featureName,
+                title = tab.title,
+                icon = NativeTabIcon.Resource(tab.icon),
+            )
+        },
+        bottomSheetAppearance = ThemedBottomSheetAppearance,
+        screenDecorator = { content -> AppContentDecorator { content() } },
+    )
+}
+'''
+
 # ── composeApp: MainViewController (iOS) ──
+
+MAIN_VIEW_CONTROLLER_COMPOSE_ROOT = '''    return ComposeUIViewController {
+        CoreComposeApp(environment = environment)
+    }'''
+
+MAIN_VIEW_CONTROLLER_SHELL_ROOT = '''    return nativeShellViewController { createNavCoordinator(environment) }
+        ?: ComposeUIViewController { CoreComposeApp(environment = environment) }'''
 
 MAIN_VIEW_CONTROLLER = '''package __APP_PACKAGE__
 
 import androidx.compose.ui.window.ComposeUIViewController
-import platform.Foundation.NSBundle
+__NATIVE_SHELL_IMPORT__import platform.Foundation.NSBundle
 import platform.UIKit.UIViewController
 
 private const val API_BASE_URL_KEY = "ApiBaseUrl"
@@ -718,9 +889,7 @@ fun MainViewController(): UIViewController {
         verboseNetworkLogging = infoPlistString(VERBOSE_NETWORK_LOGGING_KEY) == XCCONFIG_YES,
     )
 
-    return ComposeUIViewController {
-        CoreComposeApp(environment = environment)
-    }
+__MAIN_VIEW_CONTROLLER_ROOT__
 }
 
 private fun infoPlistString(key: String): String =
@@ -1832,7 +2001,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import com.ribads.synapse.ui.component.emptystate.EmptyState
+__LANDING_CHROME_IMPORTS__import com.ribads.synapse.ui.component.emptystate.EmptyState
 import com.ribads.synapse.ui.component.progress.CircularProgress
 import com.ribads.synapse.ui.component.progress.model.CircularProgressModel
 import com.ribads.synapse.ui.component.scaffold.Scaffold
@@ -1843,7 +2012,7 @@ import com.ribads.synapse.ui.mvi.OnFirstComposition
 import __BASE_PACKAGE__.feature.__FEATURE__.ui.screens.landing.LandingScreenContract.Effect
 import __BASE_PACKAGE__.feature.__FEATURE__.ui.screens.landing.LandingScreenContract.Intent
 import __BASE_PACKAGE__.feature.__FEATURE__.ui.screens.landing.LandingScreenContract.ViewState
-
+__LANDING_CHROME_DECLARATION__
 private const val LOADING_ARC_FRACTION = 0.5f
 
 private val LoadingProgress = CircularProgressModel(value = LOADING_ARC_FRACTION, showPercentage = false)
@@ -1863,7 +2032,7 @@ internal fun LandingScreen(
         }
     }
 
-    Scaffold { paddingValues ->
+    Scaffold__LANDING_SCAFFOLD_ARGS__ { paddingValues ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -1929,6 +2098,20 @@ internal abstract class LandingScreenUiComponent(
 # ─── Main Generator ───────────────────────────────────────────────────────────
 
 SESSION_DOMAIN = "session"
+MIN_TABS = 2
+MAX_TABS = 5
+
+NATIVE_NAV_PACKAGE_URL = "https://github.com/ribads/synapse-native-nav-kmp"
+NATIVE_NAV_PACKAGE_VERSION = "0.0.2"
+NATIVE_NAV_BUILD_FILE_ID = "5C0D7E1A9B3F4A6D8E2C1B01"
+NATIVE_NAV_PRODUCT_ID = "5C0D7E1A9B3F4A6D8E2C1B02"
+NATIVE_NAV_REFERENCE_ID = "5C0D7E1A9B3F4A6D8E2C1B03"
+
+LANDING_CHROME_IMPORTS = (
+    "import com.ribads.synapse.ui.chrome.ChromeTitleDisplay\n"
+    "import com.ribads.synapse.ui.chrome.ScreenChrome\n"
+    "import com.ribads.synapse.ui.component.navchrome.NavChrome\n"
+)
 
 
 def fail(message: str, code: int = 2) -> None:
@@ -1954,6 +2137,104 @@ def domain_ctx(ctx: dict, domain: str, data_extra_deps: str = "") -> dict:
     }
 
 
+def landing_chrome_placeholders(feature: str, tabs: list) -> dict:
+    """Landing screen chrome: none without tabs; a large-title root for a tab; a back bar otherwise."""
+    if not tabs:
+        return {"LANDING_CHROME_IMPORTS": "", "LANDING_CHROME_DECLARATION": "", "LANDING_SCAFFOLD_ARGS": ""}
+    title = to_pascal(feature)
+    if feature in tabs:
+        declaration = f'\nprivate val landingChrome = ScreenChrome(title = "{title}", titleDisplay = ChromeTitleDisplay.Large)\n'
+        top_bar = "        topBar = { NavChrome(chrome = landingChrome) },\n"
+        imports = LANDING_CHROME_IMPORTS
+    else:
+        declaration = f'\nprivate val landingChrome = ScreenChrome(title = "{title}")\n'
+        top_bar = (
+            "        topBar = {\n"
+            "            NavChrome(chrome = landingChrome, onLeadingClick = { viewModel.emit(Intent.Navigation.Back) })\n"
+            "        },\n"
+        )
+        imports = LANDING_CHROME_IMPORTS.replace("import com.ribads.synapse.ui.chrome.ChromeTitleDisplay\n", "")
+    return {
+        "LANDING_CHROME_IMPORTS": imports,
+        "LANDING_CHROME_DECLARATION": declaration,
+        "LANDING_SCAFFOLD_ARGS": f"(\n{top_bar}    )",
+    }
+
+
+def native_shell_placeholders(app_package: str, tabs: list) -> dict:
+    """composeApp differences under --tabs: Kotlin picks the native shell on iOS, and the tab icon needs a fixed Res package."""
+    if not tabs:
+        return {
+            "COMPOSE_RESOURCES_CONFIG": "",
+            "NATIVE_SHELL_IMPORT": "",
+            "MAIN_VIEW_CONTROLLER_ROOT": MAIN_VIEW_CONTROLLER_COMPOSE_ROOT,
+        }
+    return {
+        "COMPOSE_RESOURCES_CONFIG": f'\ncompose.resources {{\n    packageOfResClass = "{app_package}.resources"\n}}\n',
+        "NATIVE_SHELL_IMPORT": "import com.ribads.synapse.ui.compose.presentation.navigation.native.nativeShellViewController\n",
+        "MAIN_VIEW_CONTROLLER_ROOT": MAIN_VIEW_CONTROLLER_SHELL_ROOT,
+    }
+
+
+def native_nav_package_placeholders(tabs: list) -> dict:
+    """Xcode project additions that link the SynapseNativeNav Swift package, which only --tabs apps need."""
+    if not tabs:
+        return {
+            "SPM_BUILD_FILE_SECTION": "",
+            "SPM_FRAMEWORK_FILE": "",
+            "SPM_TARGET_PRODUCTS": "",
+            "SPM_PROJECT_REFERENCES": "",
+            "SPM_SECTIONS": "",
+        }
+    product_comment = f"{NATIVE_NAV_PRODUCT_ID} /* SynapseNativeNav */"
+    build_file_comment = f"{NATIVE_NAV_BUILD_FILE_ID} /* SynapseNativeNav in Frameworks */"
+    reference_comment = f'{NATIVE_NAV_REFERENCE_ID} /* XCRemoteSwiftPackageReference "synapse-native-nav-kmp" */'
+    return {
+        "SPM_BUILD_FILE_SECTION": (
+            "/* Begin PBXBuildFile section */\n"
+            f"\t\t{build_file_comment} = {{isa = PBXBuildFile; productRef = {product_comment}; }};\n"
+            "/* End PBXBuildFile section */\n\n"
+        ),
+        "SPM_FRAMEWORK_FILE": f"\t\t\t\t{build_file_comment},\n",
+        "SPM_TARGET_PRODUCTS": f"\t\t\tpackageProductDependencies = (\n\t\t\t\t{product_comment},\n\t\t\t);\n",
+        "SPM_PROJECT_REFERENCES": f"\t\t\tpackageReferences = (\n\t\t\t\t{reference_comment},\n\t\t\t);\n",
+        "SPM_SECTIONS": (
+            "\n/* Begin XCRemoteSwiftPackageReference section */\n"
+            f"\t\t{reference_comment} = {{\n"
+            "\t\t\tisa = XCRemoteSwiftPackageReference;\n"
+            f'\t\t\trepositoryURL = "{NATIVE_NAV_PACKAGE_URL}";\n'
+            "\t\t\trequirement = {\n"
+            "\t\t\t\tkind = upToNextMinorVersion;\n"
+            f"\t\t\t\tminimumVersion = {NATIVE_NAV_PACKAGE_VERSION};\n"
+            "\t\t\t};\n"
+            "\t\t};\n"
+            "/* End XCRemoteSwiftPackageReference section */\n\n"
+            "/* Begin XCSwiftPackageProductDependency section */\n"
+            f"\t\t{product_comment} = {{\n"
+            "\t\t\tisa = XCSwiftPackageProductDependency;\n"
+            f"\t\t\tpackage = {reference_comment};\n"
+            "\t\t\tproductName = SynapseNativeNav;\n"
+            "\t\t};\n"
+            "/* End XCSwiftPackageProductDependency section */\n"
+        ),
+    }
+
+
+def parse_tabs(raw: str, features: list) -> list:
+    """Parse --tabs into an ordered list, or exit with a message naming what is wrong with it."""
+    tabs = [tab.strip() for tab in raw.split(",") if tab.strip()]
+    if not tabs:
+        return tabs
+    unknown = [tab for tab in tabs if tab not in features]
+    if unknown:
+        fail(f"--tabs must be a subset of --features; not a feature: {', '.join(unknown)}")
+    if len(set(tabs)) != len(tabs):
+        fail("--tabs lists a feature more than once")
+    if not MIN_TABS <= len(tabs) <= MAX_TABS:
+        fail(f"--tabs takes {MIN_TABS} to {MAX_TABS} features, got {len(tabs)}")
+    return tabs
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Generate a Synapse KMP project with multi-module DDD architecture.",
@@ -1967,6 +2248,12 @@ def parse_args() -> argparse.Namespace:
         "--with-session",
         action="store_true",
         help="Generate domain/session: encrypted token storage, bearer auth and token refresh",
+    )
+    parser.add_argument(
+        "--tabs",
+        default="",
+        help="Comma-separated subset of --features shown as top-level tabs. "
+             "Also generates the iOS 26 Liquid Glass native shell.",
     )
     parser.add_argument(
         "--synapse-version",
@@ -2067,7 +2354,7 @@ def build_compose_app_component(ctx: dict, features: list) -> str:
     })
 
 
-def write_compose_app(out: Path, ctx: dict, domains: list, features: list, with_session: bool, force: bool) -> None:
+def write_compose_app(out: Path, ctx: dict, domains: list, features: list, tabs: list, with_session: bool, force: bool) -> None:
     data_modules = domains + ([SESSION_DOMAIN] if with_session else [])
     ctx = {
         **ctx,
@@ -2079,6 +2366,7 @@ def write_compose_app(out: Path, ctx: dict, domains: list, features: list, with_
             for f in features
         ),
         "COMPOSE_APP_SESSION_DEPS": "\n            implementation(libs.synapse.core.shared.pref)" if with_session else "",
+        **native_shell_placeholders(ctx["APP_PACKAGE"], tabs),
     }
 
     compose_app = out / "composeApp"
@@ -2088,7 +2376,20 @@ def write_compose_app(out: Path, ctx: dict, domains: list, features: list, with_
     write_file(compose_app / "build.gradle.kts", render(COMPOSE_APP_BUILD_GRADLE, ctx), force)
     write_file(common_src / "AppEnvironment.kt", render_template("composeapp/AppEnvironment.kt", ctx), force)
     write_file(common_src / "CoreComposeApp.kt", render(CORE_COMPOSE_APP, ctx), force)
-    write_file(common_src / "RootScreen.kt", render(ROOT_SCREEN, ctx), force)
+    if tabs:
+        tab_entries = "".join(
+            render(APP_TAB_ENTRY, {"FEATURE": tab, "FEATURE_PASCAL": to_pascal(tab)}) for tab in tabs
+        )
+        write_file(common_src / "AppTabs.kt", render(APP_TABS_HEAD, ctx) + tab_entries + APP_TABS_TAIL, force)
+        write_file(common_src / "RootScreen.kt", render(ROOT_SCREEN_TABS, ctx), force)
+        write_file(ios_src / "NativeShell.kt", render(NATIVE_SHELL_FACTORY, ctx), force)
+        copy_template_file(
+            "compose/ic_tab_placeholder.xml",
+            compose_app / "src" / "commonMain" / "composeResources" / "drawable" / "ic_tab_placeholder.xml",
+            force,
+        )
+    else:
+        write_file(common_src / "RootScreen.kt", render(ROOT_SCREEN, ctx), force)
     write_file(ios_src / "MainViewController.kt", render(MAIN_VIEW_CONTROLLER, ctx), force)
 
     write_file(common_src / "ui" / "MainContract.kt", render(MAIN_CONTRACT, ctx), force)
@@ -2200,8 +2501,14 @@ def write_session(out: Path, ctx: dict, force: bool) -> None:
     )
 
 
-def write_feature(out: Path, ctx: dict, feature: str, wired_domain: Optional[str], force: bool) -> None:
-    fctx = {**ctx, "FEATURE": feature, "FEATURE_PASCAL": to_pascal(feature), "FEATURE_CAMEL": to_camel(feature)}
+def write_feature(out: Path, ctx: dict, feature: str, wired_domain: Optional[str], tabs: list, force: bool) -> None:
+    fctx = {
+        **ctx,
+        "FEATURE": feature,
+        "FEATURE_PASCAL": to_pascal(feature),
+        "FEATURE_CAMEL": to_camel(feature),
+        **landing_chrome_placeholders(feature, tabs),
+    }
     fp = fctx["FEATURE_PASCAL"]
     if wired_domain:
         fctx = domain_ctx(fctx, wired_domain)
@@ -2242,7 +2549,7 @@ def write_feature(out: Path, ctx: dict, feature: str, wired_domain: Optional[str
     write_file(landing / "di" / "LandingScreenUiComponent.kt", render(LANDING_UI_COMPONENT, fctx), force)
 
 
-def write_ios_app(out: Path, ctx: dict, force: bool) -> None:
+def write_ios_app(out: Path, ctx: dict, tabs: list, force: bool) -> None:
     ios_root = out / "iosApp"
     ios_src = ios_root / "iosApp"
     ios_xcodeproj = ios_root / "iosApp.xcodeproj"
@@ -2263,7 +2570,11 @@ def write_ios_app(out: Path, ctx: dict, force: bool) -> None:
     )
 
     write_file(ios_root / "Configuration" / "Config.xcconfig", render_template("ios/Config.xcconfig", ctx), force)
-    write_file(ios_xcodeproj / "project.pbxproj", render_template("ios/project.pbxproj", ctx), force)
+    write_file(
+        ios_xcodeproj / "project.pbxproj",
+        render_template("ios/project.pbxproj", {**ctx, **native_nav_package_placeholders(tabs)}),
+        force,
+    )
     write_file(ios_xcodeproj / "project.xcworkspace" / "contents.xcworkspacedata", load_template("ios/contents.xcworkspacedata"), force)
 
 
@@ -2275,6 +2586,7 @@ def main() -> None:
     out = Path(args.output).expanduser().resolve()
     domains = [d.strip() for d in args.domains.split(",") if d.strip()]
     features = [f.strip() for f in args.features.split(",") if f.strip()]
+    tabs = parse_tabs(args.tabs, features)
     with_session: bool = args.with_session
     force: bool = args.force
 
@@ -2295,7 +2607,7 @@ def main() -> None:
         "BASE_PACKAGE": base_pkg,
         "APP_PACKAGE": f"{base_pkg}.app",
         "SYNAPSE_VERSION": resolve_synapse_version(args.synapse_version),
-        "FIRST_FEATURE": features[0],
+        "FIRST_FEATURE": tabs[0] if tabs else features[0],
         "BACKUP_EXCLUDES": backup_excludes(name.lower(), with_session, indent="    "),
         "BACKUP_EXCLUDES_NESTED": backup_excludes(name.lower(), with_session, indent="        "),
     }
@@ -2304,11 +2616,13 @@ def main() -> None:
     print(f"  Package: {base_pkg}")
     print(f"  Domains: {', '.join(domains)}{f' (+ {SESSION_DOMAIN})' if with_session else ''}")
     print(f"  Features: {', '.join(features)}")
+    if tabs:
+        print(f"  Tabs: {', '.join(tabs)} (with the iOS 26 native shell)")
     print()
 
     write_root(out, ctx, domains, features, with_session, force)
     write_android_app(out, ctx, force)
-    write_compose_app(out, ctx, domains, features, with_session, force)
+    write_compose_app(out, ctx, domains, features, tabs, with_session, force)
     write_compose_ui(out, ctx, force)
     write_core(out, ctx, force)
     for index, domain in enumerate(domains):
@@ -2316,8 +2630,8 @@ def main() -> None:
     if with_session:
         write_session(out, ctx, force)
     for index, feature in enumerate(features):
-        write_feature(out, ctx, feature, wired_domain=domains[0] if index == 0 else None, force=force)
-    write_ios_app(out, ctx, force)
+        write_feature(out, ctx, feature, wired_domain=domains[0] if index == 0 else None, tabs=tabs, force=force)
+    write_ios_app(out, ctx, tabs, force)
 
     domain_modules = 2 * (len(domains) + (1 if with_session else 0))
     total_modules = 1 + domain_modules + 2 * len(features) + 3  # core:log + domains + features + androidApp, composeApp, compose-ui

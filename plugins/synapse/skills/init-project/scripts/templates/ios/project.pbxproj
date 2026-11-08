@@ -6,7 +6,7 @@
 	objectVersion = 77;
 	objects = {
 
-/* Begin PBXFileReference section */
+__SPM_BUILD_FILE_SECTION__/* Begin PBXFileReference section */
 		CAE2D095CB46805E02D1EAA9 /* __PROJECT_NAME__.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = __PROJECT_NAME__.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -41,7 +41,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-			);
+__SPM_FRAMEWORK_FILE__			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
@@ -84,7 +84,7 @@
 				DD34926890892A8C33923484 /* iosApp */,
 			);
 			name = iosApp;
-			productName = iosApp;
+__SPM_TARGET_PRODUCTS__			productName = iosApp;
 			productReference = CAE2D095CB46805E02D1EAA9 /* __PROJECT_NAME__.app */;
 			productType = "com.apple.product-type.application";
 		};
@@ -112,7 +112,7 @@
 			);
 			mainGroup = D6651704592FF4CFBC8992B0;
 			minimizedProjectReferenceProxies = 1;
-			preferredProjectObjectVersion = 77;
+__SPM_PROJECT_REFERENCES__			preferredProjectObjectVersion = 77;
 			productRefGroup = C58B57ABD202D580AFE651D4 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -364,6 +364,6 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
-	};
+__SPM_SECTIONS__	};
 	rootObject = D1D9F58F9B73471C7F154DCF /* Project object */;
 }

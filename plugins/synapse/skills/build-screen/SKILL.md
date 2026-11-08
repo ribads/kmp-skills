@@ -75,7 +75,8 @@ Use this table to go from need → Synapse composable + model. For composable si
 | Slider / stepper / rating | `Slider` / `Stepper` / `RatingInput` | `SliderModel` / `StepperModel` / `RatingInputModel` |
 | Progress (linear / circular) | `ProgressBar` / `CircularProgress` | `ProgressBarModel` / `CircularProgressModel` |
 | Timer | `Timer` | `TimerModel` |
-| Top / bottom nav | `TopNavBar` / `BottomNavigationBar` (`LiquidGlassBottomNavigationBar`) | `TopNavBarModel` / `BottomNavigationBarModel` |
+| Screen top bar | `NavChrome` (renders natively under the iOS 26 shell, as a `TopNavBar` elsewhere) | `ScreenChrome` |
+| Sheet header / bottom nav | `TopNavBar` / `BottomNavigationBar` | `TopNavBarModel` / `BottomNavigationBarModel` |
 | Container | `Scaffold` / `Card` / `Divider` / `Tray` / `ScrollableTray` | — |
 | Root of a `bottomSheet()` screen | `TraySurface` / `ScrollableTraySurface` (never `Tray`, which would open a second sheet) | — |
 | Empty / dialog | `EmptyState` / `ConfirmDialog` | `EmptyStateModel` / `ConfirmDialogModel` |
@@ -135,7 +136,7 @@ For each UI event, the changes you need across the five files. The Mapper builds
 | Show toast | `Result.OnXFailed(toast: ToastModel)`, `Effect.ShowToast(model: ToastModel)` | builds the `ToastModel` from the typed failure | (emitted by a processor via the Mapper) | `state withEffect Effect.ShowToast(result.toast)` | `val toaster = Toast.current` (outside the effect lambda); `is Effect.ShowToast -> toaster.show(effect.model)` |
 | Click → async UseCase | `Intent.OnSubmitClick`, `Result.OnSubmitStateUpdated(submitState)` / `NavigationRequested(command)` / `OnLoginFailed(toast)` | `toInput(state)` for the UseCase input; `toResult(result: LoginResult)` for the outcome | `submitProcessor(upstream, state)`: `flatMapConcat { flow { emit(useCase.execute(mapper.toInput(state.value))) }.map(mapper::toResult).onStart { emit(Result.OnSubmitStateUpdated(ButtonState.Loading)) }.onCompletion { emit(Result.OnSubmitStateUpdated(ButtonState.Enabled)) } }` (`flatMapConcat`: a second tap must not cancel the first submit) | `state.copy(submitState = result.submitState).noEffects()`, `state withEffect Effect.Navigate(result.command)`, `state withEffect Effect.ShowToast(result.toast)` | `onClick = { viewModel.emit(Intent.OnSubmitClick) }` |
 | Initial load | (scaffold) `Intent.LoadInitialData` | `toResult(result: FeedResult)` builds the section model | `loadInitialDataProcessor` calling the UseCase, then `.map(mapper::toResult)` | `state.copy(feed = result.feed).noEffects()` | `viewModel.OnFirstComposition(Intent.LoadInitialData)` |
-| Back | (scaffold) `Intent.Navigation.Back` | (scaffold) `Result.NavigationRequested(NavigationCommand.BackCommand())` | (scaffold) `.map(mapper::toResult)` | `state withEffect Effect.Navigate(result.command)` | Back icon in `TopNavBar` emits the intent |
+| Back | (scaffold) `Intent.Navigation.Back` | (scaffold) `Result.NavigationRequested(NavigationCommand.BackCommand())` | (scaffold) `.map(mapper::toResult)` | `state withEffect Effect.Navigate(result.command)` | `NavChrome(onLeadingClick = ...)` emits the intent (the iOS 26 shell handles system back itself) |
 
 **Processor convention:** handlers are named `{verb}Processor` (`submitProcessor`, `loadInitialDataProcessor`), take `Flow<Intent.SpecificType>` (and `StateFlow<ViewState>` only if current state is needed), return `Flow<Result>`, and live **above** `process()`. Never pass state through intents; read `state.value` inside the processor.
 

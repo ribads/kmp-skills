@@ -1,6 +1,6 @@
 ---
 name: init-project
-description: Use when initializing a new KMP project with Synapse libraries. Generates the full multi-module DDD architecture (core, domain, features, androidApp, composeApp, compose-ui, iosApp) with IRSE-MVI wiring, kotlin-inject DI, and Compose Multiplatform navigation, all from templates.
+description: Use when initializing a new KMP project with Synapse libraries. Generates the full multi-module DDD architecture (core, domain, features, androidApp, composeApp, compose-ui, iosApp) with IRSE-MVI wiring, kotlin-inject DI, Compose Multiplatform navigation and, with --tabs, a tabbed shell that renders as native iOS 26 Liquid Glass chrome. All from templates.
 user-invocable: true
 ---
 
@@ -42,10 +42,13 @@ Generates a complete Kotlin Multiplatform project with the canonical Synapse mul
 ├── composeApp/                             # KMP library: DI wiring + shared app logic
 │   ├── build.gradle.kts                   # androidMultiplatformLibrary plugin
 │   └── src/
+│       ├── commonMain/composeResources/drawable/
+│       │   └── ic_tab_placeholder.xml     # --tabs only: replace with real tab icons
 │       ├── commonMain/kotlin/<pkg>/app/
 │       │   ├── AppEnvironment.kt          # apiBaseUrl + verboseNetworkLogging, read by each platform
-│       │   ├── CoreComposeApp.kt          # ImageLoader, WithImagePainter, Theme, ToastHandler, RootScreen
-│       │   ├── RootScreen.kt             # Scaffold + NavContainer (ThemedBottomSheetAppearance)
+│       │   ├── CoreComposeApp.kt          # AppContentDecorator (ImageLoader, WithImagePainter, Theme, ToastHandler) + RootScreen
+│       │   ├── AppTabs.kt                 # --tabs only: the one tab list both shells read
+│       │   ├── RootScreen.kt             # Scaffold + NavContainer (ThemedBottomSheetAppearance) + Compose bottom bar with --tabs
 │       │   ├── di/
 │       │   │   ├── RootAppBuilder.kt      # Builds the graph once per process: logger, HttpClient, domains, features
 │       │   │   ├── ComposeAppComponent.kt # Merges all feature modules
@@ -59,7 +62,8 @@ Generates a complete Kotlin Multiplatform project with the canonical Synapse mul
 │       │       ├── MainViewModel.kt
 │       │       └── di/MainUiComponent.kt
 │       └── iosMain/kotlin/<pkg>/app/
-│           └── MainViewController.kt      # Builds AppEnvironment from Info.plist
+│           ├── MainViewController.kt      # Builds AppEnvironment from Info.plist; with --tabs, picks the native shell
+│           └── NativeShell.kt             # --tabs only: createNavCoordinator() for the iOS 26 shell
 │
 ├── compose-ui/                            # Theme layer
 │   ├── build.gradle.kts
@@ -158,6 +162,7 @@ python3 "${CLAUDE_SKILL_DIR}/scripts/init_project.py" \
     --domains <comma,separated,domain,names> \
     --features <comma,separated,feature,names> \
     [--with-session] \
+    [--tabs <comma,separated,tab,features>] \
     [--synapse-version <version>] \
     [--force]
 ```
@@ -172,6 +177,7 @@ python3 "${CLAUDE_SKILL_DIR}/scripts/init_project.py" \
 | `--domains` | yes | Comma-separated domain names in lowercase (e.g. `catalog,profile,orders`), at least one. Each gets `entities/` + `data/` modules. The first one is generated as a worked example of the whole data chain and is read by the first feature. |
 | `--features` | yes | Comma-separated feature names in lowercase (e.g. `auth,home,profile`), at least one. Each gets `usecase/` + `ui/` modules with a landing screen. The first one is the start feature. |
 | `--with-session` | no | Also generate `domain/session`: encrypted token storage, an `AuthTokenSource` for bearer auth, and token refresh. Exits with status 2 if `session` is also in `--domains`. Without it, the `HttpClient` sends no credentials. |
+| `--tabs` | no | The features that are top-level tabs, in display order: a subset of `--features`, 2 to 5 of them. The first tab is the start feature. Generates the tabbed shell on every platform, including the iOS 26 Liquid Glass native shell. See below. |
 | `--synapse-version` | no | Synapse library version. Defaults to the latest release on Maven Central (`com.ribads.synapse:core-network` `maven-metadata.xml`), so a release without `core-network` is never picked. If that lookup fails (offline, proxy, TLS, or no release publishes `core-network`), the script exits with an error and writes nothing; re-run with an explicit version. There is no built-in fallback version. |
 | `--force` | no | Overwrite existing files. Otherwise aborts if output dir already has a `settings.gradle.kts`. |
 
@@ -184,10 +190,32 @@ python3 "${CLAUDE_SKILL_DIR}/scripts/init_project.py" \
     --output /Users/ribads/Projects/outside-new \
     --domains activities,profile,messaging \
     --features discover,profile,notifications,activities,create,settings \
-    --with-session
+    --with-session \
+    --tabs discover,activities,notifications,profile
 ```
 
 Omit `--synapse-version` to use the latest published release. Pass it explicitly to pin a version or to generate without network access.
+
+## Tabs and the native iOS shell
+
+Ask which features are top-level tabs and pass them as `--tabs`. Without it the project is a single navigation stack with no tab bar and no native shell.
+
+With `--tabs` the script generates everything a tabbed app needs on both shells, and the developer writes no Swift:
+
+- `AppTabs.kt`: one list (feature name, title, icon) that drives both shells.
+- `RootScreen.kt`: the full-Compose shell for Android and pre-iOS-26, a `NavContainer` above a `BottomNavigationBar`. Selecting a tab dispatches a `FeatureCommand`.
+- `NativeShell.kt` (iosMain): `createNavCoordinator()`, which builds the `NativeNavCoordinator` from the same DI graph and tab list.
+- `MainViewController.kt`: shows the native shell on iOS 26 and newer, and the full-Compose root below that.
+- `composeApp/build.gradle.kts`: a fixed `compose.resources` package for the tab icon.
+- `iosApp.xcodeproj`: links the `SynapseNativeNav` Swift package (`https://github.com/ribads/synapse-native-nav-kmp`), which holds the SwiftUI shell. Tabs, titles, toolbar actions and navigation all come from Kotlin.
+- Landing screens declare their bar with `NavChrome`: a large title on tab roots, a back bar elsewhere.
+
+What to know:
+
+- It needs Xcode 26 or newer, and a Synapse release that ships the `ui-chrome` artifact (the first one published after `0.2.0-alpha11`).
+- The app opens on the first tab on every platform. An auth gate in front of the tabs is app logic: on iOS gate the native shell in `MainViewController.kt`; elsewhere change the start feature in `MainMapper`.
+- Every tab starts with `ic_tab_placeholder`. Replace it per tab in `AppTabs.kt`; any `painterResource` format works natively, XML vectors included. Where a fitting SF Symbol exists, use `NativeTabIcon.SfSymbol` in `NativeShell.kt`: symbols take the full Liquid Glass treatment.
+- `/synapse:navigation` documents the chrome contract and the bridge.
 
 ## Gradle conventions
 
@@ -239,7 +267,7 @@ The script generates a compiling skeleton. Synapse artifacts resolve from Maven 
 3. **Add fonts.** Place `.ttf`/`.otf` files in `compose-ui/src/commonMain/composeResources/font/`.
 4. **Replace the worked example.** The first domain fetches a placeholder `GET <name>` list. Point its `DataSource`, `ApiResponse` and `Entity` at a real endpoint, and give the first feature's `<Name>Result.Success` the data its screen needs. Follow the same chain in the other domains (their repositories are empty `// TODO` skeletons), then pass each domain's `RepositoryProvidersImpl` into the use-case module that needs it, as `RootAppBuilder.build()` does for the first one.
 5. **Wire sign-in** (with `--with-session`). Point `TokenRefreshDataSource` and its models at your token endpoint, and call `SessionRepository.establish(tokens)` from your sign-in use case.
-6. **Add screens.** Use `/synapse:create-screen` to add more screens to existing features.
+6. **Add screens.** Use `/synapse:create-screen` to add more screens to existing features. With `--tabs`, also replace the placeholder tab icons and titles in `AppTabs.kt`.
 7. **Set Xcode `TEAM_ID`.** Open `iosApp/Configuration/Config.xcconfig` and fill in your Apple Developer team identifier; it feeds `DEVELOPMENT_TEAM` for code signing (leave blank for simulator-only builds).
 8. **Add app icon images.** Drop 1024×1024 PNGs into `iosApp/iosApp/Assets.xcassets/AppIcon.appiconset/` and update its `Contents.json`.
 9. **Open in Android Studio / Fleet.** Sync Gradle, then run on Android. For iOS, open `iosApp/iosApp.xcodeproj` in Xcode. Run the generated tests with `./gradlew testAndroidHostTest`.

@@ -145,11 +145,13 @@ LazyColumn {
 
 Paints `backgroundColor ?: surface.primary` and provides `LocalContentColor = element.primary`, so a screen needs no colour arguments to be correct in both appearances.
 
+Under a native navigation shell (iOS 26 Liquid Glass) the bars sit clear of the native chrome, and the `PaddingValues` handed to `content` cover that chrome (navigation bar top, floating tab bar bottom) as well as the bars. A screen that honours the padding is correct on every shell. To let content scroll beneath translucent native bars, apply the padding inside the scroll container (`Modifier.verticalScroll(state).padding(padding)`, or a lazy list's `contentPadding = padding`) rather than around it. Off the native shell the layout is unchanged. See `/synapse:navigation` for the native shell.
+
 ---
 
 ## TopNavBar
 
-Top navigation bar with an optional leading icon, optional title, and optional trailing content (either a clickable title or a row of icon buttons). A plain themed `Row` (56dp tall), not Material 3 `TopAppBar`. The leading icon slot is 48dp; tapping it invokes `onLeadingClick` (the slot is only clickable when `onLeadingClick` is non-null). Trailing icons are keyed by `String` id so callers can dispatch on which one was tapped.
+Top navigation bar with an optional leading icon, optional title, and optional trailing content (a clickable title, a row of icon buttons, or a row of text and icon actions in any mix). A plain themed `Row` (56dp tall), not Material 3 `TopAppBar`. The leading icon slot is 48dp; tapping it invokes `onLeadingClick` (the slot is only clickable when `onLeadingClick` is non-null). Trailing icons are keyed by `String` id so callers can dispatch on which one was tapped.
 
 ```kotlin
 @Composable fun TopNavBar(
@@ -158,6 +160,7 @@ Top navigation bar with an optional leading icon, optional title, and optional t
     onLeadingClick: (() -> Unit)? = null,
     onTrailingTitleClick: (() -> Unit)? = null,
     onTrailingIconClick: ((id: String) -> Unit)? = null,
+    onTrailingActionClick: ((id: String) -> Unit)? = null,
 )
 ```
 
@@ -205,12 +208,38 @@ sealed class TopNavBarTrailingContentModel {
     data class Icons(
         val icons: List<TrailingIconModel>,
     ) : TopNavBarTrailingContentModel()
+
+    @Immutable
+    data class Actions(
+        val actions: List<TrailingActionModel>,
+    ) : TopNavBarTrailingContentModel()
+}
+
+@Stable
+sealed class TrailingActionModel {
+    abstract val id: String
+    abstract val enabled: Boolean
+
+    @Immutable
+    data class Icon(
+        override val id: String,
+        val icon: Image,                       // its contentDescription is the action's only label
+        override val enabled: Boolean = true,
+    ) : TrailingActionModel()
+
+    @Immutable
+    data class Text(
+        override val id: String,
+        val clause: Clause,
+        override val enabled: Boolean = true,
+    ) : TrailingActionModel()
 }
 ```
 
 - `TopNavBarModel.withTitle(...)` is the convenient factory: pass a `NavBarIconType` and it resolves the matching `BackIcon`/`CloseIcon`/`MenuIcon` for the leading slot.
 - `TopNavBarTrailingContentModel.Title` renders a tappable text action on the trailing edge; when `enabled = false` it draws at `0.38` alpha and ignores taps. Its tap invokes `onTrailingTitleClick`.
 - `TopNavBarTrailingContentModel.Icons` renders one 48dp icon button per `TrailingIconModel`; each tap invokes `onTrailingIconClick(id)`.
+- `TopNavBarTrailingContentModel.Actions` renders text and icon actions in any mix, in list order; each tap invokes `onTrailingActionClick(id)`. A disabled action draws at `0.38` alpha and ignores taps. Give each `TrailingActionModel.Icon` image a `contentDescription` (`Image.Glyph(res, contentDescription = "Share")`).
 - The built-in icons are `Image.Glyph`s, tinted with the bar's content colour, and carry English content descriptions. Every icon button is announced as a button with its label: `leadingIconLabel` / `TrailingIconModel.label` when set (pass `Text.Localized(...)` to localize), the image's `contentDescription` otherwise. A button with no click handler is announced as disabled.
 
 **Colors** (via `Theme.colors`):
@@ -218,6 +247,79 @@ sealed class TopNavBarTrailingContentModel {
 - Content: `element.primary`
 
 ---
+
+## NavChrome
+
+A screen's navigation chrome, rendered by whichever navigation shell is active. Under the iOS 26 Liquid Glass native shell the `ScreenChrome` declaration is published to the native navigation bar (system back, toolbar buttons, native menus, live titles) and this composable renders nothing; everywhere else it renders a `TopNavBar` in place. Call it where the top bar belongs (a `Scaffold` `topBar` slot). Prefer it over raw `TopNavBar` for any screen that lives inside Synapse navigation: screens then never branch on the active shell.
+
+```kotlin
+// package com.ribads.synapse.ui.component.navchrome
+@Composable fun NavChrome(
+    chrome: ScreenChrome,
+    modifier: Modifier = Modifier,            // applied to the Compose top bar; unused while the native bar renders the chrome
+    onLeadingClick: (() -> Unit)? = null,     // handles the leading affordance; required for ChromeLeading.Close
+    onAction: (id: String) -> Unit = {},      // receives chosen action/menu-item ids
+)
+```
+
+`ScreenChrome`, `ChromeAction` (`Button`/`Menu`), `ChromeMenuItem`, `ChromeIcon` (`Drawable`/`SfSymbol`), `ChromeLeading`, `ChromeRole` and `ChromeTitleDisplay` come from `ui:chrome` (`com.ribads.synapse.ui.chrome`), which `ui:component` exposes as an `api` dependency. Full signatures are in the `/synapse:navigation` skill. Build chrome models outside composables.
+
+`NavChrome` is the bar of a screen: declare at most one per screen. A header inside a sheet or dialog renders as a `TopNavBar` on every shell, because an overlay never takes the native bar; use `leading = ChromeLeading.Close` with `onLeadingClick` for its close button.
+
+The leading affordance: the Compose top bar shows it only when `onLeadingClick` is non-null (a tab root omits the handler). A native shell draws and handles `ChromeLeading.Back` itself and never calls `onLeadingClick` for it. `leading = null` removes the affordance on every shell, the native back button included.
+
+Compose top bar rendering rules: actions render in declaration order, text and icon actions in any mix (`TopNavBarTrailingContentModel.Actions`); an icon action's `title` becomes its content description; a text action takes its role's intent (`Confirm` = emphasis, `Destructive` = error); a disabled action draws at `0.38` alpha and ignores taps; `Menu` actions open an anchored `DropdownMenu` at the bar's trailing edge; `subtitle` and `titleDisplay` are native-only and ignored.
+
+## DropdownMenu
+
+Anchored dropdown menu (Material 3 `DropdownMenu` themed with Synapse tokens). Place inside a `Box` together with the anchor content; the menu expands below the anchor. Destructive items render with the error color; disabled items dim and ignore taps.
+
+```kotlin
+// package com.ribads.synapse.ui.component.menu
+@Composable fun DropdownMenu(
+    model: MenuModel,
+    expanded: Boolean,
+    onDismissRequest: () -> Unit,
+    onItemSelected: (id: String) -> Unit,
+    modifier: Modifier = Modifier,
+)
+```
+
+**Models** (`com.ribads.synapse.ui.component.menu.model`):
+```kotlin
+@Immutable
+data class MenuModel(
+    val items: List<MenuItemModel>,
+)
+
+@Immutable
+data class MenuItemModel(
+    val id: String,                     // reported to onItemSelected
+    val label: Clause,
+    val icon: Image? = null,            // 20dp leading icon
+    val destructive: Boolean = false,   // error-color treatment
+    val enabled: Boolean = true,
+)
+```
+
+**Colors** (via `Theme.colors`):
+- Container: `surface.raised`, with the items inside `WithRaisedSurface`
+- Label: `element.primary`; destructive items `intents.error.content`
+
+```kotlin
+Box {
+    IconButton(onClick = { expanded = true }) { /* anchor */ }
+    DropdownMenu(
+        model = MenuModel(items = listOf(
+            MenuItemModel(id = "rename", label = "Rename".asText()),
+            MenuItemModel(id = "delete", label = "Delete".asText(), destructive = true),
+        )),
+        expanded = expanded,
+        onDismissRequest = { expanded = false },
+        onItemSelected = { id -> expanded = false; onMenuAction(id) },
+    )
+}
+```
 
 ## BottomNavigationBar
 
@@ -275,43 +377,6 @@ sealed class BottomNavigationBadge {
 - Icon tinting: the image type decides. An `Image.Glyph` takes the item's state colour, whether it is the `icon` or the `selectedIcon`, so an outline/filled glyph pair still follows the theme. An `Image.Artwork` is drawn as authored in every state; use it for icons that ship their own colours.
 - Badges sit on the icon's top-end shoulder, outside its centre, so a three-character count leaves the glyph recognisable. `BottomNavigationBadge.Count` shows `"99+"` when `value > 99`.
 - Screen readers hear each item once, as its label (or, without one, the icon's `contentDescription`) followed by the badge count, plus its tab role, position and selected state. Give icon-only items a `contentDescription`. A `Dot` badge is not announced.
-
----
-
-## LiquidGlassBottomNavigationBar
-
-The same destinations on a floating island, for apps where the bar is a centrepiece. Same `BottomNavigationBarModel` and call shape as `BottomNavigationBar`.
-
-```kotlin
-@Composable fun LiquidGlassBottomNavigationBar(
-    model: BottomNavigationBarModel,
-    modifier: Modifier = Modifier,
-    windowInsets: WindowInsets = WindowInsets.navigationBars,
-    onItemSelected: (id: String) -> Unit,
-)
-```
-
-Shares `BottomNavigationBarModel`, `BottomNavigationItem`, and `BottomNavigationBadge` with `BottomNavigationBar` (see above).
-
-**Anatomy**: a fully rounded `surface.raised` island with an 8dp shadow and a 1dp `border.secondary` edge. Inside it, one `intents.accent.surface` capsule, inset 4dp and concentric with the island, marks the selected item. The selected item's icon and label are both `intents.accent.content`, since both sit inside the capsule.
-
-**Motion**: the capsule travels between items like a drop of liquid. Its leading edge springs ahead to the new item (`spring(DampingRatioLowBouncy, StiffnessMediumLow)`) and lands with a slight wobble. Its trailing edge follows more softly (`spring(DampingRatioNoBouncy, StiffnessLow)`). So the capsule stretches in flight, more on a long jump than a short one, and settles back into shape. When `selectedId` matches no item, the capsule fades out where it is. When a selection returns, the capsule fades back in on that item instead of sliding from the old one.
-
-**Interaction**: as for `BottomNavigationBar`, with the cell itself as the capsule. Pressing an item tints a capsule of exactly the shape the indicator takes when it lands there, and squeezes the icon and label inside it.
-
-**Insets**: the island lifts itself above `windowInsets`, but spans the width it is given and adds no margins of its own. Pad it from the screen's edges for the floating look (see the example below). Pass `WindowInsets(0)` when an ancestor already handles the insets.
-
-**Dimensions**: at least `64dp` tall; capsule inset `4dp`; icon `24dp`; label `2dp` below the icon.
-
-**Colors** (via `Theme.colors`):
-- Island: `surface.raised`, edge `border.secondary`
-- Selected: capsule `intents.accent.surface`, icon and label `intents.accent.content`
-- Unselected icon and label: `element.secondary`
-- Press, focus, hover, disabled and badges: as for `BottomNavigationBar`, with badge cut-outs in `surface.raised`
-
-**When to pick which**:
-- `BottomNavigationBar`: flush with the bottom of the screen and quiet. Best for productivity apps and dense interfaces, or when content is colourful and the bar should recede.
-- `LiquidGlassBottomNavigationBar`: free-standing and expressive. Best for consumer apps where the bar is a showpiece. Inside `Scaffold.bottomBar`, give it `Modifier.padding(horizontal = Theme.spacing.x4, vertical = Theme.spacing.x2)` so it floats as an island.
 
 ---
 

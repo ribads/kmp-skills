@@ -101,6 +101,38 @@ Scaffold(topBar = { /* toolbar */ }) { padding ->
 }
 ```
 
+## Navigation chrome
+
+One declaration renders as a `TopNavBar` on Android and as the native Liquid Glass bar under the iOS 26 shell. The padding goes inside the scroll container so content scrolls beneath translucent native bars.
+
+```kotlin
+private val orderChrome = ScreenChrome(
+    title = "Order",
+    actions = listOf(
+        ChromeAction.Button(id = "share", title = "Share", icon = ChromeIcon.Drawable(Res.drawable.ic_share, sfSymbol = "square.and.arrow.up")),
+        ChromeAction.Button(id = "save", title = "Save", role = ChromeRole.Confirm),
+    ),
+)
+
+Scaffold(
+    topBar = {
+        NavChrome(
+            chrome = orderChrome,
+            onLeadingClick = { viewModel.emit(Intent.Navigation.Back) },
+            onAction = { id -> viewModel.emit(Intent.OnChromeAction(id)) },
+        )
+    },
+) { padding ->
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(padding)
+            .padding(Theme.spacing.x4),
+    ) { /* content */ }
+}
+```
+
 ## Bottom Navigation Bar
 
 ```kotlin
@@ -135,48 +167,6 @@ Scaffold(
                     ),
                 ),
                 selectedId = currentTab,
-            ),
-            onItemSelected = { id -> viewModel.emit(Intent.SwitchTab(id)) },
-        )
-    },
-) { padding ->
-    Column(Modifier.padding(padding)) { /* content */ }
-}
-```
-
-## Liquid Glass Bottom Navigation Bar
-
-```kotlin
-// Floating-island placement: the padding lifts the island off the screen's edges. It keeps clear of the system
-// navigation bar by itself.
-Scaffold(
-    bottomBar = {
-        LiquidGlassBottomNavigationBar(
-            model = BottomNavigationBarModel(
-                items = listOf(
-                    BottomNavigationItem(
-                        id = "home",
-                        icon = Image.Glyph(Res.drawable.ic_home),
-                        label = "Home".asText(),
-                    ),
-                    BottomNavigationItem(
-                        id = "discover",
-                        icon = Image.Glyph(Res.drawable.ic_compass),
-                        label = "Discover".asText(),
-                    ),
-                    BottomNavigationItem(
-                        id = "library",
-                        icon = Image.Glyph(Res.drawable.ic_library),
-                        selectedIcon = Image.Glyph(Res.drawable.ic_library_filled),
-                        label = "Library".asText(),
-                        badge = BottomNavigationBadge.Count(12),
-                    ),
-                ),
-                selectedId = currentTab,
-            ),
-            modifier = Modifier.padding(
-                horizontal = Theme.spacing.x4,
-                vertical = Theme.spacing.x2,
             ),
             onItemSelected = { id -> viewModel.emit(Intent.SwitchTab(id)) },
         )
