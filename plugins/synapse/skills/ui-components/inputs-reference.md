@@ -120,6 +120,16 @@ Every field takes `model`, `modifier`, `style` and `state` first, then its own c
     onClick: OptionalClickCallback,
 )
 
+@Composable fun DateTextField(
+    model: DateTextFieldModel, modifier: Modifier = Modifier,
+    style: TextFieldStyle = LocalTextFieldStyle.current, state: FieldState = FieldState.Enabled,
+    trailingIcon: Image = Image.Glyph(Res.drawable.sc_icon_calendar),
+    clickLabel: Clause? = null,
+    onResetClick: (() -> Unit)? = null,   // the sheet's reset; hidden when null
+    onDoneClick: (() -> Unit)? = null,    // the sheet's done, before it closes
+    onDateSelected: (Long) -> Unit,       // the first instant of the tapped day, as it is tapped
+)
+
 @Composable fun DropdownSelectionField(
     model: SelectionFieldModel, modifier: Modifier = Modifier,
     style: TextFieldStyle = LocalTextFieldStyle.current, state: FieldState = FieldState.Enabled,
@@ -167,6 +177,8 @@ val LocalTextFieldStyle: ProvidableCompositionLocal<TextFieldStyle>    // Filled
 
 ### Selection and currency fields
 
+`DateTextField` is the way to ask for a date in a form: a `SelectionTextField` that opens `DatePickerBottomSheet` (see [layout](layout-reference.md)) and keeps whether the sheet is open as its own state. The caller formats the date into `model.input.value`.
+
 `SelectionTextField` and `DropdownSelectionField` are read-only and act as one control:
 - Tapping anywhere on the field, label included, calls `onClick` or opens the menu, with a ripple clipped to the container.
 - A screen reader announces the field as a button (`SelectionTextField`) or a dropdown list (`DropdownSelectionField`). It reads the value, or the placeholder when empty, plus the click label when one is set.
@@ -209,6 +221,12 @@ data class TextInputModel(
 ) {
     companion object { val Default: TextInputModel }    // no label, empty value and placeholder
 }
+
+@Immutable
+data class DateTextFieldModel(
+    val input: TextInputModel,            // the label, the date as the field shows it, the placeholder, the error
+    val picker: DatePickerModel,          // the sheet it opens; see layout-reference.md
+)
 
 @Immutable
 data class PhoneInputModel(

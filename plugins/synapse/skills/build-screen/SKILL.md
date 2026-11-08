@@ -67,7 +67,8 @@ Use this table to go from need → Synapse composable + model. For composable si
 | Dropdown-style | `SelectionTextField` | `TextInputModel` |
 | Dropdown menu | `DropdownSelectionField` | `SelectionFieldModel` |
 | Multi-line | `TextArea` | `TextInputModel` |
-| Date | `DatePicker` / `DatePickerBottomSheet` | `DatePickerModel` |
+| Date in a form | `DateTextField` | `DateTextFieldModel` |
+| Date sheet / month on the page | `DatePickerBottomSheet` / `MonthCalendar` | `DatePickerModel` / `MonthCalendarModel` |
 | Time | `TimePicker` | `TimePickerModel` |
 | Checkbox / radio | `LabelCheckbox` / `RadioGroup` | `CheckboxModel` / `RadioGroupModel` |
 | Chips / tabs | `ChipGroup` / `TabLayout` (`LiquidGlassTabLayout`) | `ChipGroupModel` / `TabLayoutModel` |

@@ -342,7 +342,7 @@ Every visible component keeps an 8 dp margin (`Theme.spacing.x2`) and containers
 | CheckBox | `LabelCheckbox` |
 | ChoicePicker | `chips`: `ChipGroup`; otherwise checkboxes for `multipleSelection`, `RadioGroup` for `mutuallyExclusive` (a `DropdownSelectionField` past six options); `filterable` adds a search field |
 | Slider | `Slider`, showing the value beside its label; a whole-number range at least 10 wide moves in whole steps |
-| DateTimeInput | `SelectionTextField`s opening `DatePickerBottomSheet` and a `TimePicker` tray; reads and writes ISO 8601 (`2025-07-15`, `19:00`, or both; an instant stays an instant) |
+| DateTimeInput | `DateTextField`, and a `SelectionTextField` opening a `TimePicker` tray; reads and writes ISO 8601 (`2025-07-15`, `19:00`, or both; an instant stays an instant) |
 
 Inside a `bottomSheet()` destination or a `NavContainer`, trays take the app's sheet look; elsewhere provide `LocalBottomSheetAppearance provides ThemedBottomSheetAppearance` (see `/synapse:ui-components`).
 

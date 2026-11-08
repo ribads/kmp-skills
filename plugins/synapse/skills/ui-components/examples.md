@@ -42,23 +42,41 @@ CurrencyTextField(
 )
 ```
 
-## Date Picker
+## Dates
 
 ```kotlin
+// A date in a form: built in the mapper, which formats the date for the field
+val dueDate = DateTextFieldModel(
+    input = TextInputModel(
+        label = Text.Localized(Res.string.due_date),
+        value = dueMillis?.let { dates.format(it, "d MMM yyyy", zone) }.orEmpty(),
+        placeholder = Text.Localized(Res.string.choose_a_date),
+    ),
+    picker = DatePickerModel(
+        selectedDate = dueMillis, minDate = null, maxDate = null,
+        resetLabel = Text.Localized(Res.string.reset),
+        doneLabel = Text.Localized(Res.string.done),
+    ),
+)
+
+DateTextField(
+    model = state.dueDate,
+    onDateSelected = { millis -> onIntent(Intent.DueDateChanged(millis)) },
+)
+
+// A month on the page, a dot under each day with entries
+MonthCalendar(
+    model = state.calendar,   // MonthCalendarModel(selectedDate = picked, markedDays = entriesPerDay)
+    onDisplayedMonthChange = { month -> onIntent(Intent.MonthMoved(month)) },
+    onDayClick = { day -> onIntent(Intent.DayTapped(day)) },
+)
+
+// A date sheet opened from something other than a field
 DatePickerBottomSheet(
     isVisible = showPicker,
     model = DatePickerModel(selectedDate = selectedMs, minDate = null, maxDate = null),
     onDateSelected = { millis -> selectedMs = millis },
     onDismissRequest = { showPicker = false }
-)
-
-// Localized labels, built once in the contract or mapper
-val datePicker = DatePickerModel(
-    selectedDate = null, minDate = null, maxDate = null,
-    monthLabels = listOf(Res.string.january, /* … */ Res.string.december).map { Text.Localized(it) },
-    weekdayLabels = listOf(Res.string.sun, /* … */ Res.string.sat).map { Text.Localized(it) },   // Sunday first
-    resetLabel = Text.Localized(Res.string.reset),
-    doneLabel = Text.Localized(Res.string.done),
 )
 ```
 

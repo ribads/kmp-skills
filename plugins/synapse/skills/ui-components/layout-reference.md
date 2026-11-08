@@ -1,19 +1,35 @@
 # Layout & Containers Reference
 
-## Calendar / Date Picker
+## Calendar and date sheet
+
+`MonthCalendar` draws a month on the page. `DatePickerBottomSheet` asks for one date in a sheet. To ask for a date in a form, use `DateTextField` (see [inputs](inputs-reference.md)), which opens that sheet from a field; a calendar among a form's inputs pushes its other fields and its submit button off the screen.
 
 ```kotlin
-@Composable fun DatePicker(
-    model: DatePickerModel, modifier: Modifier = Modifier.wrapContentHeight(),
-    onDateSelected: (Long) -> Unit,
-    onResetClick: (() -> Unit)? = null,
-    onDoneClick: () -> Unit,
+@Composable fun MonthCalendar(
+    model: MonthCalendarModel, modifier: Modifier = Modifier,
+    onDisplayedMonthChange: ((Long) -> Unit)? = null,     // the first instant of the month moved to
+    onDayClick: (Long) -> Unit,                           // the first instant of the tapped day
+)
+
+@Immutable
+data class MonthCalendarModel(
+    val selectedDate: Long? = null,                       // a day is any instant of it, epoch millis
+    val minDate: Long? = null,
+    val maxDate: Long? = null,
+    val markedDays: Map<Long, Int> = emptyMap(),          // dots under a day; at most three are drawn
+    val displayedMonth: Long? = null,                     // null follows the selection, or today, until moved
+    val today: Long? = null,                              // null reads the device's clock
+    val firstDayOfWeek: DayOfWeek = DayOfWeek.SUNDAY,     // kotlinx.datetime
+    val monthLabels: List<Clause>? = null,                // null: the device's language; else 12, January first
+    val weekdayLabels: List<Clause>? = null,              // null: the device's language; else 7, Sunday first
 )
 
 @Composable fun DatePickerBottomSheet(
     isVisible: Boolean, model: DatePickerModel,
-    onDateSelected: (Long) -> Unit,
-    onDismissRequest: OptionalClickCallback,
+    onDateSelected: (Long) -> Unit,                       // the first instant of the tapped day, as it is tapped
+    onResetClick: (() -> Unit)? = null,                   // reset is hidden when null
+    onDoneClick: (() -> Unit)? = null,                    // called before the sheet closes
+    onDismissRequest: OptionalClickCallback,              // once closed: by done, a tap outside or a swipe
 )
 
 @Immutable
@@ -21,16 +37,19 @@ data class DatePickerModel(
     val selectedDate: Long?,                              // epoch millis
     val minDate: Long?,
     val maxDate: Long?,
-    val monthLabels: List<Clause> = /* "January" … "December" */,   // exactly 12, January first
-    val weekdayLabels: List<Clause> = /* "Su" … "Sa" */,            // exactly 7, Sunday first
+    val monthLabels: List<Clause>? = null,                // null: the device's language; else 12, January first
+    val weekdayLabels: List<Clause>? = null,              // null: the device's language; else 7, Sunday first
     val resetLabel: Clause = "Reset".asText(),
     val doneLabel: Clause = "Done".asText(),
+    val firstDayOfWeek: DayOfWeek = DayOfWeek.SUNDAY,     // kotlinx.datetime
 )
 ```
 
-The labels default to English; pass localized clauses for other languages. A label list of the wrong size throws `IllegalArgumentException` when the model is built. The year and day numbers are drawn as plain digits.
+Month and weekday names follow the device's language unless you pass labels. A label list of the wrong size throws `IllegalArgumentException` when the model is built. `weekdayLabels` stay Sunday first whatever `firstDayOfWeek` is. The year and day numbers are drawn as plain digits.
 
-The picker keeps the month on screen and whether the calendar, month grid or year grid is showing as its own state, starting from `selectedDate` (or today); a new model resets them. Days are converted with the device's time zone: `onDateSelected` receives the start of the chosen day there.
+The calendar opens on `selectedDate`, or today, moved inside the bounds. Tapping its title opens a grid of months and, from there, a grid of years. It keeps the grid showing as its own state. It also keeps the month on screen until the screen holds it in `displayedMonth`: to restore the month after a configuration change, keep what `onDisplayedMonthChange` reports in `ViewState` and pass it back.
+
+Days are read in the device's time zone. A month with no selectable day can't be reached, and days outside the bounds can't be tapped.
 
 ---
 

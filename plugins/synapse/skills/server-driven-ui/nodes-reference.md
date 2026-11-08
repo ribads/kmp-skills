@@ -64,7 +64,7 @@ Shared fields: `title`, `leadingImageUrl`, `trailingImageUrl`, `state`, `stateCo
 | `DropdownField` | `label`, `placeholder`, `options` (List\<UISelectionOption\>), `isError`, `footerText`, `bind`, `onChangeActionId` |
 | `TextArea` | `label`, `placeholder`, `initialValue`, `isError`, `footerText`, `bind`, `onChangeActionId`, `minLines` (Int, default 4), `maxLines` (Int, default 4) |
 | `ImagePicker` | `bind`, `placeholder` |
-| `DatePicker` | `selectedDate` (Long?), `minDate` (Long?), `maxDate` (Long?), `bind`, `onChangeActionId` |
+| `DatePicker` | `label`, `placeholder` (default "Choose a date"), `selectedDate` (Long?), `minDate` (Long?), `maxDate` (Long?), `bind`, `onChangeActionId`. A form field that opens the calendar in a sheet; for a month on the page, use `CalendarView` |
 | `NumberField` | `label`, `placeholder`, `min` (Double?), `max` (Double?), `step` (Double?, default null: on leaving the field the value snaps to the nearest multiple of `step` from `min` or zero, staying in range; see `committedValue`), `decimals` (Int, default 0), `bind`, `onChangeActionId` |
 | `SearchBar` | `placeholder` (default "Search..."), `bind` |
 | `RatingInput` | `maxStars` (Int, default 5), `bind`, `onChangeActionId` |
