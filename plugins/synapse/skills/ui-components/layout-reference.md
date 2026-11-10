@@ -145,7 +145,7 @@ LazyColumn {
 
 Paints `backgroundColor ?: surface.primary` and provides `LocalContentColor = element.primary`, so a screen needs no colour arguments to be correct in both appearances.
 
-Under a native navigation shell (iOS 26 Liquid Glass) the bars sit clear of the native chrome, and the `PaddingValues` handed to `content` cover that chrome (navigation bar top, floating tab bar bottom) as well as the bars. A screen that honours the padding is correct on every shell. To let content scroll beneath translucent native bars, apply the padding inside the scroll container (`Modifier.verticalScroll(state).padding(padding)`, or a lazy list's `contentPadding = padding`) rather than around it. Off the native shell the layout is unchanged. See `/synapse:navigation` for the native shell.
+Under a native navigation shell (iOS 26 Liquid Glass) the bars sit clear of the native chrome, and the `PaddingValues` handed to `content` cover that chrome (navigation bar top, floating tab bar bottom) as well as the bars. A screen that honours the padding is correct on every shell. The overlap is measured from where `LocalNativeChromeInsets` is provided, so system insets a parent has already consumed take nothing off it. To let content scroll beneath translucent native bars, apply the padding inside the scroll container (`Modifier.verticalScroll(state).padding(padding)`, or a lazy list's `contentPadding = padding`) rather than around it. Off the native shell the layout is unchanged. See `/synapse:navigation` for the native shell.
 
 ---
 
@@ -266,9 +266,28 @@ A screen's navigation chrome, rendered by whichever navigation shell is active. 
 
 `NavChrome` is the bar of a screen: declare at most one per screen. A header inside a sheet or dialog renders as a `TopNavBar` on every shell, because an overlay never takes the native bar; use `leading = ChromeLeading.Close` with `onLeadingClick` for its close button.
 
-The leading affordance: the Compose top bar shows it only when `onLeadingClick` is non-null (a tab root omits the handler). A native shell draws and handles `ChromeLeading.Back` itself and never calls `onLeadingClick` for it. `leading = null` removes the affordance on every shell, the native back button included.
+The leading affordance: the Compose top bar shows it only when `onLeadingClick` is non-null (a tab root omits the handler). A native shell draws and handles `ChromeLeading.Back` itself and never calls `onLeadingClick` for it. A system bar with no navigation stack behind it (`NativeChromeSink.handlesBack == false`, as [`SystemNavigationBar`](#systemnavigationbar) is used) follows the Compose rule: it shows Back only when `onLeadingClick` is non-null and reports the tap. `leading = null` removes the affordance on every shell, the native back button included.
 
 Compose top bar rendering rules: actions render in declaration order, text and icon actions in any mix (`TopNavBarTrailingContentModel.Actions`); an icon action's `title` becomes its content description; a text action takes its role's intent (`Confirm` = emphasis, `Destructive` = error); a disabled action draws at `0.38` alpha and ignores taps; `Menu` actions open an anchored `DropdownMenu` at the bar's trailing edge; `subtitle` and `titleDisplay` are native-only and ignored.
+
+## SystemNavigationBar
+
+One screen's `ScreenChrome` on the platform's own navigation bar, which is Liquid Glass on iOS 26 or later. It is for a host that pages through screens inside one destination, where no navigation shell owns a bar: `ScreenNavigationHost` uses it for a document's pages. A screen inside Synapse navigation declares `NavChrome` instead and never calls this.
+
+```kotlin
+// package com.ribads.synapse.ui.component.navchrome
+@Composable fun SystemNavigationBar(
+    chrome: ScreenChrome,
+    modifier: Modifier = Modifier,
+    onEvent: (ChromeEvent) -> Unit,                         // every tap, the leading one included
+)
+
+@Composable fun systemNavigationBarInsets(): WindowInsets?  // what the bar covers; null where the platform has no bar to float
+```
+
+Where `systemNavigationBarInsets()` is null the bar draws nothing, so render `NavChrome` there. The bar has no stack behind it: it draws `ChromeLeading.Back` and `Close` as declared and reports `ChromeEvent.LeadingClicked` for both, so the host decides what leaving means. To have screens declare into it with `NavChrome`, provide a `NativeChromeSink` whose `handlesBack` is false through `LocalNativeChromeSink`, and the insets through `LocalNativeChromeInsets`, around each screen.
+
+The title is always inline, and `subtitle` shows beneath it. A `Confirm` action is prominent in the theme's accent colour and sits at the trailing edge, a `Destructive` one takes the error colour, and a `Menu` opens a system menu. An icon uses its `sfSymbol` when it has one, otherwise its drawable. Place the bar at the top edge, beneath the status bar. It is a native view drawn above all Compose content on its window except sheets and dialogs, so leave it out while something should cover it.
 
 ## DropdownMenu
 

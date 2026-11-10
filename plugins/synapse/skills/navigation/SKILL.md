@@ -582,7 +582,7 @@ NavChrome(
 
 The leading affordance:
 
-- `ChromeLeading.Back` (default): the native shell draws and handles the system back itself and never calls `onLeadingClick` for it. The Compose top bar shows the back glyph only when `onLeadingClick` is non-null, so a tab root simply omits the handler.
+- `ChromeLeading.Back` (default): the native shell draws and handles the system back itself and never calls `onLeadingClick` for it. The Compose top bar shows the back glyph only when `onLeadingClick` is non-null, so a tab root simply omits the handler. A system bar with no navigation stack behind it (a sink whose `handlesBack` is false) follows the Compose rule and reports the tap.
 - `ChromeLeading.Close`: every shell renders a close button in place of back and reports the tap. It requires `onLeadingClick` (`NavChrome` fails fast without one).
 - `null`: no leading affordance anywhere. The native shell hides its back button too, which also disables swipe-back, so the screen must offer another way out.
 
@@ -597,6 +597,7 @@ sealed interface ChromeEvent {
 }
 
 interface NativeChromeSink {
+    val handlesBack: Boolean get() = true                  // false = a bar with no stack behind it: Back is drawn as declared and reported
     fun update(owner: Any, chrome: ScreenChrome, onEvent: (ChromeEvent) -> Unit): Boolean   // true = owner holds the native bar
     fun clear(owner: Any)
 }
@@ -664,7 +665,7 @@ class NativeNavCoordinator(
     featureLaunchers: Collection<FeatureLauncher>,                            // same set the full-Compose NavContainer registers
     tabs: List<NativeNavTab>,                                                 // non-empty, unique, each names a registered feature
     bottomSheetAppearance: BottomSheetAppearance = BottomSheetAppearance(),   // every sheet's look, as on NavContainer
-    screenDecorator: @Composable (content: @Composable () -> Unit) -> Unit,   // theme/toast/image-loader environment per screen
+    screenDecorator: @Composable (content: @Composable () -> Unit) -> Unit,   // theme/toast/image-loader environment per screen; sees LocalNativeChromeInsets
 ) {
     fun setTabBadge(tabFeatureName: String, badge: String?)                   // app-driven native tab badge
     fun navigate(command: NavigationCommand)                                  // from outside any screen: runs on the selected tab, as its top screen would
@@ -719,7 +720,7 @@ fun MainViewController(): UIViewController =
 
 Keep ONE tab list in your commonMain (featureName + title + Compose icon) and map it here: the same list drives the Compose bottom bar on Android/pre-iOS-26 and the native TabView on iOS 26. Screen titles and toolbar actions come from each screen's `NavChrome` declaration; the factory carries no display strings beyond tab titles.
 
-**Insets**: the shell reports how far the native bars overlap each hosted screen. The bridge publishes them through `LocalNativeChromeInsets`, where `Scaffold` applies them, and they update live.
+**Insets**: the shell reports how far the native bars overlap each hosted screen. The bridge publishes them through `LocalNativeChromeInsets`, where `Scaffold` applies them, and they update live. The `screenDecorator` sees them too, so a `ToastHandler` in it shows toasts clear of the bars; a `fullScreen()` destination has none.
 
 The Synapse showcase demonstrates the full pattern: `ShowcaseTabs.kt` (shared config, one raster and one XML vector tab icon), `ShowcaseRoot.kt` (full-Compose shell with `BottomNavigationBar` + `FeatureCommand` tab switching), `NativeShell.kt` (iOS coordinator factory), `features/common/DemoTopBar.kt` (`NavChrome` wrapper), `VoiceMemosFeatureLauncher.kt` (large title + destructive toolbar menu), `ChatFeatureLauncher.kt` (text toolbar button + pinned bottom input), `booking/TravellerDetailsFlow.kt` (a sheet whose `NavChrome` header renders as Compose chrome with a close button).
 
