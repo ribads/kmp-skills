@@ -70,6 +70,7 @@ import com.ribads.synapse.ui.chrome.ScreenChrome
 import com.ribads.synapse.ui.chrome.WithoutNativeChrome
 
 // iosMain only
+import com.ribads.synapse.ui.chrome.DrawableRasterizer
 import com.ribads.synapse.ui.compose.presentation.navigation.native.NativeNavCoordinator
 import com.ribads.synapse.ui.compose.presentation.navigation.native.NativeNavTab
 import com.ribads.synapse.ui.compose.presentation.navigation.native.NativeTabIcon
@@ -457,6 +458,7 @@ interface NavigationResultStore {
     fun deliver(owner: NavKey, result: NavigationResult)
     fun peek(owner: NavKey, type: KClass<out NavigationResult>): NavigationResult?  // snapshot-backed, reactive in composition
     fun consume(owner: NavKey, type: KClass<out NavigationResult>)
+    fun retainOwners(owners: Collection<NavKey>) = Unit  // host prunes results of destinations that left the stack
 }
 
 val LocalNavigationResultStore: ProvidableCompositionLocal<NavigationResultStore>
@@ -481,7 +483,7 @@ entry<HomeRoute> { key ->
 }
 ```
 
-Model each distinct result you return as its own type; several types stage independently for one owner, which is how a screen collects results from several sub-flows. The store lives only while hosted in a `NavContainer` (`LocalNavigationResultStore`), in memory only: staged results do not survive process death. System back delivers no result.
+Model each distinct result you return as its own type; several types stage independently for one owner, which is how a screen collects results from several sub-flows. The store lives only while hosted in a `NavContainer` (`LocalNavigationResultStore`), in memory only: staged results do not survive process death. A result nobody consumed is dropped once its owner leaves the back stack. System back delivers no result.
 
 ---
 
@@ -606,6 +608,9 @@ val LocalNativeChromeSink: ProvidableCompositionLocal<NativeChromeSink?>   // nu
 val LocalNativeChromeInsets: ProvidableCompositionLocal<WindowInsets?>     // null = no native chrome overlap, or already applied
 
 @Composable fun WithoutNativeChrome(content: @Composable () -> Unit)        // a surface floating over the screen: it can't take the native bar, and the native bars don't overlap it
+
+// iosMain only
+class DrawableRasterizer { fun image(drawable: DrawableResource): UIImage }   // a Compose drawable as a UIImage, for native chrome; main thread only
 ```
 
 ### Content padding under native chrome
@@ -669,14 +674,13 @@ class NativeNavCoordinator(
 ) {
     fun setTabBadge(tabFeatureName: String, badge: String?)                   // app-driven native tab badge
     fun navigate(command: NavigationCommand)                                  // from outside any screen: runs on the selected tab, as its top screen would
+    fun close()                                                               // ends the shell session and frees it; the coordinator cannot be used afterwards
 }
 
 fun nativeShellViewController(coordinator: () -> NativeNavCoordinator): UIViewController?   // null below iOS 26; coordinator runs only where the shell can
-
-class DrawableRasterizer { fun image(drawable: DrawableResource): UIImage }   // a Compose drawable as a UIImage, for native chrome; main thread only
 ```
 
-Create one coordinator per shell session; every call must be on the main thread (checked). Construction fails fast on an empty tab list, duplicate tabs, or a tab naming no registered feature. Kotlin owns each tab's path and publishes it whole; SwiftUI reports its own pops (back chevron, swipe-back) back, and the two reconcile by entry identity.
+Create one coordinator per shell session; every call must be on the main thread (checked). An app that replaces its shell (a signed-out app rebuilding its root, for example) calls `close()` on the old coordinator once that shell's view controller is discarded: the shell and the coordinator hold each other through Objective-C, so an unclosed session, its screens and its container ViewModels are never freed. An app that keeps one shell for the life of the process never needs to. Construction fails fast on an empty tab list, duplicate tabs, or a tab naming no registered feature. Kotlin owns each tab's path and publishes it whole; SwiftUI reports its own pops (back chevron, swipe-back) back, and the two reconcile by entry identity.
 
 Command translation is shared with the full-Compose dispatcher: both apply edits planned by one internal `StackPlanner` over one flat stack, and differ only in that a tab's root is permanent. A tab's stack is its native entries, each followed by its open overlays, so a command behaves as it does in `NavContainer` whether or not an overlay is open. Only the top screen of a tab can navigate: a command from a covered or already popped screen is ignored, so a double tap can't pop two screens, and a second command from a screen the first one moved off the top does nothing (use `FlowCompletionCommand` or `clearStack` to replace a screen). A destination registered with `bottomSheet()`/`dialog()` metadata always opens as a Compose overlay over the screen left on top; any other destination is a native push. `ScreenCommand` pushes, and `clearStack` resets the tab to its root first (naming that root pops back to it, with no second copy); `BackCommand` closes an open overlay, otherwise it is a native pop, and either way delivers its result to the destination revealed (`BackStackResultHandler` works unchanged); `FeatureCommand` naming another tab selects it, naming the tab the screen is on pops back to its root, and `clearStack` resets the target tab; any other registered flow name (sub-flows included, since flow names are unique tree-wide) pops back to the flow's existing root if present, else opens its start key (`clearStack` resets first); unknown names fail fast on both shells. Flow scopes resolve through the same `FlowRegistry`, from the top destination, an open overlay included: `CloseFlow` pops the nearest enclosing flow's contiguous run; `CloseFeature` pops its root feature's run, sub-flows included; closing the tab's own feature pops to the tab root, which always survives. `FlowCompletionCommand` is the same pop plus the next key, and never replaces a tab root; `ExternalUriCommand` opens the URI outside the app.
 
