@@ -9,6 +9,8 @@ commonMain.dependencies {
 }
 ```
 
+Every release is on Synapse's Maven repository, `https://maven.ribads.com`; Maven Central has major releases only. Declare it in `settings.gradle.kts` as an `exclusiveContent` repository filtered to `com.ribads.synapse`, and read the latest version from `https://maven.ribads.com/com/ribads/synapse/<artifact>/maven-metadata.xml`.
+
 Depends only on `ui:renderer-core` (pure Kotlin, no Compose), so it runs in any engine, a browser preview, or a test.
 
 The data layer lets JSON schemas declare typed fields, collections, mutations, and conditions. The renderer binds to this data reactively, with no Kotlin code needed for data operations.

@@ -15,6 +15,8 @@ commonMain.dependencies {
 }
 ```
 
+Every release is on Synapse's Maven repository, `https://maven.ribads.com`; Maven Central has major releases only. Declare it in `settings.gradle.kts` as an `exclusiveContent` repository filtered to `com.ribads.synapse`, and read the latest version from `https://maven.ribads.com/com/ribads/synapse/<artifact>/maven-metadata.xml`.
+
 Compose runtime, foundation and UI, Coil's `coil-compose` and `kotlinx-datetime` (the `TimeZone` on `Text.Timestamp`) are `api` dependencies, so a consumer needs none of them declared to use the types this module exposes.
 
 `kotlinx-datetime` runs on `java.time`, which Android ships only from API 26, and `Text` reads it for every clause. An app whose `minSdk` is below 26 enables core library desugaring in its application module, or its first `Text` crashes on Android 7:

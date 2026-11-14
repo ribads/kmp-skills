@@ -15,6 +15,8 @@ commonMain.dependencies {
 }
 ```
 
+Every release is on Synapse's Maven repository, `https://maven.ribads.com`; Maven Central has major releases only. Declare it in `settings.gradle.kts` as an `exclusiveContent` repository filtered to `com.ribads.synapse`, and read the latest version from `https://maven.ribads.com/com/ribads/synapse/<artifact>/maven-metadata.xml`.
+
 Built on `kotlinx-datetime`, which runs on `java.time`. Android ships `java.time` only from API 26, so an app whose `minSdk` is below 26 enables core library desugaring in its application module (`isCoreLibraryDesugaringEnabled = true` and `coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")`); without it, the first parse or format crashes on Android 7.
 
 ## Imports

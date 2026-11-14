@@ -178,7 +178,7 @@ python3 "${CLAUDE_SKILL_DIR}/scripts/init_project.py" \
 | `--features` | yes | Comma-separated feature names in lowercase (e.g. `auth,home,profile`), at least one. Each gets `usecase/` + `ui/` modules with a landing screen. The first one is the start feature. |
 | `--with-session` | no | Also generate `domain/session`: encrypted token storage, an `AuthTokenSource` for bearer auth, and token refresh. Exits with status 2 if `session` is also in `--domains`. Without it, the `HttpClient` sends no credentials. |
 | `--tabs` | no | The features that are top-level tabs, in display order: a subset of `--features`, 2 to 5 of them. The first tab is the start feature. Generates the tabbed shell on every platform, including the iOS 26 Liquid Glass native shell. See below. |
-| `--synapse-version` | no | Synapse library version. Defaults to the latest release on Maven Central (`com.ribads.synapse:core-network` `maven-metadata.xml`), so a release without `core-network` is never picked. If that lookup fails (offline, proxy, TLS, or no release publishes `core-network`), the script exits with an error and writes nothing; re-run with an explicit version. There is no built-in fallback version. |
+| `--synapse-version` | no | Synapse library version. Defaults to the latest release on Synapse's Maven repository (`https://maven.ribads.com`, `com.ribads.synapse:core-network` `maven-metadata.xml`), so a release without `core-network` is never picked. If that lookup fails (offline, proxy, TLS, or no release publishes `core-network`), the script exits with an error and writes nothing; re-run with an explicit version. There is no built-in fallback version. |
 | `--force` | no | Overwrite existing files. Otherwise aborts if output dir already has a `settings.gradle.kts`. |
 
 ### Example
@@ -260,7 +260,7 @@ Always run the script rather than hand-writing the scaffold; that is the whole p
 
 ## After running the script
 
-The script generates a compiling skeleton. Synapse artifacts resolve from Maven Central (already configured in `settings.gradle.kts`), so no extra credentials are needed for a default build. The user still needs to:
+The script generates a compiling skeleton. Synapse artifacts resolve from Synapse's Maven repository, `https://maven.ribads.com`, which `settings.gradle.kts` already declares as an `exclusiveContent` repository, so no extra credentials are needed for a default build. The user still needs to:
 
 1. **Set the API base URLs.** Replace the placeholder hosts in `androidApp/build.gradle.kts` (`buildConfigField` per build type) and `iosApp/Configuration/Config.xcconfig` (`API_BASE_URL[config=…]`). Keep the trailing `/`. In the xcconfig, write `https:/$()/host/`: `//` starts a comment there, and `$()` breaks it up. Add product flavors or Xcode configurations the same way when you need more environments.
 2. **Customize the theme.** Edit `compose-ui/.../<Name>Theme.kt` with brand colours for both the light and dark schemes, fonts and shapes. The app follows the device appearance (`Appearance.System`); pass another `Appearance` to `<Name>Theme` to fix it or to drive it from a user setting. Keep `window_background` in `androidApp/src/main/res/values{,-night}/colors.xml` equal to each scheme's `surface.primary`.

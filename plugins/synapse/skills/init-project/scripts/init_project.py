@@ -23,11 +23,11 @@ from pathlib import Path
 from typing import Optional
 
 
-SYNAPSE_METADATA_URL = (
-    "https://repo1.maven.org/maven2/com/ribads/synapse/core-network/maven-metadata.xml"
-)
+SYNAPSE_MAVEN_URL = "https://maven.ribads.com"
 
-CORE_NETWORK_UNRELEASED = "no release on Maven Central publishes core-network yet"
+SYNAPSE_METADATA_URL = f"{SYNAPSE_MAVEN_URL}/com/ribads/synapse/core-network/maven-metadata.xml"
+
+CORE_NETWORK_UNRELEASED = f"no release on {SYNAPSE_MAVEN_URL} publishes core-network yet"
 
 
 # ─── Helpers ───────────────────────────────────────────────────────────────────
@@ -74,7 +74,7 @@ def _fetch_metadata_xml() -> str:
 
 
 def fetch_latest_synapse_version() -> str:
-    """Return the latest released Synapse version on Maven Central.
+    """Return the latest released Synapse version on Synapse's Maven repository.
 
     Queries ``core-network``: generated projects depend on it, so only releases that publish it are usable.
     Raises ``SynapseVersionLookupError`` when the version cannot be resolved.
@@ -93,7 +93,7 @@ def fetch_latest_synapse_version() -> str:
 def resolve_synapse_version(requested: Optional[str]) -> str:
     if requested:
         return requested
-    print("Resolving latest Synapse version from Maven Central...", flush=True)
+    print(f"Resolving latest Synapse version from {SYNAPSE_MAVEN_URL}...", flush=True)
     try:
         return fetch_latest_synapse_version()
     except SynapseVersionLookupError as e:
@@ -181,6 +181,10 @@ dependencyResolutionManagement {
                 includeGroupAndSubgroups("com.android")
                 includeGroupAndSubgroups("com.google")
             }
+        }
+        exclusiveContent {
+            forRepository { maven("__SYNAPSE_MAVEN_URL__") }
+            filter { includeGroupAndSubgroups("com.ribads.synapse") }
         }
         mavenCentral()
     }
@@ -2258,7 +2262,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--synapse-version",
         default=None,
-        help="Synapse library version. Defaults to the latest release on Maven Central; "
+        help=f"Synapse library version. Defaults to the latest release on {SYNAPSE_MAVEN_URL}; "
         "generation fails if that lookup fails.",
     )
     parser.add_argument("--force", action="store_true", help="Overwrite existing files")
@@ -2607,6 +2611,7 @@ def main() -> None:
         "BASE_PACKAGE": base_pkg,
         "APP_PACKAGE": f"{base_pkg}.app",
         "SYNAPSE_VERSION": resolve_synapse_version(args.synapse_version),
+        "SYNAPSE_MAVEN_URL": SYNAPSE_MAVEN_URL,
         "FIRST_FEATURE": tabs[0] if tabs else features[0],
         "BACKUP_EXCLUDES": backup_excludes(name.lower(), with_session, indent="    "),
         "BACKUP_EXCLUDES_NESTED": backup_excludes(name.lower(), with_session, indent="        "),

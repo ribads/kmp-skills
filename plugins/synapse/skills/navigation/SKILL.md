@@ -17,6 +17,8 @@ commonMain.dependencies {
 }
 ```
 
+Every release is on Synapse's Maven repository, `https://maven.ribads.com`; Maven Central has major releases only. Declare it in `settings.gradle.kts` as an `exclusiveContent` repository filtered to `com.ribads.synapse`, and read the latest version from `https://maven.ribads.com/com/ribads/synapse/<artifact>/maven-metadata.xml`.
+
 Consumer modules that declare destinations also need the kotlinx-serialization plugin (routes are `@Serializable`):
 
 ```kotlin

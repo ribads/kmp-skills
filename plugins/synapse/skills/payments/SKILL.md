@@ -15,6 +15,8 @@ commonMain.dependencies {
 }
 ```
 
+Every release is on Synapse's Maven repository, `https://maven.ribads.com`; Maven Central has major releases only. Declare it in `settings.gradle.kts` as an `exclusiveContent` repository filtered to `com.ribads.synapse`, and read the latest version from `https://maven.ribads.com/com/ribads/synapse/<artifact>/maven-metadata.xml`.
+
 `paystack-core` declares `android.permission.INTERNET` in its Android manifest (and `paystack-ui` depends on it), so the app inherits the permission through manifest merging.
 
 ## Imports

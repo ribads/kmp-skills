@@ -15,6 +15,8 @@ iosMain.dependencies {
 }
 ```
 
+Every release is on Synapse's Maven repository, `https://maven.ribads.com`; Maven Central has major releases only. Declare it in `settings.gradle.kts` as an `exclusiveContent` repository filtered to `com.ribads.synapse`, and read the latest version from `https://maven.ribads.com/com/ribads/synapse/<artifact>/maven-metadata.xml`.
+
 The single owner of `AVAudioSession` configuration across Synapse audio modules. iOS's audio
 session is a process-global shared resource: the last component to call `setCategory` wins, so a
 recorder starting up can silently disable an active player. This coordinator computes the union of

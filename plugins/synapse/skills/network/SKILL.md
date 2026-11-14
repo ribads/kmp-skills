@@ -15,6 +15,8 @@ commonMain.dependencies {
 }
 ```
 
+Every release is on Synapse's Maven repository, `https://maven.ribads.com`; Maven Central has major releases only. Declare it in `settings.gradle.kts` as an `exclusiveContent` repository filtered to `com.ribads.synapse`, and read the latest version from `https://maven.ribads.com/com/ribads/synapse/<artifact>/maven-metadata.xml`.
+
 Exposes Ktor's `HttpClient` (`ktor-client-core` is an `api` dependency) and `kotlinx-serialization-json`. Brings the platform engines (OkHttp on Android and JVM, Darwin on iOS) and the `INTERNET` permission, so do not declare an engine yourself. Synapse builds against Ktor 3.6.0; keep any Ktor artifact you add, such as `ktor-client-mock`, on the same version.
 
 ## Imports

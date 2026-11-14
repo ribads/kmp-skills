@@ -15,6 +15,8 @@ commonMain.dependencies {
 }
 ```
 
+Every release is on Synapse's Maven repository, `https://maven.ribads.com`; Maven Central has major releases only. Declare it in `settings.gradle.kts` as an `exclusiveContent` repository filtered to `com.ribads.synapse`, and read the latest version from `https://maven.ribads.com/com/ribads/synapse/<artifact>/maven-metadata.xml`.
+
 The lifecycle `ViewModel` that `LifecycleViewModel` extends (`org.jetbrains.androidx.lifecycle:lifecycle-viewmodel`) and the Compose runtime behind `state` are `api` dependencies of `ui:mvi`, so a module that declares a ViewModel needs neither of them separately.
 
 ## Imports

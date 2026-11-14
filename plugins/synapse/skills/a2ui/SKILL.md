@@ -17,6 +17,8 @@ commonMain.dependencies {
 }
 ```
 
+Every release is on Synapse's Maven repository, `https://maven.ribads.com`; Maven Central has major releases only. Declare it in `settings.gradle.kts` as an `exclusiveContent` repository filtered to `com.ribads.synapse`, and read the latest version from `https://maven.ribads.com/com/ribads/synapse/<artifact>/maven-metadata.xml`.
+
 `ui:a2ui` exposes `ui:a2ui-core`, `ui:element`, `ui:component` and Compose runtime, foundation and UI as `api` dependencies. `ui:a2ui-core` exposes `kotlinx-serialization-json`. Targets: Android, iOS, wasmJs; the core also targets the JVM.
 
 A2UI is an open protocol in which an agent describes UI as JSON messages: a flat list of components that reference each other by id, a JSON data model they bind to, and actions that report back. The core speaks A2UI v0.9 and v0.9.1 with the published basic catalog (18 components, 14 functions), passes the protocol's conformance suites, and makes no network calls: the transport (A2A, AG-UI, SSE, a WebSocket) is the app's.

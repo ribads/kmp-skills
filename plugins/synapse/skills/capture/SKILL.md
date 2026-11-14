@@ -17,6 +17,8 @@ commonMain.dependencies {
 }
 ```
 
+Every release is on Synapse's Maven repository, `https://maven.ribads.com`; Maven Central has major releases only. Declare it in `settings.gradle.kts` as an `exclusiveContent` repository filtered to `com.ribads.synapse`, and read the latest version from `https://maven.ribads.com/com/ribads/synapse/<artifact>/maven-metadata.xml`.
+
 `core:capture` depends on `core:context`. `ui:capture` depends on `core:capture` and `ui:element`.
 
 The engine handles its own audio pipeline — no dependency on `core:record`. Audio is captured directly via CameraX's `Recorder` on Android and `AVCaptureSession` on iOS.
