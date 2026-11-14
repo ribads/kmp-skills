@@ -55,8 +55,16 @@ import com.ribads.synapse.ui.compose.presentation.navigation.compose.pageTransit
 
 import com.ribads.synapse.ui.compose.presentation.navigation.compose.chromeContentPadding
 
+// NavContainer with tabs (experimental)
+import com.ribads.synapse.ui.compose.presentation.navigation.ExperimentalNavTabsApi
+import com.ribads.synapse.ui.compose.presentation.navigation.compose.NavBarDestination
+import com.ribads.synapse.ui.compose.presentation.navigation.compose.NavContainerBars
+import com.ribads.synapse.ui.component.navchrome.rememberPlatformNavBars   // module ui:component
+
 // module ui:chrome
 import com.ribads.synapse.ui.chrome.ChromeAction
+import com.ribads.synapse.ui.chrome.ChromeDeclaration
+import com.ribads.synapse.ui.chrome.ChromeDeclarations
 import com.ribads.synapse.ui.chrome.ChromeEvent
 import com.ribads.synapse.ui.chrome.ChromeIcon
 import com.ribads.synapse.ui.chrome.ChromeLeading
@@ -68,12 +76,16 @@ import com.ribads.synapse.ui.chrome.LocalNativeChromeSink
 import com.ribads.synapse.ui.chrome.NativeChromeSink
 import com.ribads.synapse.ui.chrome.ScreenChrome
 import com.ribads.synapse.ui.chrome.WithoutNativeChrome
+import com.ribads.synapse.ui.chrome.rememberNativeChrome
 
 // iosMain only
 import com.ribads.synapse.ui.chrome.DrawableRasterizer
 import com.ribads.synapse.ui.compose.presentation.navigation.native.NativeNavCoordinator
 import com.ribads.synapse.ui.compose.presentation.navigation.native.NativeNavTab
+import com.ribads.synapse.ui.compose.presentation.navigation.native.NativeTabAction
+import com.ribads.synapse.ui.compose.presentation.navigation.native.NativeTabBarItem
 import com.ribads.synapse.ui.compose.presentation.navigation.native.NativeTabIcon
+import com.ribads.synapse.ui.compose.presentation.navigation.native.isNativeShellSupported
 import com.ribads.synapse.ui.compose.presentation.navigation.native.nativeShellViewController
 ```
 
@@ -294,6 +306,105 @@ fun App(features: Collection<FeatureLauncher>) {
 }
 ```
 
+### Tabs (experimental)
+
+A second `NavContainer` keeps the app's tabs itself: a back stack for each tab and one for what shows outside them, such as signing in, all in one composition, with the tab bar and the navigation bar drawn around the destinations. It is the same root on every platform. The API is marked `@ExperimentalNavTabsApi` and may still change, so opt in where you call it.
+
+```kotlin
+@ExperimentalNavTabsApi
+@Composable
+fun NavContainer(
+    startKey: NavKey,                                     // a tab's root, or a destination outside the tabs
+    features: Collection<FeatureLauncher>,
+    tabs: List<String>,                                   // each tab's featureName in tab bar order: unique, each a registered feature
+    bars: NavContainerBars,                               // draws both bars: rememberPlatformNavBars, or your own
+    modifier: Modifier = Modifier,
+    uriHandler: UriHandler = LocalUriHandler.current,
+    pageTransition: PageTransition = PageTransition.Platform,
+    onDestinationChanged: (key: NavKey, flowPath: FlowPath) -> Unit = { _, _ -> },   // tab switches included
+    bottomSheetAppearance: BottomSheetAppearance = BottomSheetAppearance(),
+): NavigationDispatcher
+
+// module ui:component, package com.ribads.synapse.ui.component.navchrome
+@ExperimentalNavTabsApi
+@Composable
+fun rememberPlatformNavBars(tabs: List<BottomNavigationItem>): NavContainerBars   // one item per tab in bar order, id = the tab's featureName
+```
+
+Give it the whole window and an opaque background: it deals with the system bars itself.
+
+```kotlin
+@OptIn(ExperimentalNavTabsApi::class)
+@Composable
+fun App(features: Collection<FeatureLauncher>) {
+    NavContainer(
+        startKey = HomeRoute,
+        features = features,
+        tabs = appTabs.map { it.featureName },
+        bars = rememberPlatformNavBars(appTabBarItems),
+        modifier = Modifier.fillMaxSize().background(Theme.colors.surface.primary),
+    )
+}
+```
+
+**Stacks.** Each tab keeps what is open in it while another shows, down to its ViewModels and saved state. A command comes from the destination on top of the stack showing and edits that stack as on the container without tabs, except that a tab's root always survives: `BackCommand` on a root does nothing, closing the tab's own feature pops to the root, and `FlowCompletionCommand` never replaces it. Staged back-stack results work unchanged.
+
+**Moving between stacks.**
+
+| Command | Effect |
+|---|---|
+| A destination that is a tab's root, as `ScreenCommand(HomeRoute)` | Shows that tab at its root, from anywhere |
+| `FeatureCommand(tab)` | Selects the tab and keeps what is open there. Naming the tab already showing, or `clearStack = true`, returns it to its root. Tapping the tab bar sends this |
+| `FlowCompletionCommand(a tab's root)` | Closes the flow and shows that tab at its root |
+| `clearStack = true` for a destination no tab's feature owns | Leaves the tabs: the destination becomes the only one, the tab bar goes, and every tab returns to its root |
+| Any other destination no tab owns | Opens on the tab showing |
+
+Leaving the tabs and returning through a tab's root is how an app moves between signing in and its tabs, in one container.
+
+**Bars.** The tab bar shows while a tab does. A `fullScreen()` destination shows neither bar and is left the whole window, system bars included; a tab's root keeps its bars however it is marked. Sheets and dialogs float over the destination beneath them and never take its navigation bar. Each bar fades as it comes and goes.
+
+**Floating or docked.** `NavContainerBars` says which, per bar:
+
+- Where the bars float, which with `rememberPlatformNavBars` is iOS 26 or later, they are the system's Liquid Glass `UITabBar` and `UINavigationBar`, drawn over the destinations. A destination's `NavChrome` shows on the navigation bar, and `LocalNativeChromeInsets` tells the destination how far the bars reach: the status bar, the navigation bar while it declares one, and the tab bar, or outside the tabs the system's bar at the bottom. `Scaffold` and `chromeContentPadding` apply it, so content scrolls beneath the bars and rests clear of them.
+- Where they dock, on Android, the web and iOS before 26, a `BottomNavigationBar` sits under the destinations, which are padded clear of the status bar (and, outside the tabs, of the system's navigation bar) and draw their own `TopNavBar` through `NavChrome`.
+
+Screens never branch on which: declare `NavChrome`, use `Scaffold`.
+
+**Motion.** Switching tabs does not animate; every other change uses `pageTransition` or the destination's own. On the system's navigation bar the chrome of a destination that replaces another on its stack cross-fades.
+
+```kotlin
+@ExperimentalNavTabsApi
+@Stable
+interface NavContainerBars {
+    @Composable fun floatingTabBarInsets(): WindowInsets?           // how far the tab bar floats over the destinations; null = it docks beneath them
+    @Composable fun TabBar(selectedTab: String, visibility: () -> Float, modifier: Modifier, onTabSelected: (tab: String) -> Unit)
+
+    @Composable fun floatingNavigationBarInsets(): WindowInsets?    // how far the navigation bar floats; null = destinations draw their own top bar
+    @Composable fun NavigationBar(                                  // never called where floatingNavigationBarInsets() is null
+        chrome: ScreenChrome,
+        destination: NavBarDestination,
+        visibility: () -> Float,
+        modifier: Modifier,
+        onEvent: (ChromeEvent) -> Unit,                             // every tap, the leading one included
+    )
+}
+
+@ExperimentalNavTabsApi
+@Immutable
+data class NavBarDestination(val stack: Any, val key: Any) {        // which destination the navigation bar shows
+    fun replaces(previous: NavBarDestination?): Boolean             // true = took over from another on the same stack, so animate; false = show at once
+}
+```
+
+`visibility` is how much of the bar shows, from 0 to 1, for the bar to read as it draws (`Modifier.graphicsLayer { alpha = visibility() }`). For bars of your own design system, implement `NavContainerBars`, delegating to `rememberPlatformNavBars` for whatever stays the platform's (`NavContainerBars by platformBars`).
+
+Limits today:
+
+- A `ToastHandler` around the container does not know the floating bars, so on iOS 26 a toast at the top draws beneath the navigation bar.
+- `ChromeTitleDisplay.Large` shows inline on the floating navigation bar.
+- On iOS, back is Navigation 3's gesture, not the system's interactive pop: no swipe from anywhere, and the navigation bar cross-fades instead of following the finger.
+- A tab bar the system would extend (search tab, bottom accessory, minimise on scroll) stays plain.
+
 ## Scenes
 
 Entry metadata decides how a destination is presented. Pass it as `entry<X>(metadata = …) { ... }`; a destination with no metadata is a full screen.
@@ -489,7 +600,7 @@ Model each distinct result you return as its own type; several types stage indep
 
 ## Native iOS Navigation (Liquid Glass)
 
-iOS 26 renders Liquid Glass only through native `TabView`/`NavigationStack`. The bridge hands navigation chrome to a SwiftUI shell while Compose keeps rendering screen content, one `UIViewController` per screen. Android and pre-iOS-26 keep the full-Compose `NavContainer` path unchanged.
+Two shells put an app's tabs on iOS 26 Liquid Glass chrome. The SwiftUI shell in this section hands navigation chrome to a native `TabView`/`NavigationStack` while Compose keeps rendering screen content, one `UIViewController` per screen, with the full-Compose `NavContainer` path unchanged on Android and before iOS 26: it has the system's own push and swipe-back, at the cost of a second root. `NavContainer` with tabs (experimental, see [Tabs](#tabs-experimental)) is one Compose root on every platform, with the system's bars drawn over it. The screen chrome contract below serves both.
 
 ### Screen chrome (commonMain contract)
 
@@ -609,9 +720,29 @@ val LocalNativeChromeInsets: ProvidableCompositionLocal<WindowInsets?>     // nu
 
 @Composable fun WithoutNativeChrome(content: @Composable () -> Unit)        // a surface floating over the screen: it can't take the native bar, and the native bars don't overlap it
 
+@Composable fun rememberNativeChrome(                                      // publishes chrome to the shell's native bar while composed
+    chrome: ScreenChrome,
+    onLeadingClick: (() -> Unit)?,
+    onAction: (id: String) -> Unit,
+): Boolean                                                                  // true = this declaration holds the native bar; false = render your own bar
+
+@Stable class ChromeDeclarations {                                         // for a host that draws one bar over several screens
+    fun sinkFor(screen: Any): NativeChromeSink                             // provide as LocalNativeChromeSink around that screen; handlesBack is false
+    fun declaredBy(screen: Any): ChromeDeclaration?                        // snapshot state; null while the screen declares nothing
+}
+
+class ChromeDeclaration {                                                  // what one screen declares
+    val chrome: ScreenChrome
+    val onEvent: (ChromeEvent) -> Unit                                     // send it what the user does to the bar showing chrome
+}
+
 // iosMain only
 class DrawableRasterizer { fun image(drawable: DrawableResource): UIImage }   // a Compose drawable as a UIImage, for native chrome; main thread only
 ```
+
+`rememberNativeChrome` is the seam `NavChrome` is built on, for a design system with a top bar of its own: map the bar's model to a `ScreenChrome`, render nothing (or only what the native bar can't show) while it returns true, and render the full bar while it returns false. It owns the sink protocol (one owner per screen, withdrawn when it leaves composition, Back left out on a bar with no stack unless `onLeadingClick` handles it).
+
+`ChromeDeclarations` is the other side of that seam, for a host that draws a bar of its own over several screens: each screen gets a sink of its own, so two composed at once, as during a transition, never take each other's bar, and the host draws what the screen on top declares. `NavContainer` with tabs and the renderer's `ScreenNavigationHost` are built on it.
 
 ### Content padding under native chrome
 
@@ -653,12 +784,25 @@ Inside a `Scaffold` the overlap counts as applied, so `chromeContentPadding` ret
 The SwiftUI shell ships as the `SynapseNativeNav` Swift package. Kotlin calls it through cinterop and the package knows nothing about Kotlin, so an app carries no shell code of its own.
 
 ```kotlin
+sealed interface NativeTabBarItem {     // one item of the native tab bar, in display order
+    val title: String                  // native tab bar label
+    val icon: NativeTabIcon
+}
+
 class NativeNavTab(
     val featureName: String,   // FeatureLauncher.featureName; doubles as tab id
-    val title: String,         // native tab bar label + the tab root's fallback navigation title
-    val icon: NativeTabIcon,
-) {
+    override val title: String,         // also the tab root's fallback navigation title
+    override val icon: NativeTabIcon,
+) : NativeTabBarItem {
     constructor(featureName: String, title: StringResource, icon: NativeTabIcon)   // the title from a Compose string resource
+}
+
+class NativeTabAction(          // a tab bar item with no tab of its own, e.g. a compose button
+    val id: String,             // reported to onTabAction; unique across the bar, tabs' feature names included
+    override val title: String,
+    override val icon: NativeTabIcon,
+) : NativeTabBarItem {
+    constructor(id: String, title: StringResource, icon: NativeTabIcon)
 }
 
 sealed interface NativeTabIcon {
@@ -668,8 +812,10 @@ sealed interface NativeTabIcon {
 
 class NativeNavCoordinator(
     featureLaunchers: Collection<FeatureLauncher>,                            // same set the full-Compose NavContainer registers
-    tabs: List<NativeNavTab>,                                                 // non-empty, unique, each names a registered feature
+    tabs: List<NativeTabBarItem>,                                             // at least one NativeNavTab; tabs and actions in display order
     bottomSheetAppearance: BottomSheetAppearance = BottomSheetAppearance(),   // every sheet's look, as on NavContainer
+    onTabAction: ((actionId: String) -> Unit)? = null,                        // a chosen NativeTabAction; required when tabs has one
+    onExit: ((key: NavKey) -> Unit)? = null,                                  // a clearStack command leading outside every tab (see below)
     screenDecorator: @Composable (content: @Composable () -> Unit) -> Unit,   // theme/toast/image-loader environment per screen; sees LocalNativeChromeInsets
 ) {
     fun setTabBadge(tabFeatureName: String, badge: String?)                   // app-driven native tab badge
@@ -678,9 +824,14 @@ class NativeNavCoordinator(
 }
 
 fun nativeShellViewController(coordinator: () -> NativeNavCoordinator): UIViewController?   // null below iOS 26; coordinator runs only where the shell can
+fun isNativeShellSupported(): Boolean                                                      // true where nativeShellViewController builds the shell: iOS 26 or later
 ```
 
-Create one coordinator per shell session; every call must be on the main thread (checked). An app that replaces its shell (a signed-out app rebuilding its root, for example) calls `close()` on the old coordinator once that shell's view controller is discarded: the shell and the coordinator hold each other through Objective-C, so an unclosed session, its screens and its container ViewModels are never freed. An app that keeps one shell for the life of the process never needs to. Construction fails fast on an empty tab list, duplicate tabs, or a tab naming no registered feature. Kotlin owns each tab's path and publishes it whole; SwiftUI reports its own pops (back chevron, swipe-back) back, and the two reconcile by entry identity.
+Create one coordinator per shell session; every call must be on the main thread (checked). An app that replaces its shell (a signed-out app rebuilding its root, for example) calls `close()` on the old coordinator once that shell's view controller is discarded: the shell and the coordinator hold each other through Objective-C, so an unclosed session, its screens and its container ViewModels are never freed. An app that keeps one shell for the life of the process never needs to. Construction fails fast on a tab bar without a tab, duplicate identifiers (feature names and action ids share one namespace), a tab naming no registered feature, or an action with no `onTabAction`. Kotlin owns each tab's path and publishes it whole; SwiftUI reports its own pops (back chevron, swipe-back) back, and the two reconcile by entry identity.
+
+**Tab bar actions.** A `NativeTabAction` sits in the tab bar like a tab but has no stack: choosing it calls `onTabAction` with its id and the selected tab stays selected. The app decides what opens, typically by running its own logic and then calling `navigate`, which lands on the selected tab. Use it for a centre compose button; anything that is a place to return to is a tab.
+
+**Leaving the tabs.** A `clearStack` command whose destination lies outside every tab, a `ScreenCommand(key, clearStack = true)` whose key no tab's feature tree owns or a `FeatureCommand(name, clearStack = true)` naming such a flow, makes that destination the whole app on `NavContainer`, which a tab bar cannot show. With `onExit`, the coordinator leaves every tab as it is and hands the destination over: the app replaces the shell with a root showing it (and later calls `close()`), which is how sign-out returns to sign-in. Only the top screen of a tab can exit. Without `onExit`, the command resets the tab it came from and opens the destination there. A `clearStack` command to a tab, or to a flow inside one, never exits.
 
 Command translation is shared with the full-Compose dispatcher: both apply edits planned by one internal `StackPlanner` over one flat stack, and differ only in that a tab's root is permanent. A tab's stack is its native entries, each followed by its open overlays, so a command behaves as it does in `NavContainer` whether or not an overlay is open. Only the top screen of a tab can navigate: a command from a covered or already popped screen is ignored, so a double tap can't pop two screens, and a second command from a screen the first one moved off the top does nothing (use `FlowCompletionCommand` or `clearStack` to replace a screen). A destination registered with `bottomSheet()`/`dialog()` metadata always opens as a Compose overlay over the screen left on top; any other destination is a native push. `ScreenCommand` pushes, and `clearStack` resets the tab to its root first (naming that root pops back to it, with no second copy); `BackCommand` closes an open overlay, otherwise it is a native pop, and either way delivers its result to the destination revealed (`BackStackResultHandler` works unchanged); `FeatureCommand` naming another tab selects it, naming the tab the screen is on pops back to its root, and `clearStack` resets the target tab; any other registered flow name (sub-flows included, since flow names are unique tree-wide) pops back to the flow's existing root if present, else opens its start key (`clearStack` resets first); unknown names fail fast on both shells. Flow scopes resolve through the same `FlowRegistry`, from the top destination, an open overlay included: `CloseFlow` pops the nearest enclosing flow's contiguous run; `CloseFeature` pops its root feature's run, sub-flows included; closing the tab's own feature pops to the tab root, which always survives. `FlowCompletionCommand` is the same pop plus the next key, and never replaces a tab root; `ExternalUriCommand` opens the URI outside the app.
 
@@ -698,7 +849,7 @@ A project generated with `/init-project --tabs` already has both steps, and its 
 https://github.com/ribads/synapse-native-nav-kmp
 ```
 
-Select the `SynapseNativeNav` library product, with the dependency rule **Up to Next Minor Version** from `0.0.2`. Build with the Xcode 26 SDK or later. The package links into apps with a deployment target down to iOS 16; below iOS 26 `nativeShellViewController` returns null.
+Select the `SynapseNativeNav` library product, with the dependency rule **Up to Next Minor Version** from `0.1.0`. Build with the Xcode 26 SDK or later. The package links into apps with a deployment target down to iOS 16; below iOS 26 `nativeShellViewController` returns null.
 
 An app only has to link the package if it calls `nativeShellViewController` (or exports `ui-compose-presentation` into its framework). Bridge references that nothing reaches are dropped, by Kotlin/Native in Release and by Xcode's default dead stripping in Debug, so an app that turns `DEAD_CODE_STRIPPING` off must link the package too.
 
@@ -726,7 +877,7 @@ Keep ONE tab list in your commonMain (featureName + title + Compose icon) and ma
 
 **Insets**: the shell reports how far the native bars overlap each hosted screen. The bridge publishes them through `LocalNativeChromeInsets`, where `Scaffold` applies them, and they update live. The `screenDecorator` sees them too, so a `ToastHandler` in it shows toasts clear of the bars; a `fullScreen()` destination has none.
 
-The Synapse showcase demonstrates the full pattern: `ShowcaseTabs.kt` (shared config, one raster and one XML vector tab icon), `ShowcaseRoot.kt` (full-Compose shell with `BottomNavigationBar` + `FeatureCommand` tab switching), `NativeShell.kt` (iOS coordinator factory), `features/common/DemoTopBar.kt` (`NavChrome` wrapper), `VoiceMemosFeatureLauncher.kt` (large title + destructive toolbar menu), `ChatFeatureLauncher.kt` (text toolbar button + pinned bottom input), `booking/TravellerDetailsFlow.kt` (a sheet whose `NavChrome` header renders as Compose chrome with a close button).
+The Synapse showcase demonstrates the full pattern: `ShowcaseTabs.kt` (shared config, one raster and one XML vector tab icon), `ShowcaseRoot.kt` (the `NavContainer` with tabs it runs on by default, on every platform), `NativeShell.kt` (iOS coordinator factory for the SwiftUI shell, launched with `-shell swiftui`), `features/common/DemoTopBar.kt` (`NavChrome` wrapper), `VoiceMemosFeatureLauncher.kt` (large title + destructive toolbar menu), `ChatFeatureLauncher.kt` (text toolbar button + pinned bottom input), `booking/TravellerDetailsFlow.kt` (a sheet whose `NavChrome` header renders as Compose chrome with a close button).
 
 ### v1 limitations
 - `bottomSheet()`/`dialog()` destinations render as Compose overlays, not native sheets.

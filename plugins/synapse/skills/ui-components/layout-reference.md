@@ -285,9 +285,23 @@ One screen's `ScreenChrome` on the platform's own navigation bar, which is Liqui
 @Composable fun systemNavigationBarInsets(): WindowInsets?  // what the bar covers; null where the platform has no bar to float
 ```
 
-Where `systemNavigationBarInsets()` is null the bar draws nothing, so render `NavChrome` there. The bar has no stack behind it: it draws `ChromeLeading.Back` and `Close` as declared and reports `ChromeEvent.LeadingClicked` for both, so the host decides what leaving means. To have screens declare into it with `NavChrome`, provide a `NativeChromeSink` whose `handlesBack` is false through `LocalNativeChromeSink`, and the insets through `LocalNativeChromeInsets`, around each screen.
+Where `systemNavigationBarInsets()` is null the bar draws nothing, so render `NavChrome` there. The bar has no stack behind it: it draws `ChromeLeading.Back` and `Close` as declared and reports `ChromeEvent.LeadingClicked` for both, so the host decides what leaving means. To have screens declare into it with `NavChrome`, provide a `NativeChromeSink` whose `handlesBack` is false through `LocalNativeChromeSink`, and the insets through `LocalNativeChromeInsets`, around each screen; `ChromeDeclarations` from `ui:chrome` hands out such a sink per screen.
 
 The title is always inline, and `subtitle` shows beneath it. A `Confirm` action is prominent in the theme's accent colour and sits at the trailing edge, a `Destructive` one takes the error colour, and a `Menu` opens a system menu. An icon uses its `sfSymbol` when it has one, otherwise its drawable. Place the bar at the top edge, beneath the status bar. It is a native view drawn above all Compose content on its window except sheets and dialogs, so leave it out while something should cover it.
+
+## rememberPlatformNavBars
+
+The bars of a `NavContainer` with tabs, as each platform draws them. Both are experimental (`@ExperimentalNavTabsApi`); the container is in the `/synapse:navigation` skill.
+
+```kotlin
+// package com.ribads.synapse.ui.component.navchrome
+@ExperimentalNavTabsApi
+@Composable fun rememberPlatformNavBars(
+    tabs: List<BottomNavigationItem>,                       // one per tab in bar order, each id the tab's featureName
+): NavContainerBars
+```
+
+On iOS 26 or later the tabs go on a [`SystemTabBar`](#systemtabbar) and each destination's `NavChrome` on a [`SystemNavigationBar`](#systemnavigationbar), both floating over the destinations. Everywhere else a `BottomNavigationBar` docks under them and their `NavChrome` draws a `TopNavBar` in place. Build the items outside composables, or remember them: the bars are rebuilt when the list changes.
 
 ## DropdownMenu
 

@@ -45,7 +45,7 @@ Import each type from its package below.
 | `com.ribads.synapse.ui.component.emptystate.model` | `EmptyStateModel` |
 | `com.ribads.synapse.ui.component.field` | `CurrencyTextField`, `DateTextField`, `DropdownSelectionField`, `LocalTextFieldStyle`, `PasswordTextField`, `PhoneTextField`, `SelectionTextField`, `TextArea`, `TextField`, `WithTextFieldStyle` |
 | `com.ribads.synapse.ui.component.field.model` | `CountryLocale`, `CurrencyAmount`, `CurrencyInputModel`, `DateTextFieldModel`, `FieldState`, `PhoneInputModel`, `SelectionFieldModel`, `SelectionOption`, `TextFieldStyle`, `TextInputModel` |
-| `com.ribads.synapse.ui.component.navchrome` | `NavChrome`, `SystemNavigationBar`, `systemNavigationBarInsets` |
+| `com.ribads.synapse.ui.component.navchrome` | `NavChrome`, `SystemNavigationBar`, `systemNavigationBarInsets`, `rememberPlatformNavBars` |
 | `com.ribads.synapse.ui.component.progress` | `CircularProgress`, `ProgressBar` |
 | `com.ribads.synapse.ui.component.progress.model` | `CircularProgressModel`, `ProgressBarModel` |
 | `com.ribads.synapse.ui.component.radio` | `RadioGroup` |
@@ -178,7 +178,7 @@ Required callbacks deliberately sit *after* defaulted config parameters, so call
 ## Detailed Reference
 
 - [Buttons & Inputs](inputs-reference.md) — Buttons, text fields, phone, currency, selection, text area + models
-- [Layout & Containers](layout-reference.md): MonthCalendar, DatePickerBottomSheet, Card, SelectableCard, Divider, Scaffold, TopNavBar, NavChrome, SystemNavigationBar, DropdownMenu, Trays
+- [Layout & Containers](layout-reference.md): MonthCalendar, DatePickerBottomSheet, Card, SelectableCard, Divider, Scaffold, TopNavBar, NavChrome, SystemNavigationBar, rememberPlatformNavBars, DropdownMenu, Trays
 - [Controls](controls-reference.md) — Checkbox, progress, rating, chips, tabs, radio, slider, stepper, timer, time picker, confirm dialog, empty state
 - [Charts](charts-reference.md) — Bar, line, pie charts + models
 - [Chat](chat-reference.md) — ChatTextArea, MessageBubble + models
