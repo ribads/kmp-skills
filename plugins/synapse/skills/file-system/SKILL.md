@@ -44,6 +44,7 @@ Types live in more than one package. Import them from exactly these paths:
 
 ```kotlin
 import com.ribads.synapse.core.file.FilePicker
+import com.ribads.synapse.core.file.FilePickerConfig
 import com.ribads.synapse.core.file.FilePickerRequest
 import com.ribads.synapse.core.file.FilePickerResult
 import com.ribads.synapse.core.file.ImageFileSize // iosMain only
@@ -70,7 +71,20 @@ interface FilePicker {
     }
 }
 
-expect fun buildFilePicker(): FilePicker
+// FilePicker.shared uses the defaults.
+expect fun buildFilePicker(config: FilePickerConfig = FilePickerConfig()): FilePicker
+
+data class FilePickerConfig(val presentation: Presentation = Presentation.Automatic) {
+    enum class Presentation { Automatic, FullScreen }
+}
+```
+
+`FilePickerConfig.presentation` sets how iOS presents every picker (library, import, camera, document); Android's pickers are system activities and ignore it.
+- **`Automatic`** (default) leaves UIKit's choice: the photo and document pickers open as sheets, the camera full screen.
+- **`FullScreen`** presents each with `UIModalPresentationFullScreen`, so none can be swiped down to dismiss. For an app-wide choice, build one picker at the composition root and inject it, rather than using `shared`:
+
+```kotlin
+val filePicker = buildFilePicker(FilePickerConfig(presentation = FilePickerConfig.Presentation.FullScreen))
 ```
 
 `execute` presents the system UI and suspends until the user finishes with it. It switches to the main thread itself, so it can be called from any dispatcher. Platform errors (no live `ComponentActivity` on Android, no app to handle the intent, nothing to present from on iOS, a failed library save) resolve to `Failure` and are logged (`Log.e` with tag `FilePicker` on Android, `NSLog` on iOS). Cancelling the caller propagates the `CancellationException` rather than returning a result: iOS dismisses the picker, while Android cannot close the launched system activity and discards its result.
