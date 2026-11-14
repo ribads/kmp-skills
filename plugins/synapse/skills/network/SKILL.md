@@ -15,7 +15,7 @@ commonMain.dependencies {
 }
 ```
 
-Exposes Ktor's `HttpClient` (`ktor-client-core` is an `api` dependency) and `kotlinx-serialization-json`. Brings the platform engines (OkHttp on Android, Darwin on iOS) and the `INTERNET` permission, so do not declare an engine yourself. Synapse builds against Ktor 3.6.0; keep any Ktor artifact you add, such as `ktor-client-mock`, on the same version.
+Exposes Ktor's `HttpClient` (`ktor-client-core` is an `api` dependency) and `kotlinx-serialization-json`. Brings the platform engines (OkHttp on Android and JVM, Darwin on iOS) and the `INTERNET` permission, so do not declare an engine yourself. Synapse builds against Ktor 3.6.0; keep any Ktor artifact you add, such as `ktor-client-mock`, on the same version.
 
 ## Imports
 

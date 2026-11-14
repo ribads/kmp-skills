@@ -1,6 +1,6 @@
 ---
 name: file-system
-description: Use when implementing file picking, photo or video picking, camera capture (photo or video), document selection, or saving photos and videos to the photo library in a KMP project.
+description: Use when implementing file picking, photo or video picking, camera capture (photo or video), document selection, listing the device's recent photos, or saving photos and videos to the photo library in a KMP project.
 user-invocable: true
 ---
 
@@ -15,7 +15,7 @@ commonMain.dependencies {
 }
 ```
 
-Depends on `core:context`.
+Depends on `core:context` and `core:permissions`.
 
 ## Platform setup
 
@@ -34,7 +34,7 @@ Depends on `core:context`.
 
 Captures are saved to the photo library so the result is a `PHAsset` identifier. Capture never prompts for photo library access: without add-only access granted beforehand the save fails and the request resolves to `Failure` after the user has taken the shot. A denied camera, or a device with no camera (the simulator), resolves to `Failure` without presenting anything.
 
-Resolving a `NativeIdentifier` through `PHAsset` (as ui:element `Image.LocalIdentifier` does) reads the library, which needs read access: `NSPhotoLibraryUsageDescription` plus a granted `PermissionsRequest.MediaStorage`. For a gallery pick without that access, read the bytes with `LocalAssetInMemoryProvider.getImage`.
+Resolving a `DeviceAsset` through `PHAsset` (as ui:element `Image.LocalIdentifier` does) reads the library, which needs read access: `NSPhotoLibraryUsageDescription` plus a granted `PermissionsRequest.MediaStorage`. For a gallery pick without that access, read the bytes with `LocalAssetInMemoryProvider.getImage`.
 
 ## Imports
 
@@ -45,8 +45,9 @@ import com.ribads.synapse.core.file.FilePicker
 import com.ribads.synapse.core.file.FilePickerRequest
 import com.ribads.synapse.core.file.FilePickerResult
 import com.ribads.synapse.core.file.ImageFileSize // iosMain only
-import com.ribads.synapse.core.file.ImageResult
 import com.ribads.synapse.core.file.LocalAssetInMemoryProvider // iosMain only
+import com.ribads.synapse.core.file.MediaReference
+import com.ribads.synapse.core.file.PhotoLibrary
 import com.ribads.synapse.core.file.PhotoSaver // iosMain only
 import com.ribads.synapse.core.file.buildFilePicker
 import com.ribads.synapse.core.file.dto.IosPickerResult // iosMain only
@@ -105,7 +106,7 @@ sealed class FilePickerRequest {
 
 ### Importing picks
 
-With `Media.importTo`, every pick is copied into that directory (created when missing) and returned as `ImageResult.Url` holding the copy's absolute path, named by a fresh id and its type's extension. Nothing then needs library access or a picker grant, so an app can keep picks in its own storage:
+With `Media.importTo`, every pick is copied into that directory (created when missing) and returned as `MediaReference.Uri` holding the copy's absolute path, named by a fresh id and its type's extension. Nothing then needs library access or a picker grant, so an app can keep picks in its own storage:
 
 - **Android**: copied through the content resolver, so the copy outlives the photo picker's temporary read grant. The extension comes from the MIME type (`.bin` when it has none).
 - **iOS**: the picker runs without a photo library (`PHPickerConfiguration()`), in the compatible representation mode, and each item provider's file representation is copied before the system deletes it: photos arrive as JPEG and videos as H.264, which every image and video stack reads. No Photos permission is needed.
@@ -116,33 +117,57 @@ With `Media.importTo`, every pick is copied into that directory (created when mi
 
 ```kotlin
 sealed class FilePickerResult {
-    data class Success(val paths: List<ImageResult>) : FilePickerResult()
+    data class Success(val results: List<MediaReference>) : FilePickerResult()
     data object Failure : FilePickerResult()   // an error occurred
     data object Cancelled : FilePickerResult()  // user dismissed the picker
 }
 
-sealed class ImageResult {
+sealed interface MediaReference {
+    val value: String  // stable, serialisable identity: a list, selection or upload key
     // A directly loadable URI/path: Android media/capture/document, and iOS documents.
-    data class Url(val path: String) : ImageResult()
-    // A platform asset identifier to resolve via the asset loader: iOS gallery/camera
+    data class Uri(override val value: String) : MediaReference
+    // A photo-library handle to resolve via the asset loader: iOS gallery/camera
     // picks return a PHAsset localIdentifier (render with ui:element Image.LocalIdentifier).
-    data class NativeIdentifier(val identifier: String) : ImageResult()
+    data class DeviceAsset(override val value: String) : MediaReference
 }
 ```
 
-`Cancelled` is returned on both platforms when the user backs out of the picker; `Failure` is reserved for actual errors. `Document` always yields `ImageResult.Url`; `Media`/`Capture` yield `ImageResult.Url` on Android and `ImageResult.NativeIdentifier` on iOS, for photos and videos alike.
+`Cancelled` is returned on both platforms when the user backs out of the picker; `Failure` is reserved for actual errors. `Document` always yields `MediaReference.Uri`; `Media`/`Capture` yield `MediaReference.Uri` on Android and `MediaReference.DeviceAsset` on iOS, for photos and videos alike.
 
 What each result points at:
 
-| Request | Android (`ImageResult.Url`) | iOS |
+| Request | Android (`MediaReference.Uri`) | iOS |
 |---------|-----------------------------|-----|
-| `Media` | photo-picker `content://` URI | `NativeIdentifier`: the picked asset's `PHAsset` local identifier |
-| `Media` with `importTo` | absolute path of the copy in `importTo` | `Url`: absolute path of the copy in `importTo` |
-| `Capture(Photo)` | `content://<applicationId>.synapse.file.fileprovider/...` URI of a `.jpg` in the app-specific `getExternalFilesDir(Environment.DIRECTORY_PICTURES)` | `NativeIdentifier` of the photo saved to the library |
-| `Capture(Video)` | the same provider, a `.mp4` in `getExternalFilesDir(Environment.DIRECTORY_MOVIES)` | `NativeIdentifier` of the video saved to the library |
-| `Document` | `content://` URI with a persisted read grant | `Url`: path of a copy in the app sandbox |
+| `Media` | photo-picker `content://` URI | `DeviceAsset`: the picked asset's `PHAsset` local identifier |
+| `Media` with `importTo` | absolute path of the copy in `importTo` | `Uri`: absolute path of the copy in `importTo` |
+| `Capture(Photo)` | `content://<applicationId>.synapse.file.fileprovider/...` URI of a `.jpg` in the app-specific `getExternalFilesDir(Environment.DIRECTORY_PICTURES)` | `DeviceAsset` of the photo saved to the library |
+| `Capture(Video)` | the same provider, a `.mp4` in `getExternalFilesDir(Environment.DIRECTORY_MOVIES)` | `DeviceAsset` of the video saved to the library |
+| `Document` | `content://` URI with a persisted read grant | `Uri`: path of a copy in the app sandbox |
 
 Android capture files stay until the app deletes them; a cancelled or failed capture deletes its empty file. iOS removes the camera's temporary movie file once the video is in the library.
+
+---
+
+## PhotoLibrary (Common API)
+
+```kotlin
+interface PhotoLibrary {
+    // The newest photos first, at most limit. Throws IllegalStateException without
+    // PermissionsRequest.PhotoLibrary, IllegalArgumentException when limit < 1.
+    suspend fun recentPhotos(limit: Int): List<MediaReference>
+
+    companion object {
+        val shared: PhotoLibrary
+    }
+}
+```
+
+Reads the device's photo collection directly, for an in-app gallery rather than a system picker. It needs `PermissionsRequest.PhotoLibrary` granted first (`core:permissions`; Android manifest `READ_MEDIA_IMAGES` plus `READ_EXTERNAL_STORAGE` with `maxSdkVersion="32"`, iOS `NSPhotoLibraryUsageDescription`). It checks the grant itself and throws rather than return a partial library: without it, Android 10+ would list only the app's own photos and iOS nothing.
+
+- **Android**: `MediaStore.Images` by `DATE_ADDED` descending, on `Dispatchers.IO`; `MediaReference.Uri` content URIs.
+- **iOS**: `PHAsset` images by `creationDate` descending, with `fetchLimit = limit`; `MediaReference.DeviceAsset` identifiers, read through `PHAsset` like a capture result.
+
+Bound `limit` to what a screen can show: the list is held in memory.
 
 ---
 
@@ -153,7 +178,7 @@ Android capture files stay until the app deletes them; a cancelled or failed cap
 data class ImageFileSize(val width: Double, val height: Double)
 
 interface LocalAssetInMemoryProvider {
-    // Single-shot: a successful read decodes the bytes and evicts the entry.
+    // Repeatable: reading a pick keeps it, so a thumbnail and the upload can share it.
     suspend fun getImage(localIdentifier: String, size: ImageFileSize? = null): ByteArray?
     fun save(localIdentifier: String, pickerResult: PHPickerResult)
     fun remove(localIdentifier: String)
@@ -176,7 +201,7 @@ interface PhotoSaver {
 }
 ```
 
-`LocalAssetInMemoryProvider` holds the `PHPickerResult` of every `Media` pick (the 16 most recent), keyed by its local identifier. `getImage` returns null when the identifier was never cached, was already consumed, or has no image representation (video picks). With `size = null` the bytes are the image as encoded in the library (for example HEIC). With a `size` the image is scaled down to fit within `size` pixels, aspect ratio kept and never upscaled, and returned as JPEG (transparency is not preserved).
+`LocalAssetInMemoryProvider` holds the `PHPickerResult` of every `Media` pick (the 16 most recently used), keyed by its local identifier. Reading a pick keeps it and makes it the most recently used; `remove` and `clear` release picks early. `getImage` returns null when the identifier was never cached, was removed, has been evicted, or has no image representation (video picks). With `size = null` the bytes are the image as encoded in the library (for example HEIC). With a `size` the image is scaled down to fit within `size` pixels, aspect ratio kept and never upscaled, and returned as JPEG (transparency is not preserved).
 
 `PhotoSaver` uses add-only photo library access (`NSPhotoLibraryAddUsageDescription`):
 - `getPhotoLibraryPermissionStatus()`: `Granted` for authorized or limited add-only access, otherwise `NotGranted`. Never prompts.
@@ -206,12 +231,12 @@ sealed class IosPickerResult {
 val result = FilePicker.shared.execute(FilePickerRequest.Media(type = MediaType.Photo))
 when (result) {
     is FilePickerResult.Success -> {
-        when (val asset = result.paths.first()) {
+        when (val asset = result.results.first()) {
             // Android media/capture/document and iOS documents.
-            is ImageResult.Url -> loadImage(asset.path)
+            is MediaReference.Uri -> loadImage(asset.value)
             // iOS gallery/camera: a PHAsset localIdentifier. Render it with the
             // ui:element image stack (Image.LocalIdentifier resolves it via PHAsset).
-            is ImageResult.NativeIdentifier -> showAsset(Image.LocalIdentifier(asset.identifier))
+            is MediaReference.DeviceAsset -> showAsset(Image.LocalIdentifier(asset.value))
         }
     }
     FilePickerResult.Cancelled -> { /* user dismissed the picker */ }

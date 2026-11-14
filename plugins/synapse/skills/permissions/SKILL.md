@@ -1,6 +1,6 @@
 ---
 name: permissions
-description: Use when implementing runtime permission requests for audio, camera, media storage, video call, or location permissions in a KMP project.
+description: Use when implementing runtime permission requests or status checks for audio, camera, media storage, photo library, video call, location, or notification permissions in a KMP project.
 user-invocable: true
 ---
 
@@ -36,8 +36,11 @@ import com.ribads.synapse.core.permissions.model.PermissionsResult
 interface PermissionsManager {
     suspend fun requestPermission(request: PermissionsRequest): PermissionsResult
 
-    // Opens this app's page in system Settings; returns whether it opened. Any thread, never throws.
-    suspend fun openAppSettings(): Boolean
+    // Whether every permission the request needs is already granted. Never prompts; any thread.
+    suspend fun isPermissionGranted(request: PermissionsRequest): Boolean
+
+    // Opens the Settings page for the request's permission; returns whether it opened. Any thread, never throws.
+    suspend fun openSettings(request: PermissionsRequest): Boolean
 
     companion object {
         val shared: PermissionsManager
@@ -49,7 +52,9 @@ expect fun buildPermissionsManager(): PermissionsManager
 
 On Android `requestPermission` needs a live `ComponentActivity` (`AppContextProvider.currentActivity`, see `/synapse:context`) to show the prompt, and **throws `IllegalStateException`** when there is none (for example when called before any `ComponentActivity` has resumed, or after the tracked one is destroyed). iOS needs no activity and never throws.
 
-`openAppSettings` is the way out of a final `Denied`: Android starts `ACTION_APPLICATION_DETAILS_SETTINGS` for the package, iOS opens `UIApplicationOpenSettingsURLString`.
+`isPermissionGranted` answers from the current grant state without showing anything, so it suits deciding what a screen shows before asking, or reporting a status. It needs no activity on either platform.
+
+`openSettings` is the way out of a final `Denied`. On Android it starts `ACTION_APP_NOTIFICATION_SETTINGS` for `Notifications` (API 26+) and `ACTION_APPLICATION_DETAILS_SETTINGS` for every other request. iOS always opens `UIApplicationOpenSettingsURLString`, the app's page, which links to its notification settings.
 
 ### PermissionsRequest
 
@@ -58,6 +63,8 @@ sealed class PermissionsRequest(open val contextUiDisplayed: Boolean) {
     data class Audio(override val contextUiDisplayed: Boolean) : PermissionsRequest(contextUiDisplayed)
     data class Camera(override val contextUiDisplayed: Boolean) : PermissionsRequest(contextUiDisplayed)
     data class MediaStorage(override val contextUiDisplayed: Boolean) : PermissionsRequest(contextUiDisplayed)
+    // Reading the device's photos directly (core:file PhotoLibrary). The system picker needs none.
+    data class PhotoLibrary(override val contextUiDisplayed: Boolean) : PermissionsRequest(contextUiDisplayed)
     data class VideoCall(override val contextUiDisplayed: Boolean) : PermissionsRequest(contextUiDisplayed)
     data class Location(override val contextUiDisplayed: Boolean) : PermissionsRequest(contextUiDisplayed)
     // Showing notifications. A foreground service runs without it; only its notification hides.
@@ -129,6 +136,7 @@ the request return `Denied` every time.
 | `Audio` | `RECORD_AUDIO` |
 | `Camera` | `CAMERA` |
 | `MediaStorage` | nothing |
+| `PhotoLibrary` | `READ_MEDIA_IMAGES`, plus `READ_EXTERNAL_STORAGE` with `android:maxSdkVersion="32"` |
 | `VideoCall` | `RECORD_AUDIO`, `CAMERA`; optionally `READ_PHONE_STATE` and `BLUETOOTH_SCAN` (API 31+) |
 | `Location` | `ACCESS_COARSE_LOCATION`; add `ACCESS_FINE_LOCATION` to let the user grant precise location |
 | `Notifications` | `POST_NOTIFICATIONS` (only asked on API 33+) |
@@ -154,6 +162,7 @@ Declare only the entries for the requests the app makes. Put the `android.hardwa
 | `Audio` | `RECORD_AUDIO` | microphone (`AVAudioSession`) |
 | `Camera` | `CAMERA` | camera (`AVCaptureDevice`, video) |
 | `MediaStorage` | none (modern photo-picker APIs) | photo library read/write (`PHPhotoLibrary`) |
+| `PhotoLibrary` | `READ_MEDIA_IMAGES` on API 33+, `READ_EXTERNAL_STORAGE` below | photo library read/write (`PHPhotoLibrary`); limited access counts as granted |
 | `VideoCall` | required `RECORD_AUDIO` + `CAMERA`; optional `READ_PHONE_STATE` + `BLUETOOTH_SCAN` (API 31+ only) | camera + microphone |
 | `Location` | required `ACCESS_COARSE_LOCATION`; optional `ACCESS_FINE_LOCATION` (foreground only) | when-in-use (`CLLocationManager`), either accuracy |
 | `Notifications` | required `POST_NOTIFICATIONS` on API 33+; `Success` straight away below | alert, sound and badge (`UNUserNotificationCenter`); answers without a prompt once decided |
@@ -185,6 +194,6 @@ Required iOS `Info.plist` usage-description keys per request:
 |---------|----------------|
 | `Audio`, `VideoCall` | `NSMicrophoneUsageDescription` |
 | `Camera`, `VideoCall` | `NSCameraUsageDescription` |
-| `MediaStorage` | `NSPhotoLibraryUsageDescription` (read-write access; `NSPhotoLibraryAddUsageDescription` is not used) |
+| `MediaStorage`, `PhotoLibrary` | `NSPhotoLibraryUsageDescription` (read-write access; `NSPhotoLibraryAddUsageDescription` is not used) |
 | `Location` | `NSLocationWhenInUseUsageDescription` |
 | `Notifications` | none |
