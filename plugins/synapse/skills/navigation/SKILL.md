@@ -466,7 +466,7 @@ Lifecycle inside overlays differs by kind:
 val LocalBottomSheetAppearance: ProvidableCompositionLocal<BottomSheetAppearance>
 ```
 
-**Your own `NavDisplay`.** `NavContainer` already registers the sheet strategy (ahead of Navigation 3's `DialogSceneStrategy` and the pane strategies), so most apps never touch it. An app that drives Navigation 3's `NavDisplay` itself registers it to get `bottomSheet()` destinations, first in the list so the sheet overlays the destination beneath it:
+**Your own `NavDisplay`.** `NavContainer` already registers the sheet strategy (ahead of Navigation 3's `DialogSceneStrategy` and the pane strategies), so most apps never touch it. An app that drives Navigation 3's `NavDisplay` itself registers it to get `bottomSheet()` destinations, first in the list so the sheet overlays the destination beneath it. Navigation 3's `NavDisplay` does not skip overlays during a back gesture the way `NavContainer` does, so a page pushed above a sheet opens the sheet mid-swipe there:
 
 ```kotlin
 class BottomSheetSceneStrategy<T : Any>(
@@ -548,6 +548,7 @@ override fun EntryProviderScope<NavKey>.register(dispatcher: NavigationDispatche
 - **Choose per destination, never from state**: do not pick the transition in `onDestinationChanged` or a ViewModel and feed it back into `NavContainer`. That callback fires after the transition has started, so every choice lands on the next navigation instead.
 - **Two panes**: a `listPane`/`detailPane` pair sharing the window animates with the list's transition as the pair enters or leaves; details swap inside the pane without a page transition.
 - **Overlays**: `bottomSheet()` and `dialog()` destinations ignore it and animate as sheets and dialogs.
+- **Back gesture over an overlay**: swiping back on a page pushed above a sheet or dialog reveals the page the overlay floats over, not the overlay, which would otherwise open mid-swipe. Completing the gesture still pops only the page, and the overlay presents once the pop lands. Several overlays in a row are all skipped this way.
 - **Host**: destinations are clipped to the container's bounds, and crossfades (`Platform` on Android, `Fade`) show whatever is behind the container mid-transition. Give it an opaque background.
 - **Custom motion**: Navigation 3's own metadata (`NavDisplay.transitionSpec { }`, `NavDisplay.popTransitionSpec { }`, `NavDisplay.predictivePopTransitionSpec { }`) takes precedence over `pageTransition(…)`. It is Compose-only.
 - **Known limitations**: `Platform` on iOS slides in fixed screen directions, so right-to-left layouts push from the right while the swipe-back comes from the right edge. An iOS edge swipe also dismisses a `Modal` destination, which a native full-screen cover would not allow.
