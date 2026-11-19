@@ -90,7 +90,15 @@ dispatcher.
 
 `encrypted` uses authenticated encryption on every platform: AES-256-GCM on Android and JVM,
 AES-256-CBC with an HMAC-SHA256 integrity tag (Encrypt-then-MAC) on iOS. Keys are held in the
-platform keystore/keychain. Tampered ciphertext is rejected and reads fall back to `defaultValue`.
+Android Keystore and the iOS keychain. Tampered ciphertext is rejected and reads fall back to `defaultValue`.
+
+The JVM has no platform keystore, so `encrypted` keeps its key in a PKCS#12 file at
+`~/.synapse/keystore/<sha256 of name>.p12` that only the owning user can read. The file's password comes
+from the `synapse.sharedpref.keystore.password` system property, then the `SYNAPSE_KEYSTORE_PASSWORD`
+environment variable. Without either, the password is derived from the user name, the keystore path and
+`name`, which anyone on the machine can work out, so the file's permissions are the only protection. Set
+the password before the first encrypted write and never change it: a different password cannot open the
+existing keystore, so reads fall back to `defaultValue` and writes throw.
 
 ---
 

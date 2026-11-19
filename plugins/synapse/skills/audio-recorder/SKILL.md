@@ -144,6 +144,10 @@ interface PersistentAudioRecorder {
 - **iOS**: acquires a background-capable audio session; `notification` is ignored. Throws
   `AudioSessionException` if the session cannot be activated.
 
+An app has one background recording session, so one persistent recorder may be bound at a time.
+`bind()` on a second one throws `IllegalStateException` before it touches the service or the audio
+session; `unbind()` the first, then bind the second. The bound recorder is never interrupted.
+
 ---
 
 ## Models

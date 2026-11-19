@@ -31,6 +31,7 @@ Types live in more than one package. Import them from exactly these paths:
 import com.ribads.synapse.core.playback.AudioPlayer
 import com.ribads.synapse.core.playback.MediaPlayer
 import com.ribads.synapse.core.playback.MediaProbe
+import com.ribads.synapse.core.playback.PlayerReplacedException
 import com.ribads.synapse.core.playback.VideoPlayer
 import com.ribads.synapse.core.playback.VideoSurface
 import com.ribads.synapse.core.playback.buildAudioPlayer
@@ -94,9 +95,19 @@ expect fun buildMediaProbe(): MediaProbe
 `MediaSessionService`; it does not start a foreground service. Media3 posts the
 media notification (play/pause/seek) once a loaded source is prepared, keeps the
 service in the foreground while playback runs, and drops it back to the background
-up to 10 minutes after playback pauses or ends. Only one persistent player at a
-time: the service owns a single engine, so a second `buildPersistentAudioPlayer`
-shares it and releasing either one stops the service.
+up to 10 minutes after playback pauses or ends. Releasing the current persistent
+player stops the service.
+
+**One persistent player per app:** an app has one set of system media controls
+(the Android media notification, the iOS lock screen and Control Center), so a
+second `buildPersistentAudioPlayer` replaces the first. The replaced player is
+released: its `state` becomes `PlaybackState.Error(PlayerReplacedException())`,
+`load` and `dispatch` return `CommandResult.Failure`, and its `release()` is safe
+and leaves the new player alone. Drop a replaced player rather than retry it.
+
+```kotlin
+class PlayerReplacedException : Exception
+```
 
 **iOS audio session:** every iOS player (audio, persistent, video) activates the
 shared `AVAudioSession` when it is built and holds it until `release()`, not only

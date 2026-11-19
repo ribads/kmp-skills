@@ -1,6 +1,6 @@
 ---
 name: venus-app
-description: Use when someone wants to make an app for Venus, the phone app that runs small personal apps offline, with their own AI model, or to fix problems that ribads.dev/byom found in one. Writes the app as one JSON document to upload there.
+description: Use when someone wants to make an app for Venus, the phone app that runs small personal apps offline, with their own AI model, or to fix problems that venus.studio/byom found in one. Writes the app as one JSON document to upload there.
 user-invocable: true
 ---
 
@@ -8,13 +8,13 @@ user-invocable: true
 
 # Make a Venus app
 
-Venus runs small personal apps on a person's phone, offline. An app is one JSON document. You write it, and the person takes it to https://ribads.dev/byom, which checks it and shows a QR code that opens it in Venus.
+Venus runs small personal apps on a person's phone, offline. An app is one JSON document. You write it, and the person takes it to https://venus.studio/byom, which checks it and shows a QR code that opens it in Venus.
 
 1. **Find what makes it theirs.** A personal app knows details a generic one can't. Ask up to three short questions about who it is for, what it tracks and how they do it now, then build. Skip anything they have already said.
 2. **Build it.** Follow the instruction below exactly. Where the app needs a date, use today's.
 3. **Keep private details out.** Let what you learn shape the app's fields, lists and wording, but make up its sample records: anyone with the app's code can read them. Never copy in real names, amounts, addresses or anything else private, even if the person told you. Their real records go in on their phone.
 4. **Use only what the instruction lists.** Other documents about Synapse can describe nodes that Venus does not accept yet.
-5. **Hand it over.** If you can write files, save the app as `app.json`. If not, reply as the instruction says, and tell the person to use the code block's copy button, since text copied from the page can change. Then send them to https://ribads.dev/byom.
+5. **Hand it over.** If you can write files, save the app as `app.json`. If not, reply as the instruction says, and tell the person to use the code block's copy button, since text copied from the page can change. Then send them to https://venus.studio/byom.
 6. **Fix what comes back.** If they bring back problems from that page, fix every one and give them the whole app again, not a patch.
 
 ## The instruction
