@@ -286,12 +286,12 @@ composeMultiplatform = "1.12.2"
 kotlin = "2.4.21"
 synapse = "__SYNAPSE_VERSION__"
 kotlinInject = "0.9.0"
-ksp = "2.3.6"
-ktor = "3.6.0"
+ksp = "2.3.12"
+ktor = "3.6.1"
 coilCompose = "3.6.3"
 coroutines = "1.11.0"
 kermitLogger = "2.1.0"
-kotlinxSerialization = "1.11.0"
+kotlinxSerialization = "1.13.0"
 desugarJdkLibs = "2.1.5"
 
 [libraries]
@@ -345,6 +345,11 @@ fun KotlinMultiplatformExtension.configureCommonMainKsp() {
         kotlin.srcDir("build/generated/ksp/metadata/commonMain/kotlin")
     }
     project.tasks.withType(KotlinCompilationTask::class.java).configureEach {
+        if (name != "kspCommonMainKotlinMetadata") {
+            dependsOn("kspCommonMainKotlinMetadata")
+        }
+    }
+    project.tasks.withType(KspAATask::class.java).configureEach {
         if (name != "kspCommonMainKotlinMetadata") {
             dependsOn("kspCommonMainKotlinMetadata")
         }
@@ -507,6 +512,7 @@ class MainActivity : AppCompatActivity() {
 COMPOSE_APP_BUILD_GRADLE = '''import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
+import com.google.devtools.ksp.gradle.KspAATask
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask
 import kotlin.jvm.java
 
@@ -1430,6 +1436,7 @@ interface __DOMAIN_PASCAL__RepositoryProviders {
 DOMAIN_DATA_BUILD_GRADLE = '''import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
+import com.google.devtools.ksp.gradle.KspAATask
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask
 
 plugins {
@@ -1517,6 +1524,7 @@ abstract class __DOMAIN_PASCAL__RepositoryProvidersImpl(
 # ─── feature modules ──────────────────────────────────────────────────────────
 
 FEATURE_USECASE_BUILD_GRADLE = '''import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
+import com.google.devtools.ksp.gradle.KspAATask
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask
 
 plugins {
@@ -1640,6 +1648,7 @@ abstract class __FEATURE_PASCAL__UseCaseModule(
 FEATURE_UI_BUILD_GRADLE = '''import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
+import com.google.devtools.ksp.gradle.KspAATask
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask
 
 plugins {

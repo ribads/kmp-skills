@@ -43,6 +43,7 @@ ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 
 ```kotlin
 // build.gradle.kts of a module that declares a @Component
+import com.google.devtools.ksp.gradle.KspAATask
 import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask
 
@@ -70,6 +71,12 @@ fun KotlinMultiplatformExtension.configureCommonMainKsp() {
     }
 
     project.tasks.withType(KotlinCompilationTask::class.java).configureEach {
+        if (name != "kspCommonMainKotlinMetadata") {
+            dependsOn("kspCommonMainKotlinMetadata")
+        }
+    }
+
+    project.tasks.withType(KspAATask::class.java).configureEach {
         if (name != "kspCommonMainKotlinMetadata") {
             dependsOn("kspCommonMainKotlinMetadata")
         }
