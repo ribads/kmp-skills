@@ -381,8 +381,15 @@ class CompiledCondition internal constructor(/* parsed predicate */) {
         fieldReader: ((String) -> Any?)? = null,
         collectionRecords: ((String) -> List<DataRecord>)? = null,
     ): Boolean
+    fun matches(
+        valueOf: (String) -> Any?,
+        fieldReader: ((String) -> Any?)? = null,
+        collectionRecords: ((String) -> List<DataRecord>)? = null,
+        nowMillis: Long,
+    ): Boolean
     // Reads the clock once for every record.
     fun filter(records: List<DataRecord>, fieldReader: ((String) -> Any?)? = null): List<DataRecord>
+    fun filter(records: List<DataRecord>, fieldReader: ((String) -> Any?)? = null, nowMillis: Long): List<DataRecord>
 }
 fun DataCondition.compile(): CompiledCondition
 
@@ -670,7 +677,7 @@ Hosts using `renderedEntries` only set `RenderedPageConfig.operationHandler`. A 
 Package `com.ribads.synapse.ui.renderer.capability`. The client sends what it can run with every screen request; the server only returns screens that fit, and the client can check a screen before rendering it.
 
 ```kotlin
-object SynapseSchemaVersion { const val CURRENT: Int }      // 6; see the version table in SCHEMA.md
+object SynapseSchemaVersion { const val CURRENT: Int }      // 7; see the version table in SCHEMA.md
 
 class RendererCapabilities(val operations: Set<String> = emptySet()) {   // names bound natively; no blanks or commas
     val schemaVersion: Int
