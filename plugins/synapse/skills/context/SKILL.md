@@ -1,6 +1,6 @@
 ---
 name: context
-description: Use when you need Android Context or Activity access in shared KMP code. Dependency of core:capture, core:connectivity, core:file, core:moonshine, core:paystack:ui, core:permissions, core:playback, core:record, core:share and core:sharedpref.
+description: Use when you need Android Context or Activity access in shared KMP code. Dependency of core:capture, core:connectivity, core:file, core:in-app-purchase, core:moonshine, core:paystack:ui, core:permissions, core:playback, core:record, core:share and core:sharedpref.
 user-invocable: true
 ---
 
@@ -70,6 +70,7 @@ Every Synapse module that needs a `Context` or the current activity depends on i
 | `core:capture` | `core-capture` | `androidMain`, `iosMain` | no (`implementation`) |
 | `core:connectivity` | `core-connectivity` | `androidMain` | no (`implementation`) |
 | `core:file` | `core-file` | `commonMain` | yes (`api`) |
+| `core:in-app-purchase` | `core-in-app-purchase` | `androidMain` | no (`implementation`) |
 | `core:moonshine` | `core-moonshine` | `androidMain` | no (`implementation`) |
 | `core:paystack:ui` | `paystack-ui` | `androidMain` | no (`implementation`) |
 | `core:permissions` | `core-permissions` | `commonMain` | yes (`api`) |

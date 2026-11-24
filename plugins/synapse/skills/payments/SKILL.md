@@ -1,10 +1,12 @@
 ---
 name: payments
-description: "Use when implementing payment processing in a KMP project: Paystack card payments, mobile money (M-Pesa), the Paystack payment sheet, or transaction handling. Also use when asked for Stripe, because Synapse has no Stripe support: there is no Stripe artifact to depend on."
+description: "Use when implementing payment processing in a KMP project: Paystack card payments, mobile money (M-Pesa), the Paystack payment sheet, or transaction handling. Also use when asked for Stripe, because Synapse has no Stripe support: there is no Stripe artifact to depend on. Digital goods sold inside an app (coins, credits, unlocks) go through the phone's store instead: use /in-app-purchase."
 user-invocable: true
 ---
 
 # Payment Modules: Paystack
+
+The app stores require their own billing for digital goods used inside an app (coins, credits, unlocks): sell those with `/synapse:in-app-purchase`, never with Paystack.
 
 ## Dependencies
 
